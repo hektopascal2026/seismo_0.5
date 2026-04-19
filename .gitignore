@@ -1,0 +1,6 @@
+config.local.php
+srf/config.local.php
+fetcher/scraper/config.php
+fetcher/mail/config.php
+fetcher/.DS_Store
+.DS_Store
