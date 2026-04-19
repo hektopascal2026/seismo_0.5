@@ -49,17 +49,11 @@ final class EntryRepository
      */
     public const MAX_LIMIT = 200;
 
-    /**
-     * Columns fetchEmails() will try to use for newest-first ordering, in
-     * preference order. The subset that actually exists on the resolved email
-     * table is detected at query time — see resolveEmailDateColumns().
-     */
-    private const EMAIL_DATE_COLUMNS = ['date_received', 'date_utc', 'created_at', 'date_sent'];
-
-    private ?string $cachedEmailTable = null;
+    /** Unified `emails` table (Slice 4 migration) — ordering preference. */
+    private const EMAIL_DATE_COLUMNS = ['date_utc', 'date_received', 'created_at', 'date_sent'];
 
     /**
-     * Per resolved email table — see resolveEmailDateColumns().
+     * Per-table memo for {@see resolveEmailDateColumns()}.
      *
      * @var array<string, array<int, string>>
      */
@@ -87,7 +81,7 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getLatestTimeline(int $limit, int $offset = 0): array
+    public function getLatestTimeline(int $limit, int $offset = 0, ?TimelineFilter $filter = null): array
     {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
@@ -97,19 +91,22 @@ final class EntryRepository
         // at the head. See the paging caveat above for why deep offsets are
         // not safe under heavy skew.
         $perSource = $limit + $offset;
+        $f        = $filter;
 
         $items = [];
-        foreach ($this->fetchFeedItems($perSource) as $row) {
+        foreach ($this->fetchFeedItems($perSource, $f) as $row) {
             $items[] = $this->wrapFeedItem($row);
         }
-        foreach ($this->fetchEmails($perSource) as $row) {
+        foreach ($this->fetchEmails($perSource, $f) as $row) {
             $items[] = $this->wrapEmail($row);
         }
-        foreach ($this->fetchLexItems($perSource) as $row) {
+        foreach ($this->fetchLexItems($perSource, $f) as $row) {
             $items[] = $this->wrapLexItem($row);
         }
-        foreach ($this->fetchCalendarEvents($perSource) as $row) {
-            $items[] = $this->wrapCalendarEvent($row);
+        if ($f === null || $f->includeCalendar) {
+            foreach ($this->fetchCalendarEvents($perSource) as $row) {
+                $items[] = $this->wrapCalendarEvent($row);
+            }
         }
 
         usort($items, static fn ($a, $b) => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
@@ -127,7 +124,7 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function searchTimeline(string $q, int $limit, int $offset = 0): array
+    public function searchTimeline(string $q, int $limit, int $offset = 0, ?TimelineFilter $filter = null): array
     {
         $q = trim($q);
         if ($q === '') {
@@ -138,19 +135,22 @@ final class EntryRepository
         $perSource = $limit + $offset;
         // Escape LIKE wildcards in user input so "%" and "_" are literal (MariaDB default escape \).
         $term = '%' . $this->escapeLikePattern($q) . '%';
+        $f    = $filter;
 
         $items = [];
-        foreach ($this->fetchFeedItemsSearch($term, $perSource) as $row) {
+        foreach ($this->fetchFeedItemsSearch($term, $perSource, $f) as $row) {
             $items[] = $this->wrapFeedItem($row);
         }
-        foreach ($this->searchEmailRows($term, $perSource) as $row) {
+        foreach ($this->searchEmailRows($term, $perSource, $f) as $row) {
             $items[] = $this->wrapEmail($row);
         }
-        foreach ($this->fetchLexItemsSearch($term, $perSource) as $row) {
+        foreach ($this->fetchLexItemsSearch($term, $perSource, $f) as $row) {
             $items[] = $this->wrapLexItem($row);
         }
-        foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
-            $items[] = $this->wrapCalendarEvent($row);
+        if ($f === null || $f->includeCalendar) {
+            foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
+                $items[] = $this->wrapCalendarEvent($row);
+            }
         }
 
         usort($items, static fn ($a, $b) => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
@@ -176,7 +176,7 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getFavouritesTimeline(int $limit, int $offset = 0): array
+    public function getFavouritesTimeline(int $limit, int $offset = 0, ?TimelineFilter $filter = null): array
     {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
@@ -220,14 +220,23 @@ final class EntryRepository
         foreach ($this->fetchLexRowsByIds($byType['lex_item']) as $row) {
             $items[] = $this->wrapLexItem($row);
         }
-        foreach ($this->fetchCalendarRowsByIds($byType['calendar_event']) as $row) {
-            $items[] = $this->wrapCalendarEvent($row);
+        if ($filter === null || $filter->includeCalendar) {
+            foreach ($this->fetchCalendarRowsByIds($byType['calendar_event']) as $row) {
+                $items[] = $this->wrapCalendarEvent($row);
+            }
         }
 
         foreach ($items as &$it) {
             $it['is_favourite'] = true;
         }
         unset($it);
+
+        if ($filter !== null && $filter->isActive()) {
+            $items = array_values(array_filter(
+                $items,
+                fn (array $it): bool => $this->itemMatchesTimelineFilter($it, $filter)
+            ));
+        }
 
         usort($items, static fn ($a, $b) => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
         $items = array_slice($items, $offset, $limit);
@@ -252,10 +261,7 @@ final class EntryRepository
     {
         $total = 0;
         $total += $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('feed_items'));
-        $emailTable = $this->resolveEmailTable();
-        if ($emailTable !== null) {
-            $total += $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable($emailTable));
-        }
+        $total += $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('emails'));
         $total += $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('lex_items'));
         $total += $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('calendar_events'));
         return $total;
@@ -268,8 +274,9 @@ final class EntryRepository
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchFeedItems(int $limit): array
+    private function fetchFeedItems(int $limit, ?TimelineFilter $filter = null): array
     {
+        $extra = $this->feedSqlFilter($filter);
         $sql = '
             SELECT fi.*,
                    f.title       AS feed_title,
@@ -281,54 +288,79 @@ final class EntryRepository
             JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
             WHERE f.disabled = 0
               AND fi.hidden = 0
+              ' . $extra['sql'] . '
             ORDER BY fi.published_date DESC, fi.cached_at DESC
             LIMIT ' . (int)$limit;
-        return $this->selectOrEmpty($sql);
+
+        return $extra['params'] === []
+            ? $this->selectOrEmpty($sql)
+            : $this->selectPreparedOrEmpty($sql, $extra['params']);
     }
 
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchEmails(int $limit): array
+    private function fetchEmails(int $limit, ?TimelineFilter $filter = null): array
     {
-        $table = $this->resolveEmailTable();
-        if ($table === null) {
-            return [];
-        }
-        // 0.4 shipped two email schemas (`emails` and `fetched_emails`) with
-        // different date column sets. Build the ORDER BY from whichever of
-        // EMAIL_DATE_COLUMNS the resolved table actually has, so an installer
-        // running the older `emails` shape doesn't 500 on a missing
-        // `date_received`. Slice 4's email unification retires this.
-        $dateCols = $this->resolveEmailDateColumns($table);
+        $emailTag = $filter !== null && $filter->emailTag !== null && $filter->emailTag !== ''
+            ? $filter->emailTag
+            : null;
+
+        $dateCols = $this->resolveEmailDateColumns('emails');
         if ($dateCols === []) {
-            // No recognised date column — fall back to id DESC. Ugly but
-            // stable; the email unification migration resolves this properly.
-            $orderBy = 'ORDER BY id DESC';
+            $orderBy = 'ORDER BY e.id DESC';
         } elseif (count($dateCols) === 1) {
-            $orderBy = 'ORDER BY `' . $dateCols[0] . '` DESC';
+            $orderBy = 'ORDER BY e.`' . $dateCols[0] . '` DESC';
         } else {
             $coalesce = implode(
                 ', ',
-                array_map(static fn (string $c) => '`' . $c . '`', $dateCols)
+                array_map(static fn (string $c) => '`e`.`' . $c . '`', $dateCols)
             );
             $orderBy = 'ORDER BY COALESCE(' . $coalesce . ') DESC';
         }
-        $sql = 'SELECT * FROM ' . entryTable($table) . '
+
+        if ($emailTag !== null) {
+            $sql = 'SELECT e.*, stf.tag AS sender_tag
+                    FROM ' . entryTable('emails') . ' e
+                    INNER JOIN ' . entryTable('sender_tags') . ' stf
+                      ON stf.from_email = e.from_email
+                     AND stf.tag = ?
+                     AND stf.removed_at IS NULL
+                    ' . $orderBy . '
+                    LIMIT ' . (int)$limit;
+
+            return $this->selectPreparedOrEmpty($sql, [$emailTag]);
+        }
+
+        $sql = 'SELECT e.*, st.tag AS sender_tag
+                FROM ' . entryTable('emails') . ' e
+                LEFT JOIN ' . entryTable('sender_tags') . ' st
+                  ON st.from_email = e.from_email AND st.removed_at IS NULL
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
+
         return $this->selectOrEmpty($sql);
     }
 
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchLexItems(int $limit): array
+    private function fetchLexItems(int $limit, ?TimelineFilter $filter = null): array
     {
-        $sql = 'SELECT * FROM ' . entryTable('lex_items') . '
+        $where = '';
+        $params = [];
+        if ($filter !== null && $filter->lexSources !== []) {
+            $ph = implode(',', array_fill(0, count($filter->lexSources), '?'));
+            $where = ' WHERE source IN (' . $ph . ') ';
+            $params = $filter->lexSources;
+        }
+        $sql = 'SELECT * FROM ' . entryTable('lex_items') . $where . '
                 ORDER BY document_date DESC, created_at DESC
                 LIMIT ' . (int)$limit;
-        return $this->selectOrEmpty($sql);
+
+        return $params === []
+            ? $this->selectOrEmpty($sql)
+            : $this->selectPreparedOrEmpty($sql, $params);
     }
 
     /**
@@ -447,8 +479,9 @@ final class EntryRepository
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchFeedItemsSearch(string $term, int $limit): array
+    private function fetchFeedItemsSearch(string $term, int $limit, ?TimelineFilter $filter = null): array
     {
+        $extra = $this->feedSqlFilter($filter);
         $sql = '
             SELECT fi.*,
                    f.title       AS feed_title,
@@ -460,6 +493,7 @@ final class EntryRepository
             JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
             WHERE f.disabled = 0
               AND fi.hidden = 0
+              ' . $extra['sql'] . '
               AND (
                     fi.title LIKE ?
                  OR fi.description LIKE ?
@@ -467,35 +501,56 @@ final class EntryRepository
               )
             ORDER BY fi.published_date DESC, fi.cached_at DESC
             LIMIT ' . (int)$limit;
-        $p = [$term, $term, $term];
+        $p = array_merge($extra['params'], [$term, $term, $term]);
+
         return $this->selectPreparedOrEmpty($sql, $p);
     }
 
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function searchEmailRows(string $term, int $limit): array
+    private function searchEmailRows(string $term, int $limit, ?TimelineFilter $filter = null): array
     {
-        $table = $this->resolveEmailTable();
-        if ($table === null) {
-            return [];
-        }
-        $cols = $this->resolveEmailSearchColumns($table);
+        $cols = $this->resolveEmailSearchColumns('emails');
         if ($cols === []) {
             return [];
         }
         $parts = [];
         $params = [];
         foreach ($cols as $c) {
-            $parts[] = '`' . str_replace('`', '``', $c) . '` LIKE ?';
+            $parts[] = '`e`.`' . str_replace('`', '``', $c) . '` LIKE ?';
             $params[] = $term;
         }
         $where = '(' . implode(' OR ', $parts) . ')';
-        $orderBy = $this->buildEmailOrderByClause($table);
-        $sql = 'SELECT * FROM ' . entryTable($table) . '
+        $orderBy = $this->buildEmailOrderByClause('emails');
+
+        $emailTag = $filter !== null && $filter->emailTag !== null && $filter->emailTag !== ''
+            ? $filter->emailTag
+            : null;
+
+        if ($emailTag !== null) {
+            $sql = 'SELECT e.*, stf.tag AS sender_tag
+                    FROM ' . entryTable('emails') . ' e
+                    INNER JOIN ' . entryTable('sender_tags') . ' stf
+                      ON stf.from_email = e.from_email
+                     AND stf.tag = ?
+                     AND stf.removed_at IS NULL
+                    WHERE ' . $where . '
+                    ' . $orderBy . '
+                    LIMIT ' . (int)$limit;
+            array_unshift($params, $emailTag);
+
+            return $this->selectPreparedOrEmpty($sql, $params);
+        }
+
+        $sql = 'SELECT e.*, st.tag AS sender_tag
+                FROM ' . entryTable('emails') . ' e
+                LEFT JOIN ' . entryTable('sender_tags') . ' st
+                  ON st.from_email = e.from_email AND st.removed_at IS NULL
                 WHERE ' . $where . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
+
         return $this->selectPreparedOrEmpty($sql, $params);
     }
 
@@ -548,29 +603,39 @@ final class EntryRepository
     {
         $dateCols = $this->resolveEmailDateColumns($table);
         if ($dateCols === []) {
-            return 'ORDER BY id DESC';
+            return 'ORDER BY e.id DESC';
         }
         if (count($dateCols) === 1) {
-            return 'ORDER BY `' . $dateCols[0] . '` DESC';
+            return 'ORDER BY e.`' . $dateCols[0] . '` DESC';
         }
         $coalesce = implode(
             ', ',
-            array_map(static fn (string $c) => '`' . $c . '`', $dateCols)
+            array_map(static fn (string $c) => '`e`.`' . $c . '`', $dateCols)
         );
+
         return 'ORDER BY COALESCE(' . $coalesce . ') DESC';
     }
 
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchLexItemsSearch(string $term, int $limit): array
+    private function fetchLexItemsSearch(string $term, int $limit, ?TimelineFilter $filter = null): array
     {
+        $lexWhere = '';
+        $params = [$term, $term];
+        $lexWhere = '';
+        if ($filter !== null && $filter->lexSources !== []) {
+            $ph = implode(',', array_fill(0, count($filter->lexSources), '?'));
+            $lexWhere = ' AND source IN (' . $ph . ') ';
+            $params = array_merge($params, $filter->lexSources);
+        }
         $sql = 'SELECT * FROM ' . entryTable('lex_items') . '
-                WHERE title LIKE ?
-                   OR description LIKE ?
+                WHERE (title LIKE ? OR description LIKE ?)
+                ' . $lexWhere . '
                 ORDER BY document_date DESC, created_at DESC
                 LIMIT ' . (int)$limit;
-        return $this->selectPreparedOrEmpty($sql, [$term, $term]);
+
+        return $this->selectPreparedOrEmpty($sql, $params);
     }
 
     /**
@@ -626,19 +691,19 @@ final class EntryRepository
         if ($ids === []) {
             return [];
         }
-        $table = $this->resolveEmailTable();
-        if ($table === null) {
-            return [];
-        }
         $out = [];
         foreach ($this->chunkIds($ids, 400) as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
-            $sql = 'SELECT * FROM ' . entryTable($table) . '
-                    WHERE id IN (' . $ph . ')';
+            $sql = 'SELECT e.*, st.tag AS sender_tag
+                    FROM ' . entryTable('emails') . ' e
+                    LEFT JOIN ' . entryTable('sender_tags') . ' st
+                      ON st.from_email = e.from_email AND st.removed_at IS NULL
+                    WHERE e.id IN (' . $ph . ')';
             foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
                 $out[] = $row;
             }
         }
+
         return $out;
     }
 
@@ -841,59 +906,179 @@ final class EntryRepository
         return [$placeholders, $flat];
     }
 
+    /**
+     * Extra WHERE clause fragments for `feeds` / `feed_items` when tag filters
+     * are active (Slice 4).
+     *
+     * @return array{sql: string, params: list<mixed>}
+     */
+    private function feedSqlFilter(?TimelineFilter $filter): array
+    {
+        if ($filter === null) {
+            return ['sql' => '', 'params' => []];
+        }
+        $sql    = [];
+        $params = [];
+        if ($filter->feedCategory !== null && $filter->feedCategory !== '') {
+            $sql[]    = ' AND f.category = ?';
+            $params[] = $filter->feedCategory;
+        }
+        if ($filter->feedSourceKind === 'substack') {
+            $sql[] = " AND f.source_type = 'substack'";
+        } elseif ($filter->feedSourceKind === 'scraper') {
+            $sc = entryTable('scraper_configs');
+            $sql[] = " AND (f.source_type = 'scraper' OR f.category = 'scraper'
+                OR EXISTS (SELECT 1 FROM {$sc} sc WHERE sc.url = f.url AND sc.disabled = 0))";
+        } elseif ($filter->feedSourceKind === 'rss') {
+            $sc = entryTable('scraper_configs');
+            $sql[] = " AND f.source_type NOT IN ('substack','scraper')
+                AND (f.category IS NULL OR f.category != 'scraper')
+                AND NOT EXISTS (SELECT 1 FROM {$sc} sc WHERE sc.url = f.url AND sc.disabled = 0)";
+        }
+
+        return ['sql' => implode('', $sql), 'params' => $params];
+    }
+
+    private function itemMatchesTimelineFilter(array $item, TimelineFilter $filter): bool
+    {
+        $et = (string)($item['entry_type'] ?? '');
+
+        if (!$filter->includeCalendar && $et === 'calendar_event') {
+            return false;
+        }
+        $data = $item['data'] ?? [];
+        if (!is_array($data)) {
+            $data = [];
+        }
+
+        if ($filter->feedCategory !== null && $filter->feedCategory !== '' && $et === 'feed_item') {
+            if ((string)($data['feed_category'] ?? '') !== $filter->feedCategory) {
+                return false;
+            }
+        }
+        if ($filter->feedSourceKind !== null && $et === 'feed_item') {
+            $st  = (string)($data['feed_source_type'] ?? '');
+            $cat = (string)($data['feed_category'] ?? '');
+            if ($filter->feedSourceKind === 'substack' && $st !== 'substack') {
+                return false;
+            }
+            if ($filter->feedSourceKind === 'scraper') {
+                $isScraper = $st === 'scraper' || $cat === 'scraper';
+                if (!$isScraper) {
+                    return false;
+                }
+            }
+            if ($filter->feedSourceKind === 'rss') {
+                if ($st === 'substack' || $st === 'scraper' || $cat === 'scraper') {
+                    return false;
+                }
+            }
+        }
+        if ($filter->lexSources !== [] && $et === 'lex_item') {
+            $src = (string)($data['source'] ?? '');
+            if (!in_array($src, $filter->lexSources, true)) {
+                return false;
+            }
+        }
+        if ($filter->emailTag !== null && $filter->emailTag !== '' && $et === 'email') {
+            if ((string)($data['sender_tag'] ?? '') !== $filter->emailTag) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Distinct values for dashboard tag pills (bounded).
+     *
+     * @return array{
+     *   feed_categories: list<string>,
+     *   lex_sources: list<string>,
+     *   email_tags: list<string>,
+     * }
+     */
+    public function getFilterPillOptions(): array
+    {
+        return [
+            'feed_categories' => $this->selectDistinctFeedCategories(),
+            'lex_sources'     => $this->selectDistinctLexSources(),
+            'email_tags'      => $this->selectDistinctEmailTags(),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function selectDistinctFeedCategories(): array
+    {
+        $sql = 'SELECT DISTINCT category FROM ' . entryTable('feeds') . '
+            WHERE disabled = 0
+              AND category IS NOT NULL
+              AND category != \'\'
+              AND category != \'unsortiert\'
+            ORDER BY category ASC
+            LIMIT 50';
+        $rows = $this->selectOrEmpty($sql);
+        $out  = [];
+        foreach ($rows as $r) {
+            $c = trim((string)($r['category'] ?? ''));
+            if ($c !== '') {
+                $out[] = $c;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function selectDistinctLexSources(): array
+    {
+        $sql = 'SELECT DISTINCT source FROM ' . entryTable('lex_items') . '
+            ORDER BY source ASC
+            LIMIT 50';
+        $rows = $this->selectOrEmpty($sql);
+        $out  = [];
+        foreach ($rows as $r) {
+            $s = trim((string)($r['source'] ?? ''));
+            if ($s !== '') {
+                $out[] = $s;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function selectDistinctEmailTags(): array
+    {
+        $sql = 'SELECT DISTINCT tag FROM ' . entryTable('sender_tags') . '
+            WHERE tag IS NOT NULL
+              AND tag != \'\'
+              AND tag != \'unclassified\'
+              AND (removed_at IS NULL)
+            ORDER BY tag ASC
+            LIMIT 50';
+
+        $rows = $this->selectOrEmpty($sql);
+        $out  = [];
+        foreach ($rows as $r) {
+            $t = trim((string)($r['tag'] ?? ''));
+            if ($t !== '') {
+                $out[] = $t;
+            }
+        }
+
+        return $out;
+    }
+
     // ------------------------------------------------------------------
     // Infrastructure.
     // ------------------------------------------------------------------
-
-    /**
-     * Resolve which physical email table this deployment uses.
-     *
-     * 0.4 shipped two tables (`emails`, `fetched_emails`) for historical
-     * reasons — the IMAP cron wrote to one, older code wrote to the other.
-     * Slice 4 unifies this. Until then, we enumerate the DB once per request
-     * and pick whichever table exists. In satellite mode we enumerate the
-     * mothership schema.
-     *
-     * TODO (deferred optimisation): the resolved name is stable across
-     * deploys. Stash it in magnitu_config (key `resolved_email_table`) the
-     * first time it's computed so subsequent requests skip the SHOW TABLES
-     * round-trip. Tiny; not worth doing before Slice 4's email unification
-     * removes the need entirely.
-     *
-     * Returns null when no plausible email table is present so the email
-     * family quietly drops out of the timeline.
-     */
-    private function resolveEmailTable(): ?string
-    {
-        if ($this->cachedEmailTable !== null) {
-            return $this->cachedEmailTable === '' ? null : $this->cachedEmailTable;
-        }
-
-        $showSql = SEISMO_MOTHERSHIP_DB !== ''
-            ? 'SHOW TABLES FROM `' . str_replace('`', '``', (string)SEISMO_MOTHERSHIP_DB) . '`'
-            : 'SHOW TABLES';
-
-        try {
-            $tables = $this->pdo->query($showSql)->fetchAll(PDO::FETCH_COLUMN);
-        } catch (PDOException $e) {
-            $this->cachedEmailTable = '';
-            return null;
-        }
-
-        foreach ($tables as $t) {
-            if (strtolower((string)$t) === 'fetched_emails') {
-                return $this->cachedEmailTable = (string)$t;
-            }
-        }
-        foreach ($tables as $t) {
-            $low = strtolower((string)$t);
-            if ($low === 'emails' || $low === 'email') {
-                return $this->cachedEmailTable = (string)$t;
-            }
-        }
-        $this->cachedEmailTable = '';
-        return null;
-    }
 
     /**
      * Subset of EMAIL_DATE_COLUMNS that physically exist on the resolved

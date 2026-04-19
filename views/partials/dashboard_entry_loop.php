@@ -421,9 +421,9 @@ $feedLoopPrevDayKey = null;
                             $subject = trim((string)($email['subject'] ?? ''));
                             if ($subject === '') $subject = '(No subject)';
 
-                            $body = (string)($email['text_body'] ?? '');
+                            $body = (string)($email['text_body'] ?? $email['body_text'] ?? '');
                             if ($body === '') {
-                                $body = strip_tags((string)($email['html_body'] ?? ''));
+                                $body = strip_tags((string)($email['html_body'] ?? $email['body_html'] ?? ''));
                             }
                             $body = trim(preg_replace('/\s+/', ' ', $body ?? ''));
                             if ($body === '') {

@@ -9,6 +9,39 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 4 — Unified emails, Core RSS/scraper/mail hook, tag-filter pills
+
+**Why.** 0.4 split mail between `emails` and `fetched_emails`, kept RSS/scraper/mail outside the plugin runner, and built dashboard tag filters against the full entry surface. Slice 4 merges the email schema, runs Core fetchers through the same `RefreshAllService::runAll()` entry point as plugins (with `core:*` ids in `plugin_run_log`), adds SimplePie-based RSS + a minimal HTML scraper path, and restores dashboard filter pills (0.4-shaped GET params).
+
+**What moved.**
+
+| Area | 0.5 |
+|---|---|
+| Dual email tables | `Migration003EmailsUnified` (schema **v19**) merges `fetched_emails` into `emails` (BIGINT ids, IMAP/body columns). `DROP` `fetched_emails` after merge. `getEmailTableName()` in `bootstrap.php` returns `emails`. |
+| Core refresh | `Seismo\Service\CoreRunner` runs `core:rss`, `core:scraper`, `core:mail` before plugins. Throttle matches plugin semantics (stdout-only when throttled; `plugin_run_log` stores outcomes except noise). Mail is a **stub** unless `mail_imap_host` is set — in-process IMAP fetch deferred; CLI cron against unified `emails` remains the operational path until a later slice wires IMAP here. |
+| RSS | `Seismo\Core\Fetcher\RssFetchService` (SimplePie 1.9). Normalises title/link/body per consolidation-plan fetcher contract. |
+| Scraper | `Seismo\Core\Fetcher\ScraperFetchService` + `FeedItemRepository::listFeedsForScraperRefresh()` (feeds with `source_type=scraper` or URL in `scraper_configs`). |
+| Feeds persistence | `Seismo\Repository\FeedItemRepository` — transactional `upsertFeedItems`, `prune()` stub (180d policy lands with RetentionService). |
+| `RefreshAllService::boot()` | Injects `CoreRunner` + `FeedItemRepository` + shared `PluginRunLogRepository`. |
+| Diagnostics | `views/diagnostics.php` — “Core fetchers” block above plugins; same `plugin_run_log` read model. |
+| Dashboard filters | `Seismo\Repository\TimelineFilter` + GET params `fc`, `fk`, `lx`, `etag`, `nocal`. `EntryRepository` applies SQL filters per family; favourites view filters hydrated rows in PHP. `FavouriteController` whitelist extended for filter params. |
+| Composer | `simplepie/simplepie` (^1.9). |
+
+**Gotchas.**
+
+- **Plugin deferrals (user decision D4):** LexEu / LexLegifrance / Jus / Parl MM plugins were **not** added in this slice — registry unchanged beyond Slice 3.
+- **`core:mail` rows:** When IMAP is not configured, the runner returns **skipped** without persisting a row (avoids flooding `plugin_run_log` every cron tick). When `mail_imap_host` is set but in-process fetch is still disabled, a single skipped row explains the situation.
+- **Retention:** `FeedItemRepository::prune()` is callable; `RetentionService` (Slice 5a) will invoke family prunes — no automatic feed/email prune in this slice’s cron beyond plugin runs.
+
+**Test URLs.**
+
+- `?action=migrate&key=…` — expect schema **19** after deploy.
+- `?action=diagnostics` — Core fetchers block + plugins; Refresh all runs core + plugins.
+- `?action=index&fk=substack&nocal=1` — filter pills + Leg hidden from merged timeline.
+- CLI: `php refresh_cron.php` — stdout includes `core:rss` / `core:scraper` / `core:mail` lines.
+
+---
+
 ## Correction 2026-04-19 — Slice 3 logout CSRF + top-bar logout button
 
 **Why this entry exists.** A post-Slice-3 review found two gaps between the Slice 3 reorg entry below and the shipped code. Both were minor, neither had made it to the webspace as of this correction — filing here so the failure mode is visible rather than quietly patched.

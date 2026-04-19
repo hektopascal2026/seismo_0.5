@@ -22,7 +22,10 @@ final class FavouriteController
      *
      * @var list<string>
      */
-    private const RETURN_QUERY_ALLOW = ['q', 'view', 'limit', 'offset'];
+    private const RETURN_QUERY_ALLOW = [
+        'q', 'view', 'limit', 'offset',
+        'fc', 'fk', 'lx', 'etag', 'nocal',
+    ];
 
     public function toggle(): void
     {

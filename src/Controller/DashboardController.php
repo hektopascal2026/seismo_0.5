@@ -12,6 +12,7 @@ namespace Seismo\Controller;
 
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryRepository;
+use Seismo\Repository\TimelineFilter;
 
 final class DashboardController
 {
@@ -37,16 +38,19 @@ final class DashboardController
 
         $dashboardError = null;
         $allItems        = [];
+        $timelineFilter  = TimelineFilter::fromQueryArray($_GET);
+        $filterPillOptions = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
 
         try {
             $pdo  = getDbConnection();
             $repo = new EntryRepository($pdo);
+            $filterPillOptions = $repo->getFilterPillOptions();
             if ($currentView === 'favourites') {
-                $allItems = $repo->getFavouritesTimeline($limit, $offset);
+                $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter);
             } elseif ($searchQuery !== '') {
-                $allItems = $repo->searchTimeline($searchQuery, $limit, $offset);
+                $allItems = $repo->searchTimeline($searchQuery, $limit, $offset, $timelineFilter);
             } else {
-                $allItems = $repo->getLatestTimeline($limit, $offset);
+                $allItems = $repo->getLatestTimeline($limit, $offset, $timelineFilter);
             }
         } catch (\Throwable $e) {
             error_log('Seismo dashboard: ' . $e->getMessage());
@@ -65,6 +69,8 @@ final class DashboardController
                 $emptyTimelineHint = 'favourites';
             } elseif ($searchQuery !== '') {
                 $emptyTimelineHint = 'search';
+            } elseif ($timelineFilter->isActive()) {
+                $emptyTimelineHint = 'filters';
             }
         }
 

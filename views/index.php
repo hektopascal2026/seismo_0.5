@@ -3,7 +3,7 @@
  * Dashboard / timeline view.
  *
  * Slice 1.5: search (GET), newest/favourites toggle, star buttons, session flash.
- * Tag-filter pills, refresh, and nav drawer remain future slices.
+ * Slice 4: tag-filter pills (0.4 parity).
  */
 
 declare(strict_types=1);
@@ -15,13 +15,41 @@ declare(strict_types=1);
 /** @var string $returnQuery */
 /** @var ?string $dashboardError */
 /** @var string $currentView 'newest'|'favourites' */
-/** @var string $emptyTimelineHint 'default'|'favourites'|'search' */
+/** @var string $emptyTimelineHint 'default'|'favourites'|'search'|'filters' */
 /** @var string $csrfField CSRF hidden input HTML from DashboardController::show() */
+/** @var array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $filterPillOptions */
+/** @var \Seismo\Repository\TimelineFilter $timelineFilter */
 
 use Seismo\Http\AuthGate;
 
 $basePath = getBasePath();
 $accent   = seismoBrandAccent();
+
+/** @param array<string, scalar|null> $overrides */
+$dashboardQs = static function (array $overrides) use ($searchQuery, $currentView): string {
+    $p = $_GET;
+    if (!is_array($p)) {
+        $p = [];
+    }
+    $p['action'] = 'index';
+    if ($searchQuery !== '') {
+        $p['q'] = $searchQuery;
+    }
+    if ($currentView === 'favourites') {
+        $p['view'] = 'favourites';
+    } else {
+        unset($p['view']);
+    }
+    foreach ($overrides as $k => $v) {
+        if ($v === null || $v === '') {
+            unset($p[$k]);
+        } else {
+            $p[$k] = $v;
+        }
+    }
+
+    return http_build_query($p);
+};
 
 $indexLinkParams = ['action' => 'index'];
 if ($searchQuery !== '') {
@@ -113,6 +141,51 @@ $clearSearchQs = http_build_query($clearSearchParams);
                 <a href="?<?= e($indexNewestQs) ?>" class="btn <?= $currentView === 'newest' ? 'btn-primary' : 'btn-secondary' ?>">Newest</a>
                 <a href="?<?= e($indexFavouritesQs) ?>" class="btn <?= $currentView === 'favourites' ? 'btn-primary' : 'btn-secondary' ?>">Favourites</a>
             </div>
+            <?php
+                $fk = isset($_GET['fk']) ? (string)$_GET['fk'] : '';
+                $fc = isset($_GET['fc']) ? (string)$_GET['fc'] : '';
+                $lx = isset($_GET['lx']) ? (string)$_GET['lx'] : '';
+                $etag = isset($_GET['etag']) ? (string)$_GET['etag'] : '';
+                $nocal = isset($_GET['nocal']) && (string)$_GET['nocal'] === '1';
+            ?>
+            <div class="tag-pills-section" style="margin-top: 1rem;">
+                <div style="opacity: 0.85; margin-bottom: 0.35rem;">Filters:</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;">
+                    <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'nocal' => null])) ?>" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Clear filters</a>
+                    <span style="opacity: 0.7;">|</span>
+                    <span style="opacity: 0.75;">Feed type:</span>
+                    <a href="?<?= e($dashboardQs(['fk' => 'rss'])) ?>" class="btn <?= $fk === 'rss' ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">RSS</a>
+                    <a href="?<?= e($dashboardQs(['fk' => 'substack'])) ?>" class="btn <?= $fk === 'substack' ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Substack</a>
+                    <a href="?<?= e($dashboardQs(['fk' => 'scraper'])) ?>" class="btn <?= $fk === 'scraper' ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Scraper</a>
+                    <span style="opacity: 0.7;">|</span>
+                    <span style="opacity: 0.75;">Leg in timeline:</span>
+                    <a href="?<?= e($dashboardQs(['nocal' => $nocal ? null : '1'])) ?>" class="btn <?= $nocal ? 'btn-secondary' : 'btn-primary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;"><?= $nocal ? 'Off' : 'On' ?></a>
+                </div>
+                <?php if ($filterPillOptions['feed_categories'] !== []): ?>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.5rem;">
+                    <span style="opacity: 0.75;">Feed category:</span>
+                    <?php foreach ($filterPillOptions['feed_categories'] as $cat): ?>
+                        <a href="?<?= e($dashboardQs(['fc' => $cat, 'fk' => null])) ?>" class="btn <?= $fc === $cat ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;"><?= e($cat) ?></a>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <?php if ($filterPillOptions['lex_sources'] !== []): ?>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.5rem;">
+                    <span style="opacity: 0.75;">Lex:</span>
+                    <?php foreach ($filterPillOptions['lex_sources'] as $src): ?>
+                        <a href="?<?= e($dashboardQs(['lx' => $src])) ?>" class="btn <?= $lx === $src ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;"><?= e($src) ?></a>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <?php if ($filterPillOptions['email_tags'] !== []): ?>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.5rem;">
+                    <span style="opacity: 0.75;">Email tag:</span>
+                    <?php foreach ($filterPillOptions['email_tags'] as $tg): ?>
+                        <a href="?<?= e($dashboardQs(['etag' => $tg])) ?>" class="btn <?= $etag === $tg ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;"><?= e($tg) ?></a>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+            </div>
         </div>
 
         <div class="latest-entries-section">
@@ -133,6 +206,8 @@ $clearSearchQs = http_build_query($clearSearchParams);
                         <p>No favourites yet. Star entries with the ☆ button on each card, or switch back to <a href="?<?= e($indexNewestQs) ?>">Newest</a>.</p>
                     <?php elseif ($emptyTimelineHint === 'search'): ?>
                         <p>No entries match your search. Try different words or <a href="?action=index">clear the query</a>.</p>
+                    <?php elseif ($emptyTimelineHint === 'filters'): ?>
+                        <p>No entries match the current filters. <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'nocal' => null])) ?>">Clear filters</a> or widen the selection.</p>
                     <?php else: ?>
                         <p>No entries yet. Run <code>?action=migrate</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
                     <?php endif; ?>

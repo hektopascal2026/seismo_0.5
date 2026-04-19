@@ -199,6 +199,16 @@ function entryDbSchemaExpr(): string
 }
 
 /**
+ * Canonical email storage table after Slice 4 migration (unified `emails`).
+ * CLI mail fetchers and repositories should target this name; use
+ * {@see entryTable()} when building SQL.
+ */
+function getEmailTableName(): string
+{
+    return 'emails';
+}
+
+/**
  * Top-bar title. Defaults to "Seismo"; satellites override via SEISMO_BRAND_TITLE.
  */
 function seismoBrandTitle(): string
