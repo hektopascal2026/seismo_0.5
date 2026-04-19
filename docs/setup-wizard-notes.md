@@ -12,7 +12,7 @@ Scratchpad for a future “first run” experience after a user uploads Seismo t
 ### Refresh vs cron (user expectations)
 
 - **Web “Refresh all”** uses `refreshAllSources()` in `controllers/dashboard.php` (feeds, email, Lex/Jus, Leg/parliament_ch when enabled, Magnitu rescore).
-- **`refresh_cron.php`** should match that pipeline; if it diverges, document clearly or unify implementations so “automatic refresh” and the button mean the same thing.
+- **`refresh_cron.php` (0.4)** duplicates the loop manually and **does not** call `refreshAllSources()` — as of consolidation start it **omits the Leg / parliament_ch fetch** that the web button runs. Fix by having cron delegate to `refreshAllSources()` (or shared helper) so behaviour matches.
 - **Mail** and **scraper** use **separate** CLI scripts and crons — not confused with the main refresh loop.
 
 ### Wizard could later check
