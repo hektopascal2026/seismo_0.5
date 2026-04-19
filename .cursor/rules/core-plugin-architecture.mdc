@@ -107,6 +107,48 @@ Hardcoded: `Seismo\Service\PluginRegistry` holds an explicit array of instantiat
 
 If end-user-installable plugins ever become a requirement, swap the registry implementation; the interface does not change.
 
+## Data retention (every family repo ships with `prune()`)
+
+Shared-host DB quotas (1–2 GB) are a real constraint. Data retention is **not** an afterthought feature — it's a repository contract from day one.
+
+Every family repository (`LexItemRepository`, `CalendarEventRepository`, `FeedItemRepository`, `EmailRepository`, …) **MUST** expose:
+
+```php
+public function prune(
+    \DateTimeImmutable $olderThan,
+    array $keepPredicates
+): int; // returns rows deleted
+```
+
+Keep-predicates come from policy, not schema. Minimum set every repo honours:
+
+- `is_favourite = 1` (if the family has the concept)
+- has a Magnitu score in `['investigation_lead', 'important']`
+- is manually labelled in `magnitu_labels` (labelled rows are training data — never delete)
+
+`Seismo\Service\RetentionService` composes the predicates from settings and calls each repo's `prune()` at the end of `refresh_cron.php`. Default policy for 0.5:
+
+| Family | Retention |
+|---|---|
+| `feed_items` | 180 days |
+| `emails` | 180 days |
+| `lex_items` | unlimited (never prune) |
+| `calendar_events` (Leg) | unlimited (never prune) |
+
+Policy is user-overridable per family in Settings. A dry-run preview that reports row counts (without deleting) is mandatory before any destructive run.
+
+## Plugin run log (structured diagnostics table)
+
+`RefreshAllService` records every plugin invocation to a `plugin_run_log` table:
+
+- `id`, `plugin_id`, `run_at`, `status` (`ok` | `skipped` | `error`), `item_count`, `error_message`, `duration_ms`.
+
+This replaces the scattered 0.4 pattern (`consecutive_failures` in `feeds`, `lex_<source>_failures` in `magnitu_config`, ad-hoc PHP error log lines). The diagnostics surface reads the last N runs per plugin.
+
+**No circuit breaker in v0.5.** We do **not** auto-pause plugins after N failures — that hides signal the user needs. `try/catch` + structured logging is enough until we observe the failure mode in production. Revisit only if `plugin_run_log` shows a plugin flapping enough to matter.
+
+Non-plugin errors (PHP fatals, unhandled exceptions) stay in `error_log()`. We don't build a parallel `system_logs` table for those; PHP's native log is fine.
+
 ## When is something Core vs Plugin?
 
 Rule of thumb: **if the upstream is owned by a third party and has broken on us even once, it's a Plugin.** RSS is borderline (upstream feeds break) but we're the parser — it's Core. SPARQL endpoints for EU Lex change quarterly — that's a Plugin.

@@ -64,20 +64,22 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - Introduce `Seismo\Service\SourceFetcherInterface` and a shared HTTP base client.
 - Implement `LexFedlexPlugin` (first plugin) + `LexItemRepository` (first family repo) + `LexController` + Lex page + settings tab for Lex only.
 - Plugin writes nothing directly; controller/refresh handler calls plugin → repository.
+- `LexItemRepository` exposes `prune()` from day one (repository contract, see `core-plugin-architecture.mdc`). Default policy: unlimited for `lex_items`.
 - **Definition of done:** Lex list view and “Refresh Lex” work end-to-end through the new plugin layering — template for every subsequent plugin and family repo.
 
-### Slice 3 — Unified refresh pipeline + plugin runtime boundary
+### Slice 3 — Unified refresh pipeline, runtime boundary, auth backbone, diagnostics
 
 - `Seismo\Service\PluginRegistry` (hardcoded array of instantiated plugins).
-- `Seismo\Service\RefreshAllService` shared by web + CLI: iterates Core fetchers first, then plugins with `try/catch` per plugin. Records per-run status.
+- `Seismo\Service\RefreshAllService` shared by web + CLI: iterates Core fetchers first, then plugins with `try/catch` per plugin. Writes to `plugin_run_log` table (`plugin_id`, `run_at`, `status`, `item_count`, `error_message`, `duration_ms`).
 - Rebuild `refresh_cron.php` as a thin shell that calls `RefreshAllService`.
 - Add **Leg** (ParlCh plugin) to the shared pipeline so cron and web match.
-- Plugin status rendered in the diagnostics / health surface.
-- **Definition of done:** cron and “Refresh all” execute the same steps; Leg is included in both; a failing plugin logs + shows red in diagnostics and the rest of the pipeline keeps running.
+- **Auth backbone (dormant by default).** `Seismo\Http\AuthGate`, `AuthController`, login view, `SEISMO_ADMIN_PASSWORD_HASH` switch in `config.local.php.example`. No behaviour change unless the admin opts in. See `auth-dormant-by-default.mdc`.
+- **Diagnostics surface.** Extend `?action=health` (or new `?action=diagnostics`) with a plugin-status panel: last run per plugin, item count, last error. Adds a "Test" button per plugin that calls `fetch()` without persisting — free given the plugin contract.
+- **Definition of done:** cron and "Refresh all" execute the same steps; Leg is included in both; a failing plugin logs + shows red in diagnostics and the rest of the pipeline keeps running; `SEISMO_ADMIN_PASSWORD_HASH` toggles login on/off; plugin Test button shows first N items of a dry-run fetch.
 
 ### Slice 4 — Remaining entry sources
 
-- **Core fetchers:** RSS, Substack, Mail (with email schema unification migration), Scraper — each ported as a Core service (not a plugin).
+- **Core fetchers:** RSS, Substack, Mail (with email schema unification migration), Scraper — each ported as a Core service (not a plugin). Each ships with repository `prune()`.
 - **Plugins:** LexEu, LexLegifrance, RechtBund (as Jus variant), Parl MM, any other third-party adapter — each follows the Slice 2 template.
 - Unify email schema under `emails` built from today’s `fetched_emails` structure; provide migration script.
 
@@ -87,9 +89,19 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - API controllers (`magnitu_entries`, `magnitu_scores`, `magnitu_recipe`, `magnitu_labels`, `magnitu_status`).
 - Satellite keys, Leg API exclusion stays intentional until we decide otherwise.
 
+### Slice 5a — Config unification + retention service
+
+- Rename `magnitu_config` table → `system_config` (breaking migration; documented, reversible in one step).
+- Fold `lex_config.json` and `calendar_config.json` contents into `system_config` rows keyed `plugin:<identifier>`. Retire the JSON files.
+- `Seismo\Service\RetentionService` composes keep-predicates from settings and calls each family repo's `prune()` at the end of `refresh_cron.php`. Default policy: `feed_items` 180d, `emails` 180d, `lex_items` unlimited, `calendar_events` unlimited. Manually-labelled / favourited / high-scored rows always kept.
+- Settings tab: retention days per family, "dry run" preview showing how many rows would be deleted.
+- **Definition of done:** no JSON config files remain; `php migrate.php` rebuilds a system_config table from the old layout; cron prunes feeds+emails older than 180 days while preserving protected rows; preview matches the real run count.
+
 ### Slice 6 — Admin / settings polish
 
 - Settings tabs split into clean partials (one concern each).
+- Retention UI polish (family toggles, per-family overrides, "last pruned N rows on DATE" readout).
+- Plugin diagnostics polish (test history, per-plugin last-N-runs view).
 - Retire `ai_view` experiments or fold into one admin path.
 - Styleguide kept as design source of truth.
 
@@ -117,3 +129,14 @@ Revisit a templating engine only if real pain emerges (duplicated markup, escapi
 - **Email schema unification** — exact column mapping from `emails` → unified structure. Needs a migration draft before Slice 4.
 - **`ai_view`** — keep as admin-only, retire, or fold into Magnitu UI? Decide before Slice 6.
 - **Magnitu Leg API** — when (or whether) to lift the `calendar_event` exclusion. Product decision, not technical.
+
+## Decisions settled after external review (2026-04-19)
+
+Recorded here so they don't get re-litigated:
+
+- **Retention:** `feed_items` and `emails` prune at **180 days**; `lex_items` and `calendar_events` never prune. Favourites, high-Magnitu-scored rows, and manually labelled rows are always kept. User-overridable per family. Dry-run preview mandatory.
+- **Auth:** native session auth built into 0.5 as a **dormant backbone**. Zero behaviour change unless `SEISMO_ADMIN_PASSWORD_HASH` is set in `config.local.php`. Switchable in one line.
+- **Circuit breaker:** **not** building one for 0.5. `try/catch` + `plugin_run_log` is the contract. Revisit only if production shows a plugin flapping enough to matter.
+- **Run log table:** single `plugin_run_log` table for plugin invocations. Non-plugin errors stay in PHP's `error_log()` — no parallel `system_logs` soup.
+- **Config unification:** rename `magnitu_config` → `system_config` in Slice 5a; plugin configs move from JSON files into `system_config` rows keyed `plugin:<identifier>`. Breaking but one-shot migration.
+- **Plugin dry-run:** no interface change needed. `fetch()` is already pure-function by contract (plugins can't touch the DB). The diagnostics "Test" button just calls `fetch()` and renders the first N items without invoking a repository.

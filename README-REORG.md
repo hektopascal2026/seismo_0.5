@@ -9,6 +9,38 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Decision 2026-04-19 (b) — External review settled (pre-Slice-1)
+
+A software-architect review surfaced five blind spots common to prototypes-becoming-production. Outcomes, in the order raised:
+
+**1. Unified logging + circuit breaker.** Accepted logging, rejected breaker. A single `plugin_run_log` table (`plugin_id`, `run_at`, `status`, `item_count`, `error_message`, `duration_ms`) is populated by `RefreshAllService` in Slice 3 and read by the diagnostics surface. No parallel `system_logs` — PHP's `error_log()` is the floor for non-plugin errors. **No circuit breaker in v0.5** — auto-pausing plugins hides signal the user needs; `try/catch` + structured log is enough until production shows we need more.
+
+**2. Data retention / GC.** Accepted and **promoted to a repository contract**. Every family repository (`LexItemRepository`, `CalendarEventRepository`, `FeedItemRepository`, `EmailRepository`) ships with `prune(\DateTimeImmutable $olderThan, array $keepPredicates): int` from day one — not bolted on later. A `Seismo\Service\RetentionService` composes keep-predicates from settings and calls each repo at the end of `refresh_cron.php`. Policy for v0.5: `feed_items` 180d, `emails` 180d, `lex_items` unlimited, `calendar_events` unlimited. Favourites, `investigation_lead`/`important` scored rows, and manually labelled rows are always kept. Dry-run preview is mandatory.
+
+**3. Config standardization (JSON vs DB).** Accepted with a scheduled refactor, not a rush job. Slice 5a renames `magnitu_config` → `system_config` (the table has been misnamed since 0.3; it's always been a generic k/v store) and folds `lex_config.json` + `calendar_config.json` into `system_config` rows keyed `plugin:<identifier>`. Retires the JSON files. Breaking but one-shot — cleaner backups, cleaner satellite story, cleaner setup wizard.
+
+**4. Plugin dry-run / test mode.** Accepted, **no interface change needed**. The plugin contract already forbids touching the DB, so `fetch()` is a pure function from config + network → items. The diagnostics "Test" button in Slice 3 just calls `fetch()` and renders the first N items without invoking a repository. Free feature given the contract we already chose.
+
+**5. Native session auth.** Accepted as a **dormant backbone**. Slice 3 ships:
+- `Seismo\Http\AuthGate` + `AuthController` + login view
+- `SEISMO_ADMIN_PASSWORD_HASH` constant in `config.local.php.example`
+- When the constant is unset → `AuthGate::check()` is a no-op, no behaviour change
+- When the constant is set → protected routes redirect to `?action=login`; session flag grants access
+- `health`, `login`, and `magnitu_*` are whitelisted; `health` strips version strings when auth is enforced
+- Magnitu API keeps its own Bearer-token auth, independent of this switch
+
+Rationale: the moment refresh endpoints land, an open URL is a DoS + third-party-rate-limit-cost vector. Backbone is cheap to build clean now and impossible to retrofit cleanly later; keeping it dormant means zero friction for the single-user workflow until the user chooses to flip it on.
+
+**What moved.** Nothing yet — pre-slice decisions captured for Slice 2 onward.
+
+**New rules.**
+
+- `core-plugin-architecture.mdc` extended with "Data retention" and "Plugin run log" sections (mirrored into 0.4).
+- `auth-dormant-by-default.mdc` — new, small, load-bearing. Mirrored into 0.4.
+- `docs/consolidation-plan.md` updated: Slice 3 widened (auth + run log + diagnostics), new Slice 5a (config unification + retention service), Slice 6 gains retention UI polish. A "Decisions settled after external review" section closes out the open questions the review raised.
+
+---
+
 ## Decision 2026-04-19 — Core / Plugin split (pre-Slice-1)
 
 Not a code slice; an architectural decision that shapes every slice from 2 onward. Recorded here because it changes where future ports land and what the runner looks like.

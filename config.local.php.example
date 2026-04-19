@@ -51,3 +51,16 @@ define('DB_PASS', 'CHANGE_ME');
  */
 // define('SEISMO_BRAND_TITLE', 'Seismo Digital');
 // define('SEISMO_BRAND_ACCENT', '#4a90e2');
+
+/**
+ * Optional — require login for the web UI.
+ *
+ * When this constant is unset OR an empty string, Seismo runs without any
+ * auth (same as today). When set to a password_hash() output, the web UI
+ * redirects unauthenticated visitors to `?action=login`. The Magnitu API
+ * is unaffected — it keeps its own Bearer-token auth.
+ *
+ * Generate the hash locally and paste it here:
+ *   php -r "echo password_hash('yourpass', PASSWORD_DEFAULT);"
+ */
+// define('SEISMO_ADMIN_PASSWORD_HASH', '$2y$12$...');

@@ -21,3 +21,13 @@ Scratchpad for a future “first run” experience after a user uploads Seismo t
 - `config.local.php` present and DB reachable.
 - Optional: writable JSON config paths; `.htaccess` / rewrite if applicable.
 - Generate or validate cron suggestions with **current** install path.
+
+### Auth onboarding (Slice 3)
+
+- Wizard should offer a "Set an admin password" step. On submit: compute `password_hash($input, PASSWORD_DEFAULT)` server-side, write the result to `config.local.php` as `SEISMO_ADMIN_PASSWORD_HASH`, never log or echo the plaintext. User can skip this step and the app runs unauthenticated — that's a supported default, not a warning.
+- If the wizard can't write to `config.local.php` (read-only filesystem on some shared hosts), display the hash and the exact `define(...)` line for the user to paste manually.
+
+### Retention onboarding (Slice 5a)
+
+- Wizard lands on retention defaults (`feed_items` 180d, `emails` 180d, `lex_items` unlimited, `calendar_events` unlimited). Shows current row counts and a dry-run preview of what would be deleted. No pruning runs until the user explicitly opts in.
+- Flag that Magnitu-labelled rows are always preserved — important for users who've already started training.

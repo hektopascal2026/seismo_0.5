@@ -1,0 +1,44 @@
+---
+description: Native session auth is built in but dormant unless SEISMO_ADMIN_PASSWORD_HASH is set — one switch turns it on
+alwaysApply: true
+---
+
+# Auth — dormant by default
+
+Seismo 0.5 ships with a working native session auth layer that **does nothing** unless the admin opts in. This lets us build the backbone cleanly now (before refresh endpoints create a real DoS / rate-limit-cost vector) without forcing a login flow on the single-user personal workflow.
+
+## The switch
+
+Auth is controlled by a single constant in `config.local.php`:
+
+```php
+// Uncomment to require login. Generate the hash locally:
+//   php -r "echo password_hash('yourpass', PASSWORD_DEFAULT);"
+// define('SEISMO_ADMIN_PASSWORD_HASH', '$2y$12$...');
+```
+
+- **Constant undefined or empty string** → auth is **dormant**. All routes are open. No login page shown in nav. `AuthGate::check()` is a no-op. User's workflow is identical to an unauthenticated app.
+- **Constant set to a non-empty `password_hash()` output** → auth is **enforced**. Protected routes redirect to `?action=login`; login form verifies via `password_verify()`; session flag `$_SESSION['seismo_admin'] = true` grants access until `?action=logout`.
+
+## Implementation shape
+
+- `Seismo\Http\AuthGate` — has `isEnabled()`, `isLoggedIn()`, `check(string $action): void` (redirects or returns).
+- `Seismo\Controller\AuthController` — `showLogin()`, `handleLogin()`, `logout()`.
+- `views/login.php` — plain form, uses `e()` for escaping, nothing fancy.
+- Router calls `AuthGate::check($action)` **before** dispatch.
+- Nav partial conditionally renders "Logout" only when `AuthGate::isEnabled() && AuthGate::isLoggedIn()`.
+
+## Public whitelist (always accessible even when auth is enforced)
+
+- `health` — uptime monitors need this. When auth is enforced, the health view hides PHP/MySQL version strings and reports `ok` / `not ok` only. Full detail only for logged-in admin.
+- `login` — obvious.
+- `magnitu_*` — machine-to-machine, uses Bearer tokens, never session auth.
+
+Everything else (dashboard, settings, refresh, plugin-test, diagnostics) requires login when the switch is on.
+
+## Hard rules
+
+- **Never** require auth to run by default. A fresh checkout + filled-in DB credentials must load the dashboard without a login form. The point of the backbone is that it's switchable, not mandatory.
+- **Never** store the plaintext password anywhere. Only the `password_hash()` output. The setup wizard (future) should compute the hash server-side from a user-entered password and write only the hash.
+- **Never** expose the health route's full detail to unauthenticated visitors when auth is enabled. Degrade gracefully.
+- **Magnitu API auth is separate.** `SEISMO_ADMIN_PASSWORD_HASH` controls the web UI only. Magnitu's Bearer token in `magnitu_config.api_key` is independent and unaffected by this switch.
