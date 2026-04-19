@@ -30,8 +30,24 @@ Scratchpad for a future “first run” experience after a user uploads Seismo t
 ### First-run / post-upload (Slice 0 complete)
 
 - After upload, operator creates `config.local.php` on the server (never committed).
-- Run **`php migrate.php`** once via SSH or the host’s PHP CLI (Plesk → PHP → Run script). On an empty database it applies `docs/db-schema.sql` and sets `schema_version` to 17. On a database already populated by Seismo 0.4, it should print that schema is already at version 17 and exit — **no destructive operations**.
-- `php migrate.php --status` prints current version without applying anything.
+
+**No SSH / no PHP CLI (URL-only hosting — typical shared webspace)**
+
+1. In `config.local.php`, set **`SEISMO_MIGRATE_KEY`** to a long random string (generate on your laptop: `php -r "echo bin2hex(random_bytes(32));"` and paste the hex).
+2. Upload `config.local.php` and ensure **`docs/db-schema.sql`** is on the server (same folder layout as in the repo — the migrator reads it at runtime).
+3. Open **once** in the browser (replace host, path, and secret):
+
+   `https://www.example.org/seismo/?action=migrate&key=YOUR_SECRET`
+
+4. Expect **plain text**: current schema version, then either **“Nothing to do — schema is already at version 17”** (if the DB was already migrated by 0.4) or lines showing migration 17 applied. **No HTML** — if you see a login page or 404, the URL path or key is wrong.
+5. Optional: remove or comment out `SEISMO_MIGRATE_KEY` after migrations are done so the URL cannot be called anymore.
+
+**With SSH or host “Run PHP script” (CLI available)**
+
+- `php migrate.php` — apply pending migrations.
+- `php migrate.php --status` — print version only, no changes.
+
+On an empty database, migration applies `docs/db-schema.sql` and sets `schema_version` to 17. On a database already used by Seismo 0.4, expect **no destructive operations** — mostly **“Nothing to do”** when already at 17.
 
 ### Retention onboarding (Slice 5a)
 

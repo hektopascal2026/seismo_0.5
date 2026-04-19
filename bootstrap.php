@@ -55,6 +55,7 @@ $__seismoDefaults = [
     'SEISMO_MOTHERSHIP_URL'    => '',
     'SEISMO_REMOTE_REFRESH_KEY' => '',
     'FEED_DIAGNOSTIC_KEY'      => '',
+    'SEISMO_MIGRATE_KEY'       => '',
 ];
 foreach ($__seismoDefaults as $__c => $__v) {
     if (!defined($__c)) {

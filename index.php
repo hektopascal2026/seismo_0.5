@@ -30,6 +30,11 @@ $router->register(
     \Seismo\Controller\HealthController::class . '::show',
     true
 );
+$router->register(
+    'migrate',
+    \Seismo\Controller\MigrateController::class . '::runWeb',
+    true
+);
 $router->setDefault('health');
 
 $action = $_GET['action'] ?? '';

@@ -33,7 +33,7 @@ When something breaks on the host but works locally (path, header, PHP extension
 
 User's host: `hektopascal.org`. 0.5 test URLs are relative to `https://www.hektopascal.org/seismo/`.
 
-- **Slice 0 (skeleton):** `?action=health` — ✅ verified live (PHP 8.2.30, MariaDB 10.6.20, schema 17, mothership, base path `/seismo`).
+- **Slice 0 (skeleton):** `?action=health` — ✅ verified live (PHP 8.2.30, MariaDB 10.6.20, schema 17, mothership, base path `/seismo`). **Migrations without CLI:** set `SEISMO_MIGRATE_KEY` in `config.local.php`, then open `?action=migrate&key=…` once — plain-text response; no SSH required.
 - **Slice 1 (read-only dashboard):** `?action=index` — renders existing entries via the new `EntryRepository` using `dashboard_entry_loop.php`.
 - **Slice 2+ …** add here.
 

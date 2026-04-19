@@ -64,3 +64,16 @@ define('DB_PASS', 'CHANGE_ME');
  *   php -r "echo password_hash('yourpass', PASSWORD_DEFAULT);"
  */
 // define('SEISMO_ADMIN_PASSWORD_HASH', '$2y$12$...');
+
+/**
+ * Optional — run DB migrations from the browser (no SSH / PHP CLI on host).
+ *
+ * Many shared hosts only allow uploading files and opening URLs — no terminal.
+ * Set a long random secret here, then once after deploy open:
+ *   https://your-host/path/to/seismo/?action=migrate&key=YOUR_SECRET
+ * Plain-text response: current version, then either “Nothing to do” or apply
+ * pending migrations. Remove or empty this key after you are done if you prefer.
+ *
+ * Generate locally:  php -r "echo bin2hex(random_bytes(32));"
+ */
+// define('SEISMO_MIGRATE_KEY', 'paste-a-long-random-string-here');

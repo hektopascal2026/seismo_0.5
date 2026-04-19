@@ -56,7 +56,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - Minimal class-based router in `index.php` (preserve read-only session-lock release).
 - `migrate.php` CLI + `Seismo\Migration\MigrationRunner`: migration 17 applies `docs/db-schema.sql` (consolidated 0.4 schema, all `CREATE TABLE IF NOT EXISTS`). Idempotent on existing 0.4 databases; stamps `magnitu_config.schema_version`. Later migrations append new numbered classes in `src/Migration/`.
 - One trivial route (e.g. `?action=health`) returning DB + version status.
-- **Definition of done:** fresh empty DB + `config.local.php` + `php migrate.php` creates all tables and sets schema 17; `?action=health` shows schema 17; existing live DB prints “Nothing to do” when already at 17.
+- **Definition of done:** fresh empty DB + `config.local.php` + migrations applied (CLI: `php migrate.php`, or **no CLI:** `?action=migrate&key=…` with `SEISMO_MIGRATE_KEY` in config) creates all tables and sets schema 17; `?action=health` shows schema 17; existing live DB prints “Nothing to do” when already at 17.
 
 ### Slice 1 — Read-only dashboard
 

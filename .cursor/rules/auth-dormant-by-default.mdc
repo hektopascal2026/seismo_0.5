@@ -32,6 +32,7 @@ Auth is controlled by a single constant in `config.local.php`:
 
 - `health` — uptime monitors need this. When auth is enforced, the health view hides PHP/MySQL version strings and reports `ok` / `not ok` only. Full detail only for logged-in admin.
 - `login` — obvious.
+- `migrate` — only works when `SEISMO_MIGRATE_KEY` is set and `?key=` matches (shared-hosting users without CLI). Not session auth.
 - `magnitu_*` — machine-to-machine, uses Bearer tokens, never session auth.
 
 Everything else (dashboard, settings, refresh, plugin-test, diagnostics) requires login when the switch is on.
