@@ -9,6 +9,44 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Decision 2026-04-19 (d) — Shared-host hardening (Slice 0 code + Slice 1/2 rules)
+
+A final review raised four shared-hosting / stateless-LLM-integration concerns. All four accepted; three became rules effective from Slice 1, one required a code change in Slice 0 applied retroactively.
+
+**1. Time is UTC everywhere.** Mixed time zones between PHP (often Europe/Zurich on Swiss shared hosts) and MariaDB (often UTC) silently break stateless `?since=<iso8601>` queries and retention cutoffs. Fix applied to `bootstrap.php` now:
+
+- `date_default_timezone_set('UTC')` runs before any timestamp is created.
+- `getDbConnection()` executes `SET time_zone = '+00:00'` immediately after connecting so NOW(), CURRENT_TIMESTAMP, and implicit conversions all speak UTC regardless of the server's configured TZ.
+
+New rule in `core-plugin-architecture.mdc` ("Time is UTC everywhere"): repositories store/return UTC; formatters emit ISO-8601 with explicit `Z`; views are the only layer allowed to convert to local time.
+
+**2. Bounded queries.** Shared-host `memory_limit` is typically 128 MB. A `SELECT *` across 180 days of `feed_items` with their `content` and `html_body` columns OOMs instantly. New rule: every list-returning repository method takes `int $limit` and `int $offset`, hardcoded max 200, no defaults returning everything. Single-row lookups don't need limits; pagination counts are the controller's concern via a dedicated `count()` method. Effective from Slice 1's `EntryRepository`.
+
+**3. Composer boundary.** Slice 2 will pull in vendor libs (EasyRdf for SPARQL, possibly SimplePie for RSS) and would crash on startup if `vendor/autoload.php` isn't loaded before our custom autoloader tries to find third-party classes. Fix applied to `bootstrap.php` now — `file_exists()` + `require_once` for `vendor/autoload.php` before `spl_autoload_register()`. Safe even though `vendor/` doesn't exist yet.
+
+**4. Transactional `upsertBatch`.** Plugin batches go in whole or not at all. New rule in `core-plugin-architecture.mdc` ("Transactional `upsertBatch`"): wrap `beginTransaction` / `commit`, rollback on any row failure, let the exception bubble to `RefreshAllService` which logs it to `plugin_run_log`. Partial state is worse than re-fetching.
+
+If we ever observe "one bad row kills a 50-item fetch repeatedly" as a real operational pain, we graduate to per-row `try/catch` inside the transaction with a warnings array. Not speculative.
+
+**What moved (code).**
+
+- `bootstrap.php` section 0: `date_default_timezone_set('UTC')`.
+- `bootstrap.php` section 3 renamed: Composer `vendor/autoload.php` loaded first (if present), then the `Seismo\*` PSR-4 autoloader.
+- `getDbConnection()`: `SET time_zone = '+00:00'` after PDO connection.
+
+**What moved (docs).**
+
+- `core-plugin-architecture.mdc` gains three new sections: "Time is UTC everywhere", "Bounded queries", "Transactional `upsertBatch`". Mirrored into 0.4.
+- `docs/consolidation-plan.md`: Slice 0 scope mentions UTC + vendor autoload; Slice 1 scope mentions bounded/raw/UTC; Slice 2 scope mentions transactional `upsertBatch` and `composer.json`; portability checklist gains three new items (no naive timestamps, no unbounded list methods, no `upsertBatch` without a transaction).
+
+**Gotchas.**
+
+- MariaDB `TIMESTAMP` columns store UTC internally regardless of session TZ; `DATETIME` columns store whatever's handed to them. With PHP + session both pinned to UTC, both behave identically. Choose `DATETIME` when writing new columns in migrations — `TIMESTAMP` has a 2038 limit.
+- The hardcoded `$limit` cap (200) is intentionally global. A future "bulk export" endpoint that really needs more will stream via a generator method, not raise the cap.
+- The 0.5 health page tested live yesterday was written **before** these changes. It still works — UTC pinning is additive. No re-deploy is mandatory for Slice 0 acceptance, but the next deploy will pick up the hardening automatically.
+
+---
+
 ## Decision 2026-04-19 (c) — LLM-friendly export surface (pre-Slice-1)
 
 A second review round asked how Seismo should look to an external LLM briefing workflow. Three commitments:

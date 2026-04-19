@@ -20,6 +20,16 @@ define('SEISMO_VERSION', '0.5.0-dev');
 define('SEISMO_ROOT', __DIR__);
 
 // ---------------------------------------------------------------------------
+// 0. Time is UTC everywhere.
+// ---------------------------------------------------------------------------
+// Shared hosting environments routinely disagree: PHP in Europe/Zurich, MySQL
+// in UTC, or the other way around. Mixed time zones break the stateless
+// ?since=<iso8601> export contract and the retention cutoff. We pin PHP to UTC
+// here and the DB session to UTC in getDbConnection() below. Views/formatters
+// convert to local time at render — never in the data layer.
+date_default_timezone_set('UTC');
+
+// ---------------------------------------------------------------------------
 // 1. Local credentials
 // ---------------------------------------------------------------------------
 $__seismoLocalConfig = __DIR__ . '/config.local.php';
@@ -54,8 +64,17 @@ foreach ($__seismoDefaults as $__c => $__v) {
 unset($__seismoDefaults, $__c, $__v);
 
 // ---------------------------------------------------------------------------
-// 3. Autoloader for Seismo\* → src/
+// 3. Autoloaders — Composer first, then our own Seismo\* loader.
 // ---------------------------------------------------------------------------
+// Composer vendor libs (SimplePie, EasyRdf, etc.) must be available before any
+// plugin that depends on them is instantiated. Safe to include now even though
+// vendor/ doesn't exist yet — the file_exists() check short-circuits cleanly.
+$__seismoVendorAutoload = __DIR__ . '/vendor/autoload.php';
+if (is_file($__seismoVendorAutoload)) {
+    require_once $__seismoVendorAutoload;
+}
+unset($__seismoVendorAutoload);
+
 spl_autoload_register(static function (string $class): void {
     $prefix = 'Seismo\\';
     if (strncmp($class, $prefix, strlen($prefix)) !== 0) {
@@ -90,6 +109,11 @@ function getDbConnection(): PDO
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES   => false,
     ]);
+    // Pin the session to UTC regardless of how the host configured the server.
+    // PHP is already UTC (see bootstrap section 0); this keeps MariaDB aligned
+    // so NOW(), CURRENT_TIMESTAMP, and implicit TIMESTAMP conversions all
+    // speak the same time zone as our PHP DateTimeImmutable values.
+    $pdo->exec("SET time_zone = '+00:00'");
     return $pdo;
 }
 

@@ -52,7 +52,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 ### Slice 0 — Skeleton & health check
 
-- `bootstrap.php` (autoload, config, PDO, `isSatellite()`, `entryTable()`).
+- `bootstrap.php`: UTC (`date_default_timezone_set('UTC')`), Composer vendor autoload if present, custom `Seismo\*` PSR-4 autoloader, `isSatellite()`, `entryTable()`, PDO singleton with `SET time_zone = '+00:00'`.
 - Minimal class-based router in `index.php` (preserve read-only session-lock release).
 - `migrate.php` CLI that runs the DDL (port today’s `initDatabase()` contents).
 - One trivial route (e.g. `?action=health`) returning DB + version status.
@@ -60,18 +60,20 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 ### Slice 1 — Read-only dashboard
 
-- `EntryRepository` (polymorphic reads, satellite-aware).
-- `DashboardController` that lists entries using the existing `dashboard_entry_loop.php` partial unchanged (cards are protected).
+- `EntryRepository` — polymorphic reads, satellite-aware, **bounded** (every list method takes `$limit` / `$offset`, hardcoded cap at 200; no unbounded SELECTs), **raw** (no HTML-escaping in the repo layer), **UTC-clean** (all timestamps as `DateTimeImmutable` in UTC).
+- `DashboardController` that lists entries using the existing `dashboard_entry_loop.php` partial unchanged (cards are protected). Controller applies `$limit`/`$offset` from `$_GET`.
 - No writes yet. Satellite mode should work against a mothership DB without scraping.
-- **Definition of done:** feed renders on both mothership and satellite; all card types look identical to 0.4.
+- **Definition of done:** feed renders on both mothership and satellite; all card types look identical to 0.4; no query returns more than 200 rows regardless of URL params; no `htmlspecialchars` call in repository code.
 
 ### Slice 2 — Lex as the reference plugin port
 
 - Introduce `Seismo\Service\SourceFetcherInterface` and a shared HTTP base client.
+- Add `composer.json` pulling EasyRdf (SPARQL) and any other genuine vendor needs for Lex; Composer's `vendor/autoload.php` is already wired in Slice 0's bootstrap.
 - Implement `LexFedlexPlugin` (first plugin) + `LexItemRepository` (first family repo) + `LexController` + Lex page + settings tab for Lex only.
 - Plugin writes nothing directly; controller/refresh handler calls plugin → repository.
 - `LexItemRepository` exposes `prune()` from day one (repository contract, see `core-plugin-architecture.mdc`). Default policy: unlimited for `lex_items`.
-- **Definition of done:** Lex list view and “Refresh Lex” work end-to-end through the new plugin layering — template for every subsequent plugin and family repo.
+- `LexItemRepository::upsertBatch()` is **transactional** (begin / commit / rollback on any row failure). Plugin batches go in whole or not at all.
+- **Definition of done:** Lex list view and “Refresh Lex” work end-to-end through the new plugin layering — template for every subsequent plugin and family repo; intentionally inserting a bad row in a test batch rolls the whole batch back and leaves `lex_items` untouched.
 
 ### Slice 3 — Unified refresh pipeline, runtime boundary, auth backbone, diagnostics
 
@@ -123,6 +125,9 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - [ ] New tables and ENUM widenings live in `migrate.php`, not request-time.
 - [ ] Cron changes mirrored in `RefreshAllService` (or equivalent).
 - [ ] Setup-wizard notes updated with any new requirement (extensions, writable paths, env vars).
+- [ ] No naive timestamps — all `DateTimeImmutable` constructed with explicit UTC; all ISO-8601 output includes `Z` / `+00:00`.
+- [ ] No list-returning repository method without `$limit` / `$offset`.
+- [ ] No `upsertBatch` / multi-row write method without a transaction wrapper.
 
 ## Views
 
@@ -161,3 +166,4 @@ Recorded here so they don't get re-litigated:
 - **Config unification:** rename `magnitu_config` → `system_config` in Slice 5a; plugin configs move from JSON files into `system_config` rows keyed `plugin:<identifier>`. Breaking but one-shot migration.
 - **Plugin dry-run:** no interface change needed. `fetch()` is already pure-function by contract (plugins can't touch the DB). The diagnostics "Test" button just calls `fetch()` and renders the first N items without invoking a repository.
 - **Machine-readable export:** three commitments for Slice 5 — repositories return raw data (rule enforced from Slice 1), export is stateless (client passes `?since`), and a dedicated read-only API key keeps briefing scripts blast-radius-small. Stateful "already briefed" tracking is out of scope; we'd add it if a second consumer ever needs to coordinate, not speculatively.
+- **Shared-host hardening (a round of four):** UTC everywhere (PHP + MariaDB session pinned); every list-returning repo method is bounded (`$limit`/`$offset`, hardcoded max 200); every `upsertBatch` wraps a transaction with rollback-on-any-row-failure; Composer `vendor/autoload.php` is included by `bootstrap.php` before our own autoloader so plugins bringing vendor deps (EasyRdf, etc.) don't crash at startup.

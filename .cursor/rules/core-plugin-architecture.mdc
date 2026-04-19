@@ -107,6 +107,52 @@ Hardcoded: `Seismo\Service\PluginRegistry` holds an explicit array of instantiat
 
 If end-user-installable plugins ever become a requirement, swap the registry implementation; the interface does not change.
 
+## Time is UTC everywhere (one clock, one format)
+
+Shared hosts routinely disagree between themselves (PHP in Europe/Zurich, MariaDB in UTC, or vice versa), and mixed time zones silently break the stateless `?since=<iso8601>` export contract, retention cutoffs, and timestamp diffing. v0.5 enforces UTC on **every** layer that sees a timestamp:
+
+- `bootstrap.php` calls `date_default_timezone_set('UTC')` before anything else creates a timestamp.
+- `getDbConnection()` pins the MariaDB session with `SET time_zone = '+00:00'` immediately after connecting.
+- Repositories store and return UTC. When constructing PHP objects, use `new DateTimeImmutable($value, new DateTimeZone('UTC'))`. Never naive.
+- Formatters output **ISO-8601 with an explicit `Z` or `+00:00` suffix**. Never a bare `2026-04-19 10:00:00`.
+- **Views are the only layer allowed to convert to local time** (currently Zurich). A helper in `views/` will handle display formatting; repositories never see a local-time value.
+
+**Consequence.** Daylight-saving transitions in March and October, which have historically produced "off by two hours" bugs in `?since` queries and retention pruning, cannot happen because no layer below the view ever leaves UTC.
+
+## Bounded queries (every list method has `$limit` and `$offset`)
+
+Shared-host `memory_limit` is typically 128 MB. A `SELECT * FROM feed_items` across 180 days of retained rows, each with `content` and `html_body`, will OOM instantly. Repositories MUST NOT return unbounded result sets.
+
+- Every list-returning repository method takes `int $limit` and `int $offset` parameters — no defaults that return everything.
+- There is a hardcoded maximum `$limit` (currently **200**) defined as a repository constant. Callers asking for more are silently capped. This protects against "`?limit=1000000`" in the URL bar.
+- Single-row lookups (`findById`, `findByExternalId`) don't need limits — they fetch one row.
+- Pagination metadata (total count) is the controller's concern, not the repository's: call a dedicated `count()` method when the view needs totals.
+
+## Transactional `upsertBatch` (all-or-nothing per plugin run)
+
+Plugin batches go in whole or not at all. `LexItemRepository::upsertBatch()`, `CalendarEventRepository::upsertBatch()`, and any future family repo's batch method follow this shape:
+
+```php
+public function upsertBatch(array $items): int
+{
+    $this->pdo->beginTransaction();
+    try {
+        foreach ($items as $item) {
+            $this->upsertOne($item); // prepared statement inside
+        }
+        $this->pdo->commit();
+        return count($items);
+    } catch (\Throwable $e) {
+        $this->pdo->rollBack();
+        throw $e; // RefreshAllService catches, logs to plugin_run_log
+    }
+}
+```
+
+If any row fails, the whole batch rolls back and the plugin's `plugin_run_log` row records the error. Partial state is worse than re-fetching — the plugin runs again on the next refresh cycle.
+
+If we ever observe "one bad row kills the whole fetch" as a real operational pain, we graduate to per-row `try/catch` inside the transaction with a warnings array. Not speculative.
+
 ## Repositories return raw data (no escaping, no formatting)
 
 The repository layer is the boundary between "what MariaDB stores" and "what anyone who wants that data receives". It is **not** the place for presentation concerns.
