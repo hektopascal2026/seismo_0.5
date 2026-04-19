@@ -64,6 +64,23 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - `DashboardController` that lists entries using the existing `dashboard_entry_loop.php` partial unchanged (cards are protected). Controller applies `$limit`/`$offset` from `$_GET`.
 - No writes yet. Satellite mode should work against a mothership DB without scraping.
 - **Definition of done:** feed renders on both mothership and satellite; all card types look identical to 0.4; no query returns more than 200 rows regardless of URL params; no `htmlspecialchars` call in repository code.
+- **Explicitly deferred from this slice** (reassigned to named slices after an unilateral drop in the first Slice 1 attempt — see `slice-scope-fidelity.mdc`):
+ - Search box (`?q=...`) → **Slice 1.5**. Read-only; no reason to wait for Slice 4.
+ - Favourites-view toggle (`?view=favourites`) → **Slice 1.5**. Read-only filter against `entry_favourites`.
+ - Tag filter pills (feed / email / substack categories, Lex pills, scraper pills, Leg pill) → **Slice 4**. Pills depend on fully ported entry sources + the sender_tags unification that Slice 4 already touches; doing them piecewise now would ship partial filters that break as each source ports.
+ - Per-card star buttons (render) → **Slice 1.5**; POST to `?action=toggle_favourite` → **Slice 3**. Render-only stars that 500 on click are worse UX than none, so they ship together with the toggle route.
+ - Top-bar "Refresh all" button and `?action=refresh_all` → **Slice 3** (unified refresh pipeline).
+ - Navigation drawer with links to other pages → **Slice 6** (admin/settings polish), unless navigability pain surfaces sooner as Slices 2–4 land pages that need to be reachable from the dashboard.
+
+### Slice 1.5 — Dashboard filters (read-only)
+
+- Search box: `EntryRepository::searchTimeline(string $q, int $limit, int $offset)`. Runs `LIKE` across title + description + content for feed_items, subject + body for emails, title + description for lex_items and calendar_events. Bounded + satellite-safe like Slice 1.
+- Newest / Favourites view toggle: second repository method `EntryRepository::getFavouritesTimeline(int $limit, int $offset)` that filters by the **local** `entry_favourites` table (never wrapped in `entryTable()`). Read-only — the star POST stays out of this slice.
+- Per-card star buttons rendered when `$showFavourites = true` in the view. Their form posts to `?action=toggle_favourite`, which still returns a 404/500 in this slice — so the buttons are re-enabled here **only if Slice 3 lands first or Slice 1.5 is paired with the minimum toggle-favourite POST route**. Choose one of:
+ - **1.5a:** render stars now, wire the POST in Slice 3. Cleaner split but ships a broken star click.
+ - **1.5b:** render stars and ship just `?action=toggle_favourite` (single POST endpoint + repo write) alongside 1.5. Minimal write surface, no broken state.
+ Defaults to 1.5b so the dashboard is coherent after each slice.
+- **Definition of done:** `?q=` filters the merged timeline without regressions; `?view=favourites` shows only starred entries; star click toggles favourite state and reloads; no query exceeds 200 rows; no HTML in the repository layer.
 
 ### Slice 2 — Lex as the reference plugin port
 
@@ -90,6 +107,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - **Core fetchers:** RSS, Substack, Mail (with email schema unification migration), Scraper — each ported as a Core service (not a plugin). Each ships with repository `prune()`.
 - **Plugins:** LexEu, LexLegifrance, RechtBund (as Jus variant), Parl MM, any other third-party adapter — each follows the Slice 2 template.
 - Unify email schema under `emails` built from today’s `fetched_emails` structure; provide migration script.
+- **Tag filter pills on the dashboard** (deferred from Slice 1): feed-category pills, email-tag pills, substack-category pills, Lex source pills, scraper-source pills, Leg toggle. Ships here rather than piecemeal so all pills reflect fully ported sources and the unified `sender_tags`/email-tags surface.
 
 ### Slice 5 — Magnitu boundary + machine-readable export surface
 
@@ -116,6 +134,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - Plugin diagnostics polish (test history, per-plugin last-N-runs view).
 - Retire `ai_view` experiments or fold into one admin path.
 - Styleguide kept as design source of truth.
+- **Navigation drawer on the dashboard and per-source pages** (deferred from Slice 1): top-bar menu button reopened, drawer links to Feeds / Mail / Lex / Leg / Magnitu / Settings / About. Can land earlier if navigability pain surfaces before Slice 6 — in that case, split into a small "Slice 2.5 — navigation" and update this section to point at the slice it moved to. Do not re-add it mid-slice without naming the slice (`slice-scope-fidelity.mdc`).
 
 ## Portability checklist (applies to every slice)
 
@@ -128,6 +147,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - [ ] No naive timestamps — all `DateTimeImmutable` constructed with explicit UTC; all ISO-8601 output includes `Z` / `+00:00`.
 - [ ] No list-returning repository method without `$limit` / `$offset`.
 - [ ] No `upsertBatch` / multi-row write method without a transaction wrapper.
+- [ ] No 0.4 feature dropped from the slice's scope without either (a) user confirmation in the same turn, or (b) a numbered slice entry added to this file. See `.cursor/rules/slice-scope-fidelity.mdc`.
 
 ## Views
 

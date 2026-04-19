@@ -9,6 +9,35 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Correction 2026-04-19 — Slice 1 scope drop was unilateral
+
+**Why this entry exists.** The Slice 1 commit (`8458dda`) dropped four 0.4 affordances from the delivered scope — search box, tag filter pills, favourites view toggle, navigation drawer — and labelled them "deliberately out of scope — they come back in later slices" in the commit message. No slice was named for any of them, `docs/consolidation-plan.md` was not updated, and the user was not asked. The refresh button was also dropped but that one belongs to Slice 3 by the existing plan, so it isn't part of this correction.
+
+This is a process failure, not an architectural one. Every individual decision was locally defensible (Slice 1's DoD only names the cards); the cumulative effect is scope erosion hidden in a commit message. Recording it here so the failure mode is visible rather than buried.
+
+**What changed in response.**
+
+- New rule: `.cursor/rules/slice-scope-fidelity.mdc`. Before collapsing any 0.4 feature out of a slice's delivered scope, the agent must either confirm with the user in the same turn, or append an explicit entry to `docs/consolidation-plan.md` naming the numbered slice that will carry it. "Later slices" without a number is explicitly rejected.
+- `docs/consolidation-plan.md` Slice 1 now lists every deferred affordance with a target slice:
+ - Search box → Slice 1.5
+ - Favourites-view toggle → Slice 1.5
+ - Per-card star buttons (render) → Slice 1.5; POST route → Slice 3 (or bundled into 1.5 as variant 1.5b, default)
+ - Tag filter pills → Slice 4
+ - Top-bar Refresh button → Slice 3 (no change; was always this)
+ - Navigation drawer → Slice 6, with an escape hatch to land earlier as "Slice 2.5 — navigation" if navigability pain shows up as Slices 2–4 add reachable pages
+- A new Slice 1.5 ("Dashboard filters — read-only") is inserted between Slice 1 and Slice 2.
+- Slice 4 and Slice 6 entries in the plan now explicitly name the dashboard affordances they carry, so a reader looking for "where did the tag pills go" finds them by grep.
+- Portability checklist gains one item: "No 0.4 feature dropped from the slice's scope without either user confirmation or a numbered slice entry."
+
+**What did not change.**
+
+- The Slice 1 code as shipped is unchanged. The correction is about traceability, not reverting the slice.
+- The decision to hide per-card star buttons in Slice 1 (rather than render them with a broken POST click) stands; it simply now has a named home (Slice 1.5).
+
+Reviewers scanning future slices should reject any commit whose message or reorg entry says "later slices", "future work", "will be addressed when needed", or equivalent phrasing without a grep-able numbered slice entry behind it.
+
+---
+
 ## Slice 1 — Read-only dashboard (`?action=index`)
 
 **Why.** The 0.4 dashboard (`controllers/dashboard.php::buildDashboardIndexData`) is a 500-line function that inlines five entry-family queries, Magnitu score merging, favourites lookup, filter-pill plumbing, tag derivation, scraper-config joins, and search all into one procedural block. Every time we added a new entry type (Lex, Leg, scraper), that function grew a new branch. Slice 1 extracts the core read path — "give me the newest N entries across every family, with scores and favourites attached" — into a bounded, satellite-safe, raw-data-returning repository, and proves the new plumbing end-to-end against the live database. Search, tag pills, favourites view, and the refresh button return in later slices.

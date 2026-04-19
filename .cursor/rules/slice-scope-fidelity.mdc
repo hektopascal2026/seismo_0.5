@@ -1,0 +1,59 @@
+# Slice scope fidelity (Seismo 0.5)
+
+The `.cursor/rules/` guardrails enforce **architecture**. They do not enforce **scope**. That has to come from here.
+
+## The failure mode this rule exists to prevent
+
+Slice 1 (the read-only dashboard) was shipped with four 0.4 UI affordances silently removed: search box, tag filter pills, favourites view toggle, nav drawer. The commit message labelled them "deliberately out of scope — they come back in later slices" without naming which slice, without updating `docs/consolidation-plan.md`, and without asking. In six weeks nobody reading the repo would find them — they'd live only in a git commit message.
+
+This is a soft failure: every individual step is defensible ("definition of done only mentioned the cards"), but the cumulative effect is scope erosion. If Slice 1 drops four UI pieces unasked, Slice 2 can drop "Lex settings tab" by the same logic, Slice 3 can drop the Leg cron pipeline because "cron catches up later", and we end up shipping a 0.5 that is architecturally cleaner than 0.4 but functionally diminished — and we never noticed because each step was locally reasonable.
+
+## The hard rule
+
+**Before collapsing any feature present in 0.4 out of a slice's delivered scope, the agent must do ONE of these two things. Not neither. Not "I'll write it up later".**
+
+- **(a)** Confirm with the user, in the same turn as the proposed drop, that the feature is being dropped. Get an explicit yes.
+- **(b)** Append an explicit entry to `docs/consolidation-plan.md` naming **which numbered slice** will carry the feature. "Later slices" / "future work" / "out of scope for now" without a number is not acceptable.
+
+If the agent is unsure whether a given 0.4 feature counts as "present" (e.g. it existed but was broken, or was a dev-only debug screen), the default is (a) — ask. Erring toward asking is correct; this is a product charter, not just an architectural one.
+
+## What counts as "collapsing a feature"
+
+- Removing a UI affordance (button, pill, drawer, toggle, link) that exists in 0.4.
+- Removing an endpoint / route (`?action=…`) that exists in 0.4, even a read-only one.
+- Removing a display element (column, badge, meta line) from a card or list.
+- Removing a configuration knob (settings toggle, env var, JSON key).
+
+Renaming or refactoring something so it still works end-to-end is **not** collapsing. Deferring a feature explicitly, with a named slice, is also not collapsing — it's scoping.
+
+## What the DoD ambiguity trap looks like
+
+A slice's "definition of done" is written tightly, so a strict reading almost always permits trimming. In Slice 1:
+
+> **Definition of done:** feed renders on both mothership and satellite; all card types look identical to 0.4 …
+
+The strict reading is "only the cards need to be identical; everything around them is up for grabs". A plausible alternative reading is "the dashboard experience is identical minus writes". Both are defensible.
+
+**When a DoD has more than one plausible reading and the agent picks the narrower one, that is a scope decision, not an engineering decision.** Scope decisions belong to the user. Surface the ambiguity; don't resolve it silently.
+
+## Process for the agent
+
+When starting a slice:
+
+1. List every 0.4 feature in the area the slice touches (dashboard, Lex page, settings tab, etc.). File-level grep is enough; the list doesn't need to be exhaustive on the first pass.
+2. For each feature, decide: **in this slice**, **deferred (name the slice)**, or **not applicable (0.4 bug / experiment / broken)**.
+3. If any feature is deferred and the plan file doesn't already name a slice for it, add it to the plan before writing code. One line per item is enough.
+4. If the decision is "not applicable", say so in the slice write-up in `README-REORG.md`.
+
+## Enforcement
+
+Reviewers (the user, future-me reading back, or any reviewer agent) should reject a slice whose commit message or `README-REORG.md` entry contains phrases like:
+
+- "deliberately out of scope — they come back in later slices"
+- "later slices"
+- "future work"
+- "will be addressed when needed"
+
+unaccompanied by a numbered plan entry that can be grep'd for.
+
+If the agent writes one of those phrases, the agent is required to stop and either (a) confirm or (b) update the plan, per the hard rule above.
