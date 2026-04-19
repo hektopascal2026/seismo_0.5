@@ -18,7 +18,7 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 | Area | 0.5 |
 |---|---|
 | Dual email tables | `Migration003EmailsUnified` (schema **v19**) merges `fetched_emails` into `emails` (BIGINT ids, IMAP/body columns). `DROP` `fetched_emails` after merge. `getEmailTableName()` in `bootstrap.php` returns `emails`. |
-| Core refresh | `Seismo\Service\CoreRunner` runs `core:rss`, `core:scraper`, `core:mail` before plugins. Throttle matches plugin semantics (stdout-only when throttled; `plugin_run_log` stores outcomes except noise). Mail is a **stub** unless `mail_imap_host` is set — in-process IMAP fetch deferred; CLI cron against unified `emails` remains the operational path until a later slice wires IMAP here. |
+| Core refresh | `Seismo\Service\CoreRunner` runs `core:rss`, `core:scraper`, `core:mail` before plugins. Throttle matches plugin semantics (stdout-only when throttled; `plugin_run_log` stores outcomes except noise). **`core:mail` is a stub** (no in-process IMAP yet); mail ingestion is the **CLI** under `fetcher/mail/` writing to unified `emails`. Diagnostics “Refresh” records a skipped row only when `$force` (web), not on cron — avoids log spam. |
 | RSS | `Seismo\Core\Fetcher\RssFetchService` (SimplePie 1.9). Normalises title/link/body per consolidation-plan fetcher contract. |
 | Scraper | `Seismo\Core\Fetcher\ScraperFetchService` + `FeedItemRepository::listFeedsForScraperRefresh()` (feeds with `source_type=scraper` or URL in `scraper_configs`). |
 | Feeds persistence | `Seismo\Repository\FeedItemRepository` — transactional `upsertFeedItems`, `prune()` stub (180d policy lands with RetentionService). |
@@ -30,7 +30,7 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 **Gotchas.**
 
 - **Plugin deferrals (user decision D4):** LexEu / LexLegifrance / Jus / Parl MM plugins were **not** added in this slice — registry unchanged beyond Slice 3.
-- **`core:mail` rows:** When IMAP is not configured, the runner returns **skipped** without persisting a row (avoids flooding `plugin_run_log` every cron tick). When `mail_imap_host` is set but in-process fetch is still disabled, a single skipped row explains the situation.
+- **`core:mail` rows:** Always **skipped** with a message pointing at the CLI mail fetcher — until in-process IMAP is implemented, do not expect `mail_imap_*` in `magnitu_config` to change behaviour. **`plugin_run_log`:** skipped row is written on **forced** runs (Refresh all / per-core Refresh on diagnostics), not on CLI cron (`$force = false`), so cron does not append a useless row every tick.
 - **Retention:** `FeedItemRepository::prune()` is callable; `RetentionService` (Slice 5a) will invoke family prunes — no automatic feed/email prune in this slice’s cron beyond plugin runs.
 
 **Test URLs.**

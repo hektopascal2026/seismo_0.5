@@ -189,19 +189,15 @@ final class CoreRunner
             );
         }
 
-        $host = trim((string)($this->magnituConfig->get('mail_imap_host') ?? ''));
-        if ($host === '') {
-            return PluginRunResult::skipped(
-                'Mail IMAP not configured (set mail_imap_host in magnitu_config). Use CLI mail cron against the unified `emails` table.'
-            );
-        }
-
-        $start = (int)(microtime(true) * 1000);
+        // In-process IMAP for core:mail is not implemented yet. Operational path is
+        // the standalone CLI under fetcher/mail/ (cron) writing to unified `emails`.
+        // Do not suggest mail_imap_* keys here until this runner actually fetches.
         $r = PluginRunResult::skipped(
-            'In-process IMAP fetch is not enabled in this build — configure CLI mail cron against the unified `emails` table.'
+            'Mail is fetched by the CLI mail cron into `emails`, not by this button yet. See fetcher/mail/ on the server.'
         );
-        $duration = max(0, (int)(microtime(true) * 1000) - $start);
-        $this->record(self::ID_MAIL, $r, $duration);
+        if ($force) {
+            $this->record(self::ID_MAIL, $r, 0);
+        }
 
         return $r;
     }
