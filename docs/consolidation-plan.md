@@ -129,6 +129,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 ### Slice 6 — Admin / settings polish
 
+- **Main feed page size (user setting).** Persist a default number of entries for `?action=index` (today `DashboardController` uses hardcoded `DEFAULT_LIMIT = 30`; `EntryRepository::MAX_LIMIT` stays the hard cap at 200). Store in `system_config` after Slice 5a, or interim key in `magnitu_config` if settings land before rename. Settings UI: numeric field + validation; dashboard reads saved default when `?limit=` is absent.
 - Settings tabs split into clean partials (one concern each).
 - Retention UI polish (family toggles, per-family overrides, "last pruned N rows on DATE" readout).
 - Plugin diagnostics polish (test history, per-plugin last-N-runs view).
