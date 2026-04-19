@@ -13,11 +13,15 @@
 
 /**
  * Database (required).
+ *
+ * Use hostname only for DB_HOST; optional port via DB_PORT or legacy "host:3306"
+ * (parsed in getDbConnection()).
  */
-define('DB_HOST', 'localhost:3306');
+define('DB_HOST', 'localhost');
 define('DB_NAME', 'CHANGE_ME');
 define('DB_USER', 'CHANGE_ME');
 define('DB_PASS', 'CHANGE_ME');
+// define('DB_PORT', '3306'); // optional — omit to use the driver default (3306)
 
 /**
  * Optional — protect Settings → Feed diagnostics with ?key= on the URL.
@@ -40,6 +44,8 @@ define('DB_PASS', 'CHANGE_ME');
  * profile. It reads entries cross-DB from the mothership and keeps its own
  * scoring tables (entry_scores, magnitu_config, magnitu_labels). The DB_USER
  * on this satellite must have SELECT on the mothership database.
+ *
+ * Use boolean true / false only (not 1 / 0 — though 1 / 0 are accepted via cast).
  */
 // define('SEISMO_SATELLITE_MODE', true);
 // define('SEISMO_MOTHERSHIP_DB', 'seismo_main');
@@ -69,8 +75,11 @@ define('DB_PASS', 'CHANGE_ME');
  * Optional — run DB migrations from the browser (no SSH / PHP CLI on host).
  *
  * Many shared hosts only allow uploading files and opening URLs — no terminal.
- * Set a long random secret here, then once after deploy open:
- *   https://your-host/path/to/seismo/?action=migrate&key=YOUR_SECRET
+ * Set a long random secret here, then run migrations once via one of:
+ *   - Authorization: Bearer YOUR_SECRET (best — avoids query strings / most logs)
+ *   - POST key=YOUR_SECRET (e.g. HTML form; action URL without key in query)
+ *   - GET ?action=migrate&key=YOUR_SECRET (works; key may appear in access logs)
+ *
  * Plain-text response: current version, then either “Nothing to do” or apply
  * pending migrations. Remove or empty this key after you are done if you prefer.
  *

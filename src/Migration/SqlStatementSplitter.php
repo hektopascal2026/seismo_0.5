@@ -2,9 +2,13 @@
 /**
  * Split a .sql file into executable statements for PDO::exec (one at a time).
  *
- * Handles -- line comments and /* *\/ block comments. Not a full SQL parser;
- * sufficient for our consolidated schema files which do not embed semicolons
- * inside string literals.
+ * Strips block comments and line comments. Line comments are recognised as:
+ *   - whole lines whose first non-whitespace characters are `--`
+ *   - trailing ` -- …` where `--` is preceded by whitespace (MySQL line comment)
+ *
+ * Assumption: the consolidated schema does not put `--` inside a quoted string
+ * on the same line as other SQL in a way that would be mistaken for a comment.
+ * If that changes, use a proper SQL lexer or split migrations manually.
  */
 
 declare(strict_types=1);
@@ -40,8 +44,11 @@ final class SqlStatementSplitter
     {
         $lines = explode("\n", $sql);
         foreach ($lines as $i => $line) {
-            // Remove -- comments; keep http:// etc. by only stripping when -- is not inside a URL context (heuristic: -- at start of token after space)
-            $lines[$i] = (string)preg_replace('/--[^\r\n]*/', '', $line);
+            if (str_starts_with(ltrim($line), '--')) {
+                $lines[$i] = '';
+                continue;
+            }
+            $lines[$i] = (string)preg_replace('/\s--[^\r\n]*$/', '', $line);
         }
         return implode("\n", $lines);
     }

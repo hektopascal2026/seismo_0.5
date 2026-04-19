@@ -44,6 +44,11 @@ if (!file_exists($__seismoLocalConfig)) {
 require $__seismoLocalConfig;
 unset($__seismoLocalConfig);
 
+// Optional DB port — omit in config.local.php to use the driver default (3306).
+if (!defined('DB_PORT')) {
+    define('DB_PORT', '');
+}
+
 // ---------------------------------------------------------------------------
 // 2. SEISMO_* defaults (satellite / branding / remote refresh)
 // ---------------------------------------------------------------------------
@@ -56,6 +61,7 @@ $__seismoDefaults = [
     'SEISMO_REMOTE_REFRESH_KEY' => '',
     'FEED_DIAGNOSTIC_KEY'      => '',
     'SEISMO_MIGRATE_KEY'       => '',
+    'SEISMO_ADMIN_PASSWORD_HASH' => '',
 ];
 foreach ($__seismoDefaults as $__c => $__v) {
     if (!defined($__c)) {
@@ -104,7 +110,19 @@ function getDbConnection(): PDO
     if ($pdo !== null) {
         return $pdo;
     }
-    $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+    $host = DB_HOST;
+    $port = null;
+    if (preg_match('/^(.+):(\d+)$/', $host, $m)) {
+        $host = $m[1];
+        $port = (int)$m[2];
+    }
+    if (defined('DB_PORT') && DB_PORT !== '' && DB_PORT !== null) {
+        $port = (int)DB_PORT;
+    }
+    $dsn = 'mysql:host=' . $host . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+    if ($port !== null) {
+        $dsn .= ';port=' . $port;
+    }
     $pdo = new PDO($dsn, DB_USER, DB_PASS, [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -143,7 +161,9 @@ function getBasePath(): string
  */
 function isSatellite(): bool
 {
-    return SEISMO_SATELLITE_MODE === true;
+    // Accept only boolean true/false in config.local.php; cast so `1`/`0` from
+    // older copies do not silently fail the === true check.
+    return (bool)SEISMO_SATELLITE_MODE;
 }
 
 /**
@@ -159,10 +179,11 @@ function isSatellite(): bool
  */
 function entryTable(string $table): string
 {
+    $quoted = '`' . str_replace('`', '``', $table) . '`';
     if (SEISMO_MOTHERSHIP_DB !== '') {
-        return '`' . SEISMO_MOTHERSHIP_DB . '`.' . $table;
+        return '`' . str_replace('`', '``', SEISMO_MOTHERSHIP_DB) . '`.' . $quoted;
     }
-    return $table;
+    return $quoted;
 }
 
 /**
@@ -202,7 +223,9 @@ function seismoBrandAccent(): ?string
  *
  *   <?= e($user['name']) ?>
  */
-function e(?string $value): string
-{
-    return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+if (!function_exists('e')) {
+    function e(?string $value): string
+    {
+        return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
 }

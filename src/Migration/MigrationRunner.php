@@ -9,37 +9,30 @@ declare(strict_types=1);
 namespace Seismo\Migration;
 
 use PDO;
-use PDOException;
+use Seismo\Repository\MagnituConfigRepository;
 
 final class MigrationRunner
 {
     /** Highest schema version shipped by built-in migrations. */
     public const LATEST_VERSION = Migration001BaseSchema::VERSION;
 
-    public function __construct(private PDO $pdo)
-    {
+    private MagnituConfigRepository $magnituConfig;
+
+    public function __construct(
+        private PDO $pdo,
+        ?MagnituConfigRepository $magnituConfig = null,
+    ) {
+        $this->magnituConfig = $magnituConfig ?? new MagnituConfigRepository($pdo);
     }
 
     /**
      * Returns current stored schema version, or 0 if unreadable / not set.
+     * Delegates to MagnituConfigRepository (same semantics when the table is missing).
      */
     public function getCurrentVersion(): int
     {
-        try {
-            $stmt = $this->pdo->query(
-                "SELECT config_value FROM magnitu_config WHERE config_key = 'schema_version'"
-            );
-            if ($stmt === false) {
-                return 0;
-            }
-            $v = $stmt->fetchColumn();
-            if ($v === false || $v === null || $v === '') {
-                return 0;
-            }
-            return (int)$v;
-        } catch (PDOException $e) {
-            return 0;
-        }
+        $v = $this->magnituConfig->getSchemaVersion();
+        return $v ?? 0;
     }
 
     /**
@@ -63,7 +56,7 @@ final class MigrationRunner
             }
             $log("Applying migration to version {$targetVersion} …\n");
             $migration->apply($this->pdo);
-            $this->setSchemaVersion($targetVersion);
+            $this->magnituConfig->set('schema_version', (string)$targetVersion);
             $current = $targetVersion;
             $log("OK — schema version is now {$targetVersion}.\n");
         }
@@ -71,15 +64,5 @@ final class MigrationRunner
         if ($current >= self::LATEST_VERSION) {
             $log('Schema is up to date (' . self::LATEST_VERSION . ").\n");
         }
-    }
-
-    private function setSchemaVersion(int $version): void
-    {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO magnitu_config (config_key, config_value)
-             VALUES (?, ?)
-             ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
-        );
-        $stmt->execute(['schema_version', (string)$version]);
     }
 }

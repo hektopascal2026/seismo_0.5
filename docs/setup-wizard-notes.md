@@ -35,12 +35,12 @@ Scratchpad for a future “first run” experience after a user uploads Seismo t
 
 1. In `config.local.php`, set **`SEISMO_MIGRATE_KEY`** to a long random string (generate on your laptop: `php -r "echo bin2hex(random_bytes(32));"` and paste the hex).
 2. Upload `config.local.php` and ensure **`docs/db-schema.sql`** is on the server (same folder layout as in the repo — the migrator reads it at runtime).
-3. Open **once** in the browser (replace host, path, and secret):
-
-   `https://www.example.org/seismo/?action=migrate&key=YOUR_SECRET`
-
+3. Run migrations **once** using the secret — prefer an option that keeps the key out of query strings and access logs:
+   - **Authorization: Bearer** (e.g. `curl -H "Authorization: Bearer YOUR_SECRET" "https://www.example.org/seismo/?action=migrate"` if your host allows), or
+   - **POST** `key` (e.g. a one-field HTML form with `method="post"` and `action="https://…/seismo/?action=migrate"` with no key in the URL), or
+   - **GET** `?action=migrate&key=YOUR_SECRET` (works on URL-only hosts; the key may appear in server access logs — rotate/remove the key after use).
 4. Expect **plain text**: current schema version, then either **“Nothing to do — schema is already at version 17”** (if the DB was already migrated by 0.4) or lines showing migration 17 applied. **No HTML** — if you see a login page or 404, the URL path or key is wrong.
-5. Optional: remove or comment out `SEISMO_MIGRATE_KEY` after migrations are done so the URL cannot be called anymore.
+5. Optional: remove or comment out `SEISMO_MIGRATE_KEY` after migrations are done so the endpoint cannot be called anymore.
 
 **With SSH or host “Run PHP script” (CLI available)**
 

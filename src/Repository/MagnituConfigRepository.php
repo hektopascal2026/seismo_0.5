@@ -54,4 +54,19 @@ final class MagnituConfigRepository
         }
         return (string)$value;
     }
+
+    /**
+     * Upsert a key. Used by migrations for `schema_version` and by settings
+     * code later. Throws PDOException if `magnitu_config` does not exist — only
+     * call after the base schema migration has created the table.
+     */
+    public function set(string $key, string $value): void
+    {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO magnitu_config (config_key, config_value)
+             VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
+        );
+        $stmt->execute([$key, $value]);
+    }
 }
