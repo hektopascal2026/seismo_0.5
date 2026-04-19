@@ -31,6 +31,7 @@ if (PHP_SAPI !== 'cli') {
 require_once __DIR__ . '/bootstrap.php';
 
 use Seismo\Service\RefreshAllService;
+use Seismo\Service\RetentionService;
 
 if (isSatellite()) {
     fwrite(STDOUT, "[seismo] satellite mode — refresh_cron skipped.\n");
@@ -65,6 +66,29 @@ foreach ($results as $id => $result) {
         $result->message !== null ? ' msg=' . $result->message : ''
     );
     fwrite(STDOUT, $line . "\n");
+}
+
+// Retention: prune entry-source rows past their family's retention
+// cutoff, respecting keep-predicates (favourites, high scores, labels).
+// Mothership only — RetentionService::pruneAll() short-circuits on
+// satellites. Kept inside try/catch so a broken retention query never
+// masks upstream plugin errors in the exit code.
+try {
+    $pruned = RetentionService::boot($pdo)->pruneAll();
+    if ($pruned === []) {
+        fwrite(STDOUT, "[seismo] retention: no policies active (all families unlimited).\n");
+    } else {
+        $total = array_sum($pruned);
+        foreach ($pruned as $family => $n) {
+            fwrite(STDOUT, sprintf("[seismo] retention %-16s deleted=%d\n", $family, $n));
+        }
+        fwrite(STDOUT, "[seismo] retention: deleted {$total} row(s) total.\n");
+    }
+} catch (\Throwable $e) {
+    fwrite(STDERR, '[seismo] retention failed: ' . $e->getMessage() . "\n");
+    // Do not exit here — a retention failure should not mask an otherwise
+    // successful plugin run. The error is logged via STDERR / error_log.
+    error_log('Seismo retention cron: ' . $e->getMessage());
 }
 
 $duration = (int)((microtime(true) - $start) * 1000);

@@ -144,9 +144,13 @@ final class LexItemRepository
     }
 
     /**
-     * Default policy: never prune legal text (see RetentionService in later slices).
+     * Default retention policy: legal text is **never** auto-pruned
+     * (see `core-plugin-architecture.mdc`). Slice 5a keeps that default
+     * but wires `prune()` up anyway so the admin can opt into a cutoff
+     * via the Retention settings surface without new code.
      *
-     * @param array<string, mixed> $keepPredicates Reserved for favourites / scores / labels.
+     * @param list<string> $keepPredicates Tokens from
+     *        {@see \Seismo\Service\RetentionService}.
      */
     public function prune(DateTimeImmutable $olderThan, array $keepPredicates): int
     {
@@ -154,9 +158,59 @@ final class LexItemRepository
             throw new \RuntimeException('LexItemRepository::prune must not run on a satellite; lex_items live in the mothership DB.');
         }
 
-        unset($olderThan, $keepPredicates);
+        $cutoff = $olderThan->format('Y-m-d H:i:s');
+        $where  = $this->buildPruneWhere($keepPredicates);
 
-        return 0;
+        try {
+            $stmt = $this->pdo->prepare(
+                'DELETE FROM ' . entryTable('lex_items') . ' t WHERE ' . $where
+            );
+            $stmt->execute([$cutoff]);
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return 0;
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Dry-run counterpart of `prune()`. Identical WHERE clause via
+     * `buildPruneWhere()` — preview and real run cannot diverge.
+     *
+     * @param list<string> $keepPredicates
+     */
+    public function dryRunPrune(DateTimeImmutable $olderThan, array $keepPredicates): int
+    {
+        $cutoff = $olderThan->format('Y-m-d H:i:s');
+        $where  = $this->buildPruneWhere($keepPredicates);
+
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM ' . entryTable('lex_items') . ' t WHERE ' . $where
+            );
+            $stmt->execute([$cutoff]);
+            return (int)$stmt->fetchColumn();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return 0;
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * @param list<string> $keepPredicates
+     */
+    private function buildPruneWhere(array $keepPredicates): string
+    {
+        $keeps = \Seismo\Service\RetentionPredicates::forEntryType('lex_item', $keepPredicates);
+        $where = 't.fetched_at < ?';
+        if ($keeps !== '') {
+            $where .= ' AND NOT (' . $keeps . ')';
+        }
+        return $where;
     }
 
     /**

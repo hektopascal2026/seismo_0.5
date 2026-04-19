@@ -20,7 +20,7 @@ declare(strict_types=1);
 namespace Seismo\Controller;
 
 use Seismo\Http\AuthGate;
-use Seismo\Repository\MagnituConfigRepository;
+use Seismo\Repository\SystemConfigRepository;
 use Seismo\Repository\SystemRepository;
 
 final class HealthController
@@ -35,7 +35,7 @@ final class HealthController
             $pdo = getDbConnection();
             $dbStatus      = 'ok';
             $dbVersion     = (new SystemRepository($pdo))->mysqlVersion();
-            $schemaVersion = (new MagnituConfigRepository($pdo))->getSchemaVersion();
+            $schemaVersion = (new SystemConfigRepository($pdo))->getSchemaVersion();
         } catch (\Throwable $e) {
             $dbStatus = 'error: ' . $e->getMessage();
         }

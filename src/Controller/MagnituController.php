@@ -31,7 +31,7 @@ use PDOException;
 use Seismo\Http\BearerAuth;
 use Seismo\Core\Scoring\ScoringService;
 use Seismo\Repository\EntryScoreRepository;
-use Seismo\Repository\MagnituConfigRepository;
+use Seismo\Repository\SystemConfigRepository;
 use Seismo\Repository\MagnituExportRepository;
 use Seismo\Repository\MagnituLabelRepository;
 
@@ -60,7 +60,7 @@ final class MagnituController
 
     public function entries(): void
     {
-        $config = new MagnituConfigRepository(getDbConnection());
+        $config = new SystemConfigRepository(getDbConnection());
         if (!BearerAuth::guardMagnitu($config)) {
             return;
         }
@@ -107,7 +107,7 @@ final class MagnituController
             return;
         }
         $pdo = getDbConnection();
-        $config = new MagnituConfigRepository($pdo);
+        $config = new SystemConfigRepository($pdo);
         if (!BearerAuth::guardMagnitu($config)) {
             return;
         }
@@ -182,7 +182,7 @@ final class MagnituController
     public function recipe(): void
     {
         $pdo    = getDbConnection();
-        $config = new MagnituConfigRepository($pdo);
+        $config = new SystemConfigRepository($pdo);
         if (!BearerAuth::guardMagnitu($config)) {
             return;
         }
@@ -228,7 +228,7 @@ final class MagnituController
     public function labels(): void
     {
         $pdo = getDbConnection();
-        $config = new MagnituConfigRepository($pdo);
+        $config = new SystemConfigRepository($pdo);
         if (!BearerAuth::guardMagnitu($config)) {
             return;
         }
@@ -299,7 +299,7 @@ final class MagnituController
     public function status(): void
     {
         $pdo    = getDbConnection();
-        $config = new MagnituConfigRepository($pdo);
+        $config = new SystemConfigRepository($pdo);
         if (!BearerAuth::guardMagnitu($config)) {
             return;
         }

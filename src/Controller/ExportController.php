@@ -22,7 +22,7 @@ namespace Seismo\Controller;
 use Seismo\Formatter\JsonExportFormatter;
 use Seismo\Formatter\MarkdownBriefingFormatter;
 use Seismo\Http\BearerAuth;
-use Seismo\Repository\MagnituConfigRepository;
+use Seismo\Repository\SystemConfigRepository;
 use Seismo\Repository\MagnituExportRepository;
 
 final class ExportController
@@ -33,7 +33,7 @@ final class ExportController
     public function entries(): void
     {
         $pdo    = getDbConnection();
-        $config = new MagnituConfigRepository($pdo);
+        $config = new SystemConfigRepository($pdo);
         if (!BearerAuth::guardExport($config)) {
             return;
         }
@@ -59,7 +59,7 @@ final class ExportController
     public function briefing(): void
     {
         $pdo    = getDbConnection();
-        $config = new MagnituConfigRepository($pdo);
+        $config = new SystemConfigRepository($pdo);
         if (!BearerAuth::guardExport($config)) {
             return;
         }

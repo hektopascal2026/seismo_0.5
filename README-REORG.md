@@ -9,6 +9,67 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 5a — Config unification + retention service
+
+**Why.** 0.5 inherited three config stores from 0.4 that all behaved the same but lived in different places: `magnitu_config` (SQL k/v), `lex_config.json` (on disk), `calendar_config.json` (on disk). The table was also misnamed — it has always been a generic instance-level key/value store, never Magnitu-specific. Slice 5a folds all three into one `system_config` table and introduces the long-deferred retention service so the shared-host DB quota finally has automatic pressure relief (per `core-plugin-architecture.mdc`, every family repo was already required to ship a `prune()` — this slice wires them into a policy layer).
+
+**What moved.**
+
+| Area | 0.5 |
+|---|---|
+| Table rename | `Migration005SystemConfig` (schema **v21**) runs `ALTER TABLE magnitu_config RENAME TO system_config`. Existing rows (Magnitu `api_key`, `export:api_key`, recipe JSON, etc.) survive untouched. |
+| JSON fold-in | Same migration reads `lex_config.json` and `calendar_config.json` from the install root, upserts one `system_config` row per top-level block (`plugin:ch`, `plugin:eu`, `plugin:parliament_ch`, …), and renames the JSON files to `.migrated-v21` as a manual-rollback sample. The `jus_banned_words` list routes to `lex:jus_banned_words` (not a plugin). Satellite mode runs step 1 only (local `magnitu_config` rename for auth keys); it has no plugin configs to fold. |
+| Repository | `Seismo\Repository\SystemConfigRepository` replaces `MagnituConfigRepository`. Public surface grows: `getJson()` / `setJson()` (for plugin-config blocks), `getAllPluginBlocks()`, a request-local memoisation cache, and transparent legacy-table fallback in `get()` / `set()` so the brief window between "new code uploaded" and "Migration 005 applied" doesn't break `?action=health`. Old class name is deleted outright; every callsite is renamed. |
+| Config stores | `Seismo\Config\LexConfigStore` and `Seismo\Config\CalendarConfigStore` keep their 0.4-shape public API (`load()`, `save()`, `saveChBlock()` / `saveParlChBlock()`, `defaultConfig()`) so no caller changed. Internally, `load()` assembles the blob from per-block `plugin:<key>` rows; `save()` decomposes it back. Constructors took no args before and still take no args — they instantiate their own `SystemConfigRepository` with `getDbConnection()` by default. |
+| Retention service | `Seismo\Service\RetentionService` (`pruneAll()` / `previewAll()` / `loadPolicy()` / `savePolicy()`). Policy rows live at `retention:<family>` in `system_config`, JSON-shaped `{"days": 180, "keep": ["favourited","high_score","labelled"]}`. `days = null` or `0` disables pruning for the family. Defaults match the table in `core-plugin-architecture.mdc`: 180d for `feed_items` and `emails`, unlimited for `lex_items` and `calendar_events`. |
+| Predicate builder | `Seismo\Service\RetentionPredicates::forEntryType()` is the only place that maps keep-tokens (`favourited`, `high_score`, `labelled`) to `EXISTS (…)` SQL. Family repos call it from `buildPruneWhere()` so preview and real run share the exact same WHERE clause by construction. |
+| Family repos | `FeedItemRepository`, `LexItemRepository`, `CalendarEventRepository` now have real `prune()` + matching `dryRunPrune()` instead of stubs. New `Seismo\Repository\EmailRepository` exists solely to own `prune()` / `dryRunPrune()` for `emails` (reads still go through `EntryRepository` / `MagnituExportRepository`). All four share the same `buildPruneWhere()` pattern. |
+| Cron wiring | `refresh_cron.php` calls `RetentionService::boot($pdo)->pruneAll()` at the tail, after plugins. Satellite mode short-circuits at the service level. Retention failures log via STDERR + `error_log()` but **do not** flip the cron exit code — a broken retention query must not mask a successful plugin run (or vice versa). |
+| UI | `Seismo\Controller\RetentionController` + `views/retention.php` — standalone `?action=retention` page with a per-family editable row (days + keep-checkboxes + "would delete today" count) plus a "Run retention now" button. CSRF-guarded POSTs at `retention_save`, `retention_preview`, `retention_prune`. Discoverable from the Diagnostics top-bar. Settings-tab integration lands with Slice 6. |
+
+**New wiring.**
+
+```
+Config reads  : LexConfigStore::load() / CalendarConfigStore::load()
+                     ↓
+               SystemConfigRepository::getJson('plugin:<key>')
+                     ↓ (per-request memo cache)
+               SELECT … FROM system_config WHERE config_key = ?
+
+Retention run : refresh_cron.php
+                     ↓
+               RetentionService::pruneAll()    (satellite short-circuit)
+                     ↓        per family with days > 0
+               {Feed|Email|Lex|Calendar}ItemRepository::prune(cutoff, keeps)
+                     ↓
+               RetentionPredicates::forEntryType() → WHERE fragment
+                     ↓
+               DELETE FROM <entry_table> t WHERE … AND NOT (EXISTS keeps)
+```
+
+**Migration rollback.** Rename the table back, drop folded rows, un-rename the JSON sidecars. Documented inline in `Migration005SystemConfig.php`. JSON files are renamed (not deleted) so the admin has an on-disk sample to diff against the folded rows if anything looks off.
+
+**Gotchas.**
+
+- **`MagnituConfigRepository` is gone.** Every import has been renamed to `SystemConfigRepository`. If a mid-rewrite branch resurfaces and imports the old class, add a matching `use` alias rather than reintroducing the file — the old name was misleading from day one.
+- **Legacy-table fallback is intentional but transition-only.** `SystemConfigRepository::get()` / `set()` silently retry against `magnitu_config` when `system_config` is missing. This keeps `?action=health` alive between deploying Slice 5a and running migrate; it is NOT meant to outlive Slice 5a. Remove the fallback in Slice 6 polish.
+- **Lex plugin keys aren't plugin identifiers yet.** `LexFedlexPlugin::getConfigKey()` returns `'ch'` (0.4 legacy). The stored row is `plugin:ch`. Future slices may normalise those to the Fedlex identifier (`plugin:fedlex`) — when they do, add a data-renaming migration, don't edit the plugin's `getConfigKey()` in place.
+- **`jus_banned_words` isn't a plugin.** It's a shared filter list that lived inside `lex_config.json` because that's where `getLexConfig()` put it. Slice 5a routes it to `lex:jus_banned_words` instead of `plugin:jus_banned_words` so `SystemConfigRepository::getAllPluginBlocks()` doesn't surface it as a phantom plugin.
+- **`EmailRepository` exists only for retention.** Reads for dashboard + Magnitu API still go through `EntryRepository` / `MagnituExportRepository`. Resist the temptation to move all email SQL here until a consumer actually asks for it — the split is currently justified by "each concern has one SQL owner", and a premature mega-repo would undo that.
+- **Retention on Leg / Lex defaults to unlimited.** If the admin ever sets a cutoff for `lex_items` or `calendar_events`, the same keep-predicates apply — but the default is "never auto-prune legal text" per `core-plugin-architecture.mdc`. The policy row exists so the option is discoverable, not because the slice changed the default.
+
+**Test URLs.**
+
+- `?action=migrate&key=…` — expect schema **21** after deploy. Two messages: "Applying migration to version 21" (rename + fold) and then the final "Schema is up to date".
+- `?action=health` — still renders; schemaVersion reports 21.
+- `?action=retention` — renders the grid with 180-day policies active on `feed_items` / `emails` and "unlimited" on `lex_items` / `calendar_events`. "Would delete today" column should match your live data. On satellite: the Refresh preview works, "Run retention now" button refuses.
+- `?action=retention` → edit "feed_items" to e.g. 365 days → "Save policies" → reload. Row reflects the new cutoff; `system_config` gets a new `retention:feed_items` row.
+- `?action=retention_prune` (POST via the button) → runs `pruneAll()`; flash message reports the per-family deletion totals.
+- `?action=lex` / `?action=leg` — config still loads (from `system_config` now). Saving the Parlament CH block writes to `plugin:parliament_ch` row.
+- Negative: on a fresh database where `system_config` doesn't exist, `?action=health` still responds (falls back to `magnitu_config`). On a post-Slice-5 database with the old table name but new code, `?action=health` reports schema 20 correctly via the fallback until migrate is run.
+
+---
+
 ## Slice 5 — Magnitu boundary + read-only export surface
 
 **Why.** 0.4's Magnitu API lived in `controllers/magnitu.php` with inline SQL, scoring math, and shape-building all in one file. It also conflated two concerns: the *write* Magnitu sync contract (scores in, entries out) and a future *read-only* export surface for briefings and automation. Slice 5 ports the API to the new layering (controller → service → repository), introduces a second Bearer key so a compromised briefing script can't push scores, and restores recipe rescoring. Contract with Magnitu's `sync.py` is unchanged — every JSON shape matches 0.4 byte-for-byte.
@@ -49,6 +110,7 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 - **`magnitu_status.version`** reports `SEISMO_VERSION` (currently `0.5.0-dev`). 0.4 returned the hardcoded string `'0.5.0'`. Python `sync.py` treats it as an opaque label; the change is intentional and visible.
 - **`ScoringService` does not cap per-run duration.** Each family is bounded at 500 rows, so worst case is 4×500 rows through `RecipeScorer::score()` — fast on typical shared hosts, but the `magnitu_recipe` POST is synchronous. If this becomes a timeout problem, split into background rescoring; not speculative.
 - **Slice 5a** (rename `magnitu_config` → `system_config`) still pending. The row for `export:api_key` survives the rename unchanged.
+- **Fetch/persist boundary refactor (post-review).** First Gemini pass flagged `ScoringService` for executing its own `SELECT` queries. Fixed by moving every unscored-row lookup into `EntryScoreRepository` (`getUnscoredFeedItems` / `getUnscoredLexItems` / `getUnscoredEmails` / `getUnscoredCalendarEvents`), each honouring `entryTable()` and a `MAX_UNSCORED_LIMIT = 500`. `ScoringService` now takes only `EntryScoreRepository` and orchestrates `RecipeScorer::score()` → `upsertRecipeScore()`. Second Gemini pass: PASS. No behaviour change, pure code move.
 
 **Test URLs.**
 

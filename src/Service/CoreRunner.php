@@ -9,7 +9,7 @@ use DateTimeZone;
 use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Core\Fetcher\ScraperFetchService;
 use Seismo\Repository\FeedItemRepository;
-use Seismo\Repository\MagnituConfigRepository;
+use Seismo\Repository\SystemConfigRepository;
 use Seismo\Repository\PluginRunLogRepository;
 
 /**
@@ -32,7 +32,7 @@ final class CoreRunner
     public function __construct(
         private FeedItemRepository $feeds,
         private PluginRunLogRepository $runLog,
-        private MagnituConfigRepository $magnituConfig,
+        private SystemConfigRepository $magnituConfig,
         private RssFetchService $rss = new RssFetchService(),
         private ScraperFetchService $scraper = new ScraperFetchService(),
     ) {

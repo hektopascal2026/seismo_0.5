@@ -5,8 +5,10 @@
  * Applies versioned migrations in `src/Migration/`. The base migration (17)
  * loads `docs/db-schema.sql` (consolidated 0.4 schema, all CREATE IF NOT EXISTS).
  *
- * Safe on your live database: if `magnitu_config.schema_version` is already 17,
- * nothing runs except a quick version check.
+ * Safe on your live database: if `system_config.schema_version` is already
+ * at the latest, nothing runs except a quick version check. Table was
+ * named `magnitu_config` before Migration 005 (Slice 5a); the runner
+ * reads both names during the transition.
  *
  * Usage:
  *   php migrate.php           # apply pending migrations

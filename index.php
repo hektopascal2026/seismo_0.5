@@ -121,7 +121,29 @@ $router->register(
     \Seismo\Controller\AuthController::class . '::logout',
     false
 );
-// Magnitu HTTP API — Bearer-authenticated against `magnitu_config.api_key`.
+// Retention settings surface. Read view is plain GET; preview and
+// actual prune are POSTed with a session-bound CSRF token.
+$router->register(
+    'retention',
+    \Seismo\Controller\RetentionController::class . '::show',
+    true
+);
+$router->register(
+    'retention_preview',
+    \Seismo\Controller\RetentionController::class . '::preview',
+    false
+);
+$router->register(
+    'retention_save',
+    \Seismo\Controller\RetentionController::class . '::save',
+    false
+);
+$router->register(
+    'retention_prune',
+    \Seismo\Controller\RetentionController::class . '::runPrune',
+    false
+);
+// Magnitu HTTP API — Bearer-authenticated against `system_config.api_key`.
 // AuthGate whitelists these so dormant-by-default session auth doesn't
 // intercept them; BearerAuth inside the controller enforces the real gate.
 $router->register(

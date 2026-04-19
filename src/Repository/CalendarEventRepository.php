@@ -213,9 +213,13 @@ final class CalendarEventRepository
     }
 
     /**
-     * Leg retention is unlimited per the core rule. No-op stub for contract parity.
+     * Default retention policy: Leg is **never** auto-pruned (see
+     * `core-plugin-architecture.mdc`). Slice 5a wires `prune()` up so
+     * the admin can opt into a cutoff via Retention settings if they
+     * ever want to; `RetentionService` will otherwise skip this family.
      *
-     * @param array<string, mixed> $keepPredicates Reserved for favourites / scores / labels.
+     * @param list<string> $keepPredicates Tokens from
+     *        {@see \Seismo\Service\RetentionService}.
      */
     public function prune(DateTimeImmutable $olderThan, array $keepPredicates): int
     {
@@ -223,9 +227,59 @@ final class CalendarEventRepository
             throw new \RuntimeException('CalendarEventRepository::prune must not run on a satellite; calendar_events live in the mothership DB.');
         }
 
-        unset($olderThan, $keepPredicates);
+        $cutoff = $olderThan->format('Y-m-d H:i:s');
+        $where  = $this->buildPruneWhere($keepPredicates);
 
-        return 0;
+        try {
+            $stmt = $this->pdo->prepare(
+                'DELETE FROM ' . entryTable('calendar_events') . ' t WHERE ' . $where
+            );
+            $stmt->execute([$cutoff]);
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return 0;
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Dry-run counterpart of `prune()`. Same WHERE clause via
+     * `buildPruneWhere()` so preview and real run stay in lockstep.
+     *
+     * @param list<string> $keepPredicates
+     */
+    public function dryRunPrune(DateTimeImmutable $olderThan, array $keepPredicates): int
+    {
+        $cutoff = $olderThan->format('Y-m-d H:i:s');
+        $where  = $this->buildPruneWhere($keepPredicates);
+
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM ' . entryTable('calendar_events') . ' t WHERE ' . $where
+            );
+            $stmt->execute([$cutoff]);
+            return (int)$stmt->fetchColumn();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return 0;
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * @param list<string> $keepPredicates
+     */
+    private function buildPruneWhere(array $keepPredicates): string
+    {
+        $keeps = \Seismo\Service\RetentionPredicates::forEntryType('calendar_event', $keepPredicates);
+        $where = 't.fetched_at < ?';
+        if ($keeps !== '') {
+            $where .= ' AND NOT (' . $keeps . ')';
+        }
+        return $where;
     }
 
     /**

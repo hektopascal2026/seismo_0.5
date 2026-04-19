@@ -134,6 +134,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - **0.4 subscription-based email hiding is NOT ported.** v0.4's Magnitu responses filtered out emails whose sender address had `show_in_magnitu = 0` in `email_subscriptions`. v0.5 exposes all `emails` rows via `MagnituExportRepository::listEmailsSince()` regardless of subscription visibility. Re-adding the filter is a deliberate product decision (sender-level opt-out for the Magnitu pipeline) — file under Slice 6 if confirmed; do not smuggle it into a later slice.
 - **`magnitu_status.version` contract drift.** 0.4 returned a monolithic `version` string baked from the running codebase. v0.5's `MagnituController::status()` returns `{"schema_version": <int>, "recipe_version": <int>}` instead, which is what 0.4's `sync.py` actually consumes. If the mothership tooling still reads `.version` as a single string, the consumer must be updated in the same push. Documented here so the next reviewer doesn't mistake it for an oversight.
 - **`ScoringService::rescoreAll()` runs synchronously from the `magnitu_recipe` POST handler.** Up to ~2,000 rescores (500 per family × 4 families) fit inside a shared-host PHP timeout today; beyond that it needs to move to a cron worker. Filed as Slice 5b follow-up below rather than a warning to re-raise every review.
+- **Fetch/persist boundary fixed post-review.** The initial Slice 5 submission had `ScoringService` issuing its own `SELECT` queries against entry-source tables (first Gemini review flagged this as a **FAIL**). Fixed in-session by moving every unscored-row lookup into `EntryScoreRepository` as `getUnscoredFeedItems() / getUnscoredLexItems() / getUnscoredEmails() / getUnscoredCalendarEvents()`, each honouring `entryTable()` + a repo-local `MAX_UNSCORED_LIMIT = 500`. `ScoringService` no longer takes a `PDO` — it depends only on `EntryScoreRepository` and orchestrates `RecipeScorer::score()` → `upsertRecipeScore()`. Second Gemini review: PASS.
 
 ### Slice 5b — Async recipe rescoring (deferred follow-up)
 
@@ -141,13 +142,22 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - If corpus growth, shared-host timeouts, or client impatience ever push that over the edge, move rescoring to a cron-style queue: the POST handler bumps `recipe_version` + flips an `entry_scores` "dirty" flag (or clears the `model_version` for non-Magnitu rows), and a `RescoreWorker` called from `refresh_cron.php` drains batches between plugin runs.
 - Not in scope while the synchronous path measurably works; listed here so the path is pre-agreed and not re-litigated in a review.
 
-### Slice 5a — Config unification + retention service
+### Slice 5a — Config unification + retention service — **shipped**
 
 - Rename `magnitu_config` table → `system_config` (breaking migration; documented, reversible in one step).
 - Fold `lex_config.json` and `calendar_config.json` contents into `system_config` rows keyed `plugin:<identifier>`. Retire the JSON files.
 - `Seismo\Service\RetentionService` composes keep-predicates from settings and calls each family repo's `prune()` at the end of `refresh_cron.php`. Default policy: `feed_items` 180d, `emails` 180d, `lex_items` unlimited, `calendar_events` unlimited. Manually-labelled / favourited / high-scored rows always kept.
 - Settings tab: retention days per family, "dry run" preview showing how many rows would be deleted.
 - **Definition of done:** no JSON config files remain; `php migrate.php` rebuilds a system_config table from the old layout; cron prunes feeds+emails older than 180 days while preserving protected rows; preview matches the real run count.
+
+**Scope-fidelity notes for Slice 5a (per `slice-scope-fidelity.mdc`):**
+
+- **JSON sidecars are renamed, not deleted.** Migration 005 renames `lex_config.json` → `lex_config.json.migrated-v21` (same for calendar) so the admin keeps an on-disk sample to diff against the folded rows. Deletion is left to the admin; not speculative.
+- **Retention settings ship as a standalone `?action=retention` page**, not a tab inside a combined Settings surface — the settings-tab architecture is Slice 6's concern. The page is linked from the Diagnostics top-bar and will graduate into a tab later.
+- **Preview / actual consistency is enforced by construction.** Every family repo routes both `prune()` and `dryRunPrune()` through a private `buildPruneWhere()` that pulls the keep-fragment from `RetentionPredicates::forEntryType()`. The two queries cannot diverge modulo rows inserted between the two calls.
+- **`MagnituConfigRepository` is deleted outright, not kept as a deprecated shim.** Every callsite in 0.5 has been renamed to `SystemConfigRepository`; no external consumer was relying on the old class name. `SystemConfigRepository::get()/set()` still falls back to the legacy `magnitu_config` table name during the transition window (deploy-code → run-migrate), documented to be removed in Slice 6.
+- **`jus_banned_words` is stored under `lex:jus_banned_words`, not `plugin:jus_banned_words`.** It is a shared filter list, not a plugin block — routing it differently keeps `SystemConfigRepository::getAllPluginBlocks()` honest.
+- **`EmailRepository` is a new retention-only repo.** Reads still go through `EntryRepository` / `MagnituExportRepository`; `EmailRepository` owns `prune()` and `dryRunPrune()` only. Resist folding all email SQL here without a consumer asking — "one SQL owner per concern" is load-bearing.
 
 ### Slice 6 — Admin / settings polish
 

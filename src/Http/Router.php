@@ -9,8 +9,13 @@
  * Two concerns that existed in the 0.4 front controller and are preserved here:
  *   1. Most read-only actions release the session lock early so PHP's file-based
  *      session handler doesn't serialise concurrent requests. Routes that render
- *      CSRF forms (`index`, `lex`, `leg`, `calendar`) skip early release — see
- *      {@see READONLY_KEEP_SESSION_FOR_CSRF}.
+ *      CSRF forms (`index`, `lex`, `leg`, `calendar`, `retention`) skip early
+ *      release — see {@see READONLY_KEEP_SESSION_FOR_CSRF}. Any future
+ *      read-only route whose controller calls `CsrfToken::field()` MUST be
+ *      added to that list; otherwise `session_write_close()` fires before
+ *      the handler and the subsequent `session_start()` inside
+ *      `CsrfToken::ensure()` reloads `$_SESSION` from disk, silently
+ *      dropping any flash message the preceding POST stashed.
  *   2. Unknown actions fall back to a configured default rather than 404'ing,
  *      so the app stays usable when the default page isn't ported yet.
  *
@@ -33,10 +38,11 @@ final class Router
      * @var array<string, true>
      */
     private const READONLY_KEEP_SESSION_FOR_CSRF = [
-        'index'    => true,
-        'lex'      => true,
-        'leg'      => true,
-        'calendar' => true,
+        'index'     => true,
+        'lex'       => true,
+        'leg'       => true,
+        'calendar'  => true,
+        'retention' => true,
     ];
 
     /** @var array<string, string> action => "Class::method" */

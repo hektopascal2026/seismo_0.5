@@ -11,7 +11,7 @@ use Seismo\Config\LexConfigStore;
 use Seismo\Repository\CalendarEventRepository;
 use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\LexItemRepository;
-use Seismo\Repository\MagnituConfigRepository;
+use Seismo\Repository\SystemConfigRepository;
 use Seismo\Repository\PluginRunLogRepository;
 
 /**
@@ -238,7 +238,7 @@ final class RefreshAllService
             new CoreRunner(
                 new FeedItemRepository($pdo),
                 $runLog,
-                new MagnituConfigRepository($pdo),
+                new SystemConfigRepository($pdo),
             ),
         );
     }

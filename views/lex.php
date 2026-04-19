@@ -195,7 +195,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
 
             <?php if ($lexItems === []): ?>
                 <div class="empty-state">
-                    <p>No legislation in this filter yet. Enable sources in <code>lex_config.json</code> or fetch from 0.4 / Fedlex refresh (CH) above.</p>
+                    <p>No legislation in this filter yet. Enable sources via the CH settings form above, or trigger a Fedlex refresh.</p>
                 </div>
             <?php else: ?>
                 <?php

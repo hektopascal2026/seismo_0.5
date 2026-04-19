@@ -1,55 +1,110 @@
 <?php
+/**
+ * Reads / writes Lex plugin configuration from `system_config`.
+ *
+ * Historical context: 0.4 and pre-Slice-5a 0.5 stored this blob in
+ * `lex_config.json` on disk. Slice 5a folded each top-level block into
+ * its own `system_config` row keyed `plugin:<block>` (except the shared
+ * `jus_banned_words` list, which lives at `lex:jus_banned_words`) and
+ * renamed the file to `.migrated-v21` as a manual-rollback sample.
+ *
+ * The public API — `load()`, `save()`, `saveChBlock()`, `defaultConfig()` —
+ * is unchanged so no caller outside this class needs to know the backing
+ * shifted from filesystem to SQL. Internally, `load()` assembles the
+ * same flat map the JSON file used to return by reading the relevant
+ * rows, and `save()` decomposes the map back into per-row writes.
+ */
 
 declare(strict_types=1);
 
 namespace Seismo\Config;
 
-/**
- * Reads/writes `lex_config.json` beside bootstrap (same contract as 0.4 getLexConfig).
- */
+use Seismo\Repository\SystemConfigRepository;
+
 final class LexConfigStore
 {
-    private string $path;
+    /**
+     * Top-level keys recognised by `load()` / `save()`. Anything else in
+     * the passed blob is ignored on save, and missing keys fall back to
+     * `defaultConfig()`. Keep this list aligned with the `getConfigKey()`
+     * values the Lex plugins return.
+     */
+    private const PLUGIN_BLOCKS = [
+        'eu', 'ch', 'de', 'ch_bger', 'ch_bge', 'ch_bvger', 'parl_mm', 'fr',
+    ];
 
-    public function __construct(?string $path = null)
+    private const SPECIAL_BANNED_WORDS_KEY = 'lex:jus_banned_words';
+
+    private SystemConfigRepository $config;
+
+    public function __construct(?SystemConfigRepository $config = null)
     {
-        $this->path = $path ?? (SEISMO_ROOT . '/lex_config.json');
+        $this->config = $config ?? new SystemConfigRepository(getDbConnection());
     }
 
     /**
      * Full config with defaults merged for any missing top-level keys.
+     * Same shape as the 0.4 `lex_config.json` contract.
      *
      * @return array<string, mixed>
      */
     public function load(): array
     {
         $defaults = $this->defaultConfig();
-        if (!is_file($this->path)) {
-            return $defaults;
-        }
-        $raw = @file_get_contents($this->path);
-        if ($raw === false || $raw === '') {
-            return $defaults;
-        }
-        $data = json_decode($raw, true);
-        if (!is_array($data)) {
-            return $defaults;
+        $merged   = $defaults;
+
+        foreach (self::PLUGIN_BLOCKS as $block) {
+            $stored = $this->config->getJson(SystemConfigRepository::PLUGIN_PREFIX . $block, []);
+            if ($stored !== []) {
+                $merged[$block] = array_replace_recursive(
+                    is_array($defaults[$block] ?? null) ? $defaults[$block] : [],
+                    $stored
+                );
+            }
         }
 
-        /** @var array<string, mixed> */
-        return array_replace_recursive($defaults, $data);
+        $bannedRaw = $this->config->get(self::SPECIAL_BANNED_WORDS_KEY);
+        if ($bannedRaw !== null && trim($bannedRaw) !== '') {
+            $decoded = json_decode($bannedRaw, true);
+            if (is_array($decoded)) {
+                $merged['jus_banned_words'] = array_values(array_filter(array_map(
+                    static fn ($v) => is_string($v) ? $v : null,
+                    $decoded
+                )));
+            }
+        }
+
+        return $merged;
     }
 
     /**
-     * Persist entire config (pretty-printed JSON).
+     * Persist the entire config. Each top-level key is upserted as its
+     * own row so that per-plugin writes are later possible without
+     * round-tripping the whole blob.
      *
      * @param array<string, mixed> $config
      */
     public function save(array $config): void
     {
-        $json = json_encode($config, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
-        if (file_put_contents($this->path, $json, LOCK_EX) === false) {
-            throw new \RuntimeException('Could not write lex_config.json.');
+        foreach (self::PLUGIN_BLOCKS as $block) {
+            if (!array_key_exists($block, $config)) {
+                continue;
+            }
+            $value = $config[$block];
+            if (!is_array($value)) {
+                continue;
+            }
+            $this->config->setJson(SystemConfigRepository::PLUGIN_PREFIX . $block, $value);
+        }
+
+        if (array_key_exists('jus_banned_words', $config) && is_array($config['jus_banned_words'])) {
+            $this->config->set(
+                self::SPECIAL_BANNED_WORDS_KEY,
+                json_encode(
+                    array_values($config['jus_banned_words']),
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT
+                ) . "\n"
+            );
         }
     }
 
@@ -60,9 +115,12 @@ final class LexConfigStore
      */
     public function saveChBlock(array $chBlock): void
     {
-        $full = $this->load();
-        $full['ch'] = array_replace_recursive($full['ch'] ?? [], $chBlock);
-        $this->save($full);
+        $existing = $this->config->getJson(
+            SystemConfigRepository::PLUGIN_PREFIX . 'ch',
+            is_array($this->defaultConfig()['ch'] ?? null) ? $this->defaultConfig()['ch'] : []
+        );
+        $merged = array_replace_recursive($existing, $chBlock);
+        $this->config->setJson(SystemConfigRepository::PLUGIN_PREFIX . 'ch', $merged);
     }
 
     /**

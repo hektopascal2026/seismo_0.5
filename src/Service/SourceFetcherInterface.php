@@ -25,7 +25,12 @@ interface SourceFetcherInterface
      */
     public function getEntryType(): string;
 
-    /** Key inside the family JSON config (e.g. lex_config.json → "ch"). */
+    /**
+     * Row-key fragment inside `system_config` (e.g. Fedlex → "ch", which
+     * resolves to `plugin:ch`). Historically the slot lived in a JSON
+     * file (`lex_config.json`, `calendar_config.json`); Slice 5a folded
+     * those into `system_config` rows.
+     */
     public function getConfigKey(): string;
 
     /**

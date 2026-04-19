@@ -189,26 +189,37 @@ final class FeedItemRepository
     }
 
     /**
-     * Default policy: 180d (caller supplies cutoff). Protected rows via predicates in Slice 5a.
+     * Age column used by both `prune()` and `dryRunPrune()`. `cached_at`
+     * is the row-insert timestamp (populated by MariaDB default), which
+     * is the honest cutoff for retention — `published_date` comes from
+     * the feed publisher and can be arbitrarily old or missing.
+     */
+    private const AGE_COLUMN = 'cached_at';
+
+    /**
+     * Delete feed_items older than `$olderThan` unless protected by a
+     * keep-predicate. Honours the pre-Slice-5a invariant that
+     * soft-deleted rows (`hidden = 1`) are themselves kept — the
+     * soft-delete flag is its own retention signal (admin marked them
+     * hidden; don't silently hard-delete without their say).
      *
-     * @param array<string, mixed> $keepPredicates Reserved.
+     * @param list<string> $keepPredicates Tokens from
+     *        {@see \Seismo\Service\RetentionService}.
      */
     public function prune(DateTimeImmutable $olderThan, array $keepPredicates): int
     {
         if (isSatellite()) {
             throw new \RuntimeException('FeedItemRepository::prune must not run on a satellite.');
         }
-        unset($keepPredicates);
+
         $cutoff = $olderThan->format('Y-m-d H:i:s');
-        $sql = 'DELETE FROM ' . entryTable('feed_items') . '
-            WHERE cached_at < ?
-              AND hidden = 0
-            LIMIT 10000';
+        $where  = $this->buildPruneWhere($keepPredicates);
 
         try {
-            $stmt = $this->pdo->prepare($sql);
+            $stmt = $this->pdo->prepare(
+                'DELETE FROM ' . entryTable('feed_items') . ' t WHERE ' . $where
+            );
             $stmt->execute([$cutoff]);
-
             return $stmt->rowCount();
         } catch (PDOException $e) {
             if (PdoMysqlDiagnostics::isMissingTable($e)) {
@@ -216,6 +227,45 @@ final class FeedItemRepository
             }
             throw $e;
         }
+    }
+
+    /**
+     * Dry-run counterpart of `prune()`. Same WHERE clause, `SELECT
+     * COUNT(*)` instead of DELETE — the two stay in sync by construction
+     * because both go through `buildPruneWhere()`.
+     *
+     * @param list<string> $keepPredicates
+     */
+    public function dryRunPrune(DateTimeImmutable $olderThan, array $keepPredicates): int
+    {
+        $cutoff = $olderThan->format('Y-m-d H:i:s');
+        $where  = $this->buildPruneWhere($keepPredicates);
+
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM ' . entryTable('feed_items') . ' t WHERE ' . $where
+            );
+            $stmt->execute([$cutoff]);
+            return (int)$stmt->fetchColumn();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return 0;
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * @param list<string> $keepPredicates
+     */
+    private function buildPruneWhere(array $keepPredicates): string
+    {
+        $keeps = \Seismo\Service\RetentionPredicates::forEntryType('feed_item', $keepPredicates);
+        $where = 't.' . self::AGE_COLUMN . ' < ? AND t.hidden = 0';
+        if ($keeps !== '') {
+            $where .= ' AND NOT (' . $keeps . ')';
+        }
+        return $where;
     }
 
     private function isNavigableHttpUrl(string $url): bool

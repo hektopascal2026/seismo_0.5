@@ -71,6 +71,7 @@ $statusBg = static function (?array $row): string {
             <div class="top-bar-actions">
                 <a href="<?= e($basePath) ?>/index.php?action=lex" class="top-bar-btn" title="Lex">Lex</a>
                 <a href="<?= e($basePath) ?>/index.php?action=leg" class="top-bar-btn" title="Leg">Leg</a>
+                <a href="<?= e($basePath) ?>/index.php?action=retention" class="top-bar-btn" title="Retention">Retention</a>
                 <a href="<?= e($basePath) ?>/index.php?action=index" class="top-bar-btn" title="Back to timeline">←</a>
                 <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
                     <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" style="display:inline; margin:0;">
