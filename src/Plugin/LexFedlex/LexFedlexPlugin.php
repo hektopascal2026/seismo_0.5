@@ -41,6 +41,17 @@ final class LexFedlexPlugin implements SourceFetcherInterface
     }
 
     /**
+     * 4 hours. Fedlex publications change on a daily-to-weekly cadence; 4h is
+     * plenty fresh for a legislation monitor and keeps SPARQL load modest
+     * when the master cron fires every 5 minutes. User-initiated refresh
+     * from the Lex page bypasses this (force=true).
+     */
+    public function getMinIntervalSeconds(): int
+    {
+        return 4 * 60 * 60;
+    }
+
+    /**
      * Normalise config language to a safe Fedlex authority code (defaults to DEU).
      */
     public static function normalizeFedlexLanguage(string $raw): string

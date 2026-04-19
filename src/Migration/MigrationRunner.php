@@ -14,7 +14,7 @@ use Seismo\Repository\MagnituConfigRepository;
 final class MigrationRunner
 {
     /** Highest schema version shipped by built-in migrations. */
-    public const LATEST_VERSION = Migration001BaseSchema::VERSION;
+    public const LATEST_VERSION = Migration002PluginRunLog::VERSION;
 
     private MagnituConfigRepository $magnituConfig;
 
@@ -45,7 +45,8 @@ final class MigrationRunner
         $current = $this->getCurrentVersion();
 
         $migrations = [
-            Migration001BaseSchema::VERSION => new Migration001BaseSchema(),
+            Migration001BaseSchema::VERSION  => new Migration001BaseSchema(),
+            Migration002PluginRunLog::VERSION => new Migration002PluginRunLog(),
         ];
 
         ksort($migrations, SORT_NUMERIC);

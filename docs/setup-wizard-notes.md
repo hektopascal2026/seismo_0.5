@@ -15,6 +15,23 @@ Scratchpad for a future “first run” experience after a user uploads Seismo t
 - **`refresh_cron.php` (0.4)** duplicates the loop manually and **does not** call `refreshAllSources()` — as of consolidation start it **omits the Leg / parliament_ch fetch** that the web button runs. Fix by having cron delegate to `refreshAllSources()` (or shared helper) so behaviour matches.
 - **Mail** and **scraper** use **separate** CLI scripts and crons — not confused with the main refresh loop.
 
+### Master Cron in 0.5 (Slice 3 — replaces the per-source crons for plugins)
+
+After uploading 0.5, the admin only needs **one** cron entry for plugin refreshes:
+
+```
+*/5 * * * * /usr/bin/php /path/to/seismo/refresh_cron.php
+```
+
+Wizard steps (eventual, when implemented):
+
+1. Detect existing 0.4 cron lines that target Lex / Jus / Leg / parliament_ch. Offer to **comment them out** (one click, never auto-deleted) and replace with the single master line above.
+2. **Mail and scraper crons stay as they are.** Slice 3 only consolidates plugin refreshes (Fedlex, ParlCh today). Core RSS / mail / scraper stay on their dedicated crons until the Core port lands in a later slice.
+3. Surface the per-plugin **throttle** (Fedlex 4h, ParlCh 4h, hardcoded in `getMinIntervalSeconds()`). The cron may run every 5 min; `RefreshAllService` will skip plugins inside their throttle window. Throttle skips appear in cron mail (stdout) but not in the diagnostics table.
+4. Validate that the chosen interpreter has the required PHP extensions (cURL, PDO MySQL) by running `php -m`.
+
+The web "Refresh all" button (`?action=refresh_all` from Diagnostics) is the manual override — it always passes `force=true` and bypasses throttles.
+
 ### Wizard could later check
 
 - PHP version and extensions (cURL, IMAP, PDO MySQL, etc.).
@@ -22,10 +39,22 @@ Scratchpad for a future “first run” experience after a user uploads Seismo t
 - Optional: writable JSON config paths; `.htaccess` / rewrite if applicable.
 - Generate or validate cron suggestions with **current** install path.
 
-### Auth onboarding (Slice 3)
+### Auth onboarding (Slice 3 — backbone shipped)
 
 - Wizard should offer a "Set an admin password" step. On submit: compute `password_hash($input, PASSWORD_DEFAULT)` server-side, write the result to `config.local.php` as `SEISMO_ADMIN_PASSWORD_HASH`, never log or echo the plaintext. User can skip this step and the app runs unauthenticated — that's a supported default, not a warning.
-- If the wizard can't write to `config.local.php` (read-only filesystem on some shared hosts), display the hash and the exact `define(...)` line for the user to paste manually.
+- If the wizard can't write to `config.local.php` (read-only filesystem on some shared hosts), display the hash and the exact `define(...)` line for the user to paste manually. Manual one-liner from a shell on the local laptop:
+
+```
+php -r "echo password_hash('yourpass', PASSWORD_DEFAULT) . PHP_EOL;"
+```
+
+Then paste into `config.local.php`:
+
+```
+define('SEISMO_ADMIN_PASSWORD_HASH', '$2y$12$...');
+```
+
+- Note: the `?action=health` page **degrades** when auth is enabled and the visitor isn't logged in — only `dbStatus: ok|not ok` is exposed, no PHP/MySQL versions. This is intentional so uptime monitors keep working without leaking version strings.
 
 ### First-run / post-upload (Slice 0 complete)
 
@@ -48,6 +77,12 @@ Scratchpad for a future “first run” experience after a user uploads Seismo t
 - `php migrate.php --status` — print version only, no changes.
 
 On an empty database, migration applies `docs/db-schema.sql` and sets `schema_version` to 17. On a database already used by Seismo 0.4, expect **no destructive operations** — mostly **“Nothing to do”** when already at 17.
+
+### Mutable JSON configs (Slice 2 / Slice 3)
+
+- `lex_config.json` (Slice 2) and `calendar_config.json` (Slice 3) are written by the Lex and Leg settings forms. Both files live next to `bootstrap.php` and are **gitignored** — only `*_config.example.json` is committed.
+- The wizard should detect missing files on first run and create them from the example shapes; subsequent saves go through `LexConfigStore::save()` / `CalendarConfigStore::save()` (atomic write via temp file + rename inside each store).
+- Filesystem must be writable by the PHP process for these saves. If write fails, the settings save returns a session error without losing the in-memory config.
 
 ### Retention onboarding (Slice 5a)
 

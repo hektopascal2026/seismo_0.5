@@ -7,7 +7,7 @@ namespace Seismo\Service;
 /**
  * Third-party source adapter contract (plugins). No SQL — persistence is the runner's job.
  *
- * @see \Seismo\Service\PluginRunner
+ * @see \Seismo\Service\RefreshAllService
  */
 interface SourceFetcherInterface
 {
@@ -17,7 +17,12 @@ interface SourceFetcherInterface
     /** Human-readable label for UI and logs. */
     public function getLabel(): string;
 
-    /** Family table / Magnitu entry_type: lex_item, calendar_event, … */
+    /**
+     * Family table / Magnitu `entry_type`.
+     *
+     * v0.5: `RefreshAllService` maps `lex_item` and `calendar_event` to repos;
+     * add a branch there when introducing a new family.
+     */
     public function getEntryType(): string;
 
     /** Key inside the family JSON config (e.g. lex_config.json → "ch"). */
@@ -32,4 +37,19 @@ interface SourceFetcherInterface
      * @return array<int, array<string, mixed>>
      */
     public function fetch(array $config): array;
+
+    /**
+     * Minimum seconds between successful runs for this plugin.
+     *
+     * RefreshAllService::runAll() skips the plugin when the last `ok` row in
+     * plugin_run_log is newer than now - getMinIntervalSeconds(). Throttle
+     * skips are NOT persisted to plugin_run_log (see Master Cron pattern in
+     * core-plugin-architecture.mdc) — they only appear on cron stdout.
+     *
+     * User-initiated single-plugin refreshes bypass this via
+     * RefreshAllService::runPlugin($id, force: true).
+     *
+     * Return 0 to always run (no throttle).
+     */
+    public function getMinIntervalSeconds(): int;
 }

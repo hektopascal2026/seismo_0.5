@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 /**
- * Outcome of a single plugin run (until plugin_run_log lands in Slice 3).
+ * Outcome of a single plugin run. Persisted to `plugin_run_log` by
+ * RefreshAllService (except for throttle-skipped outcomes — those stay
+ * in memory and go to stdout only; see RefreshAllService docblock).
  */
 final class PluginRunResult
 {

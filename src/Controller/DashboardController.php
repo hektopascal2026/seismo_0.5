@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryRepository;
 
 final class DashboardController
@@ -24,6 +25,8 @@ final class DashboardController
 
     public function show(): void
     {
+        $csrfField = CsrfToken::field();
+
         $limit  = $this->clampLimit($_GET['limit'] ?? null);
         $offset = $this->clampOffset($_GET['offset'] ?? null);
 

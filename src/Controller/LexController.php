@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Seismo\Controller;
 
 use Seismo\Config\LexConfigStore;
+use Seismo\Http\CsrfToken;
 use Seismo\Plugin\LexFedlex\LexFedlexPlugin;
 use Seismo\Repository\LexItemRepository;
-use Seismo\Service\PluginRegistry;
-use Seismo\Service\PluginRunner;
+use Seismo\Service\RefreshAllService;
 
 final class LexController
 {
@@ -16,6 +16,8 @@ final class LexController
 
     public function show(): void
     {
+        $csrfField = CsrfToken::field();
+
         $lexItems = [];
         $lexCfg = [];
         $enabledLexSources = [];
@@ -70,13 +72,23 @@ final class LexController
             return;
         }
 
-        $pdo = getDbConnection();
-        $runner = new PluginRunner(
-            new PluginRegistry(),
-            new LexItemRepository($pdo),
-            new LexConfigStore()
-        );
-        $result = $runner->runFedlex();
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectToLex();
+
+            return;
+        }
+
+        try {
+            $pdo = getDbConnection();
+            $result = RefreshAllService::boot($pdo)->runPlugin('fedlex', true);
+        } catch (\Throwable $e) {
+            error_log('Seismo refresh_fedlex: ' . $e->getMessage());
+            $_SESSION['error'] = 'Fedlex refresh failed: ' . $e->getMessage();
+            $this->redirectToLex();
+
+            return;
+        }
 
         if ($result->isOk()) {
             $_SESSION['success'] = 'Fedlex refresh finished: ' . $result->count . ' row(s) processed.';
@@ -92,6 +104,13 @@ final class LexController
     public function saveLexCh(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectToLex();
+
+            return;
+        }
+
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
             $this->redirectToLex();
 
             return;

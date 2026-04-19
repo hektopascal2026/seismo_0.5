@@ -1,0 +1,229 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Seismo\Service;
+
+use DateTimeImmutable;
+use DateTimeZone;
+use Seismo\Config\CalendarConfigStore;
+use Seismo\Config\LexConfigStore;
+use Seismo\Repository\CalendarEventRepository;
+use Seismo\Repository\LexItemRepository;
+use Seismo\Repository\PluginRunLogRepository;
+
+/**
+ * Orchestrates plugin execution. Shared by:
+ *   - Master cron (refresh_cron.php) — calls runAll() with throttling.
+ *   - Web "Refresh all" button (?action=refresh_all) — calls runAll(force: true).
+ *   - Per-plugin refresh buttons — calls runPlugin($id, force: true).
+ *   - Diagnostics "Test" button — calls testPlugin($id) (no persistence).
+ *
+ * ## Master Cron pattern
+ *
+ * `refresh_cron.php` is the ONLY cron job a shared-host admin needs to register.
+ * It may fire every 5 minutes (Plesk default granularity). We do NOT want every
+ * plugin hitting its upstream every 5 minutes, so runAll() consults each
+ * plugin's {@see SourceFetcherInterface::getMinIntervalSeconds()} and skips
+ * plugins whose last `ok` run in `plugin_run_log` is fresher than that.
+ *
+ * Throttle skips are written to stdout (visible in cron mail) but **not**
+ * persisted to `plugin_run_log` — a 5-minute cron would otherwise write
+ * ~288 rows/day/plugin of pure noise. User-initiated refresh paths call
+ * with `$force = true` to bypass the throttle (the human is more important
+ * than the rate limit in that case; they know they're hitting the upstream).
+ *
+ * Rows ARE persisted for every non-throttle outcome (ok, error, skipped-because-
+ * satellite, skipped-because-disabled-in-config). Those are the rows diagnostics
+ * displays.
+ *
+ * Scope (Slice 3): plugin refreshes only. Core RSS/Mail retention, scraper,
+ * and magnitu rescoring stay out of here — they graduate in later slices.
+ */
+final class RefreshAllService
+{
+    public function __construct(
+        private readonly PluginRegistry $registry,
+        private readonly PluginRunLogRepository $runLog,
+        private readonly LexItemRepository $lexItems,
+        private readonly CalendarEventRepository $calendarEvents,
+        private readonly LexConfigStore $lexConfig,
+        private readonly CalendarConfigStore $calendarConfig,
+    ) {
+    }
+
+    /**
+     * Run every registered plugin.
+     *
+     * @param bool $force If true, ignore the per-plugin throttle (web "Refresh all").
+     * @return array<string, PluginRunResult>
+     */
+    public function runAll(bool $force = false): array
+    {
+        $results = [];
+        foreach ($this->registry->all() as $id => $plugin) {
+            $results[$id] = $this->runOne($plugin, $force);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Run a single plugin by id.
+     *
+     * @param bool $force Defaults to true because the web single-plugin refresh
+     *                    button is always explicit human intent.
+     */
+    public function runPlugin(string $id, bool $force = true): PluginRunResult
+    {
+        $plugin = $this->registry->get($id);
+        if ($plugin === null) {
+            return PluginRunResult::error('Plugin "' . $id . '" is not registered.');
+        }
+
+        return $this->runOne($plugin, $force);
+    }
+
+    /**
+     * Dry-run for diagnostics: call fetch() without writing. Throttle is
+     * ignored; no plugin_run_log row is written. Returns the first $peek rows.
+     *
+     * @return array{items: list<array<string, mixed>>, error: ?string, count: int}
+     */
+    public function testPlugin(string $id, int $peek = 5): array
+    {
+        $peek = max(1, min($peek, 20));
+        $plugin = $this->registry->get($id);
+        if ($plugin === null) {
+            return ['items' => [], 'error' => 'Plugin "' . $id . '" is not registered.', 'count' => 0];
+        }
+
+        if (isSatellite()) {
+            return ['items' => [], 'error' => 'Satellite mode — entry plugins do not run here.', 'count' => 0];
+        }
+
+        $block = $this->resolveConfigBlock($plugin);
+
+        try {
+            $rows = $plugin->fetch($block);
+        } catch (\Throwable $e) {
+            error_log('Seismo testPlugin ' . $plugin->getIdentifier() . ': ' . $e->getMessage());
+
+            return ['items' => [], 'error' => $e->getMessage(), 'count' => 0];
+        }
+
+        return [
+            'items' => array_slice($rows, 0, $peek),
+            'error' => null,
+            'count' => count($rows),
+        ];
+    }
+
+    private function runOne(SourceFetcherInterface $plugin, bool $force): PluginRunResult
+    {
+        $id = $plugin->getIdentifier();
+
+        if (isSatellite()) {
+            $result = PluginRunResult::skipped('Satellite mode — entry plugins do not run here.');
+            $this->record($id, $result, 0);
+
+            return $result;
+        }
+
+        if (!$force && $this->isThrottled($plugin)) {
+            $msg = 'Throttled — last successful run is fresher than ' . $plugin->getMinIntervalSeconds() . 's.';
+            if (PHP_SAPI === 'cli') {
+                fwrite(STDOUT, '[seismo] plugin ' . $id . ' skipped: ' . $msg . "\n");
+            }
+
+            return PluginRunResult::skipped($msg);
+        }
+
+        $block = $this->resolveConfigBlock($plugin);
+        if (empty($block['enabled'])) {
+            $result = PluginRunResult::skipped('Disabled in config.');
+            $this->record($id, $result, 0);
+
+            return $result;
+        }
+
+        $start = (int)(microtime(true) * 1000);
+        try {
+            $rows = $plugin->fetch($block);
+            $count = $this->persist($plugin, $rows);
+            $result = PluginRunResult::ok($count);
+        } catch (\Throwable $e) {
+            error_log('Seismo plugin ' . $id . ': ' . $e->getMessage());
+            $result = PluginRunResult::error($e->getMessage());
+        }
+        $duration = max(0, (int)(microtime(true) * 1000) - $start);
+        $this->record($id, $result, $duration);
+
+        return $result;
+    }
+
+    private function isThrottled(SourceFetcherInterface $plugin): bool
+    {
+        $minInterval = $plugin->getMinIntervalSeconds();
+        if ($minInterval <= 0) {
+            return false;
+        }
+        $last = $this->runLog->lastSuccessfulRunAt($plugin->getIdentifier());
+        if ($last === null) {
+            return false;
+        }
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+        return ($now->getTimestamp() - $last->getTimestamp()) < $minInterval;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolveConfigBlock(SourceFetcherInterface $plugin): array
+    {
+        $key = $plugin->getConfigKey();
+
+        return match ($plugin->getEntryType()) {
+            'lex_item'       => (array)($this->lexConfig->load()[$key] ?? []),
+            'calendar_event' => (array)($this->calendarConfig->load()[$key] ?? []),
+            default          => [],
+        };
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     */
+    private function persist(SourceFetcherInterface $plugin, array $rows): int
+    {
+        return match ($plugin->getEntryType()) {
+            'lex_item'       => $this->lexItems->upsertBatch($rows),
+            'calendar_event' => $this->calendarEvents->upsertBatch($rows),
+            default          => throw new \RuntimeException('No repository wired for entry_type "' . $plugin->getEntryType() . '"'),
+        };
+    }
+
+    private function record(string $id, PluginRunResult $result, int $durationMs): void
+    {
+        try {
+            $this->runLog->record($id, $result, $durationMs);
+        } catch (\Throwable $e) {
+            error_log('Seismo plugin_run_log write failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Convenience factory so controllers and cron don't repeat the wiring.
+     */
+    public static function boot(\PDO $pdo): self
+    {
+        return new self(
+            new PluginRegistry(),
+            new PluginRunLogRepository($pdo),
+            new LexItemRepository($pdo),
+            new CalendarEventRepository($pdo),
+            new LexConfigStore(),
+            new CalendarConfigStore(),
+        );
+    }
+}

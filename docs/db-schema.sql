@@ -358,6 +358,28 @@ CREATE TABLE IF NOT EXISTS srf_fetch_state (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- -----------------------------------------------------------------------------
+-- Plugin run log (Seismo 0.5 — introduced in schema version 18 / Migration 002).
+-- One row per non-skipped plugin invocation by RefreshAllService.
+--
+-- Throttle-skipped runs are deliberately NOT recorded to avoid drowning the
+-- table on a 5-minute master cron. Diagnostics computes "next allowed run"
+-- from the last `ok` row + plugin->getMinIntervalSeconds().
+--
+-- Local table (never wrapped by entryTable()) — satellites keep their own log.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS plugin_run_log (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    plugin_id     VARCHAR(64) NOT NULL,
+    run_at        DATETIME    NOT NULL,
+    status        ENUM('ok','skipped','error') NOT NULL,
+    item_count    INT         NOT NULL DEFAULT 0,
+    error_message TEXT        DEFAULT NULL,
+    duration_ms   INT         NOT NULL DEFAULT 0,
+    INDEX idx_plugin_run_at (plugin_id, run_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 -- =============================================================================
 -- Review notes / known rough edges (pointers for the reviewer):
 -- =============================================================================

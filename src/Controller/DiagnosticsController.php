@@ -1,0 +1,220 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Seismo\Controller;
+
+use DateTimeImmutable;
+use DateTimeZone;
+use Seismo\Http\CsrfToken;
+use Seismo\Repository\PluginRunLogRepository;
+use Seismo\Service\PluginRegistry;
+use Seismo\Service\RefreshAllService;
+
+/**
+ * Diagnostics page — plugin-run status surface.
+ *
+ * Slice 3 scope (intentionally minimal):
+ *   - Status table with one row per registered plugin (latest run from
+ *     plugin_run_log + throttle window).
+ *   - "Refresh all now" master button (force=true; bypasses throttle).
+ *   - Per-plugin "Refresh now" button (force=true).
+ *   - Per-plugin "Test fetch" button (calls fetch() without persisting,
+ *     stashes a peek of the rows in a session flash).
+ *
+ * Out of scope for Slice 3 (graduates later):
+ *   - History strip (recentForPlugin) — code is in place, UI lands when needed.
+ *   - Inline config viewer — admin still uses Lex/Leg pages for config.
+ *
+ * All POST endpoints require CSRF and run behind AuthGate (router enforces it
+ * because `diagnostics`, `refresh_all`, `refresh_plugin`, `plugin_test` are
+ * NOT on the AuthGate public whitelist).
+ */
+final class DiagnosticsController
+{
+    public function show(): void
+    {
+        $registry = new PluginRegistry();
+        $plugins  = $registry->all();
+
+        $status   = [];
+        $loadError = null;
+
+        try {
+            $pdo = getDbConnection();
+            $log = new PluginRunLogRepository($pdo);
+            $latest = $log->latestPerPlugin(array_keys($plugins));
+        } catch (\Throwable $e) {
+            error_log('Seismo diagnostics: ' . $e->getMessage());
+            $loadError = 'Could not read plugin_run_log. Has migration v18 run yet? (?action=migrate&key=…)';
+            $latest = [];
+        }
+
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+        foreach ($plugins as $id => $plugin) {
+            $row = $latest[$id] ?? null;
+            $minInterval = $plugin->getMinIntervalSeconds();
+
+            $nextAllowed = null;
+            if ($row !== null && $row['status'] === 'ok' && $minInterval > 0) {
+                $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
+            }
+
+            $status[$id] = [
+                'id'            => $id,
+                'label'         => $plugin->getLabel(),
+                'entry_type'    => $plugin->getEntryType(),
+                'config_key'    => $plugin->getConfigKey(),
+                'min_interval'  => $minInterval,
+                'last'          => $row,
+                'next_allowed'  => $nextAllowed,
+                'is_throttled'  => $nextAllowed !== null && $nextAllowed > $now,
+            ];
+        }
+
+        // Keep `diagnostics` registered as NOT read-only so this unset persists
+        // (read-only routes call session_write_close() before the controller runs).
+        $testResult = $_SESSION['plugin_test_result'] ?? null;
+        unset($_SESSION['plugin_test_result']);
+
+        $basePath  = getBasePath();
+        $satellite = isSatellite();
+
+        require_once SEISMO_ROOT . '/views/helpers.php';
+        require SEISMO_ROOT . '/views/diagnostics.php';
+    }
+
+    public function refreshAll(): void
+    {
+        if (!$this->guardPost()) {
+            return;
+        }
+
+        try {
+            $pdo = getDbConnection();
+            $results = RefreshAllService::boot($pdo)->runAll(true);
+        } catch (\Throwable $e) {
+            error_log('Seismo diagnostics refresh_all: ' . $e->getMessage());
+            $_SESSION['error'] = 'Refresh all failed: ' . $e->getMessage();
+            $this->redirectToDiagnostics();
+
+            return;
+        }
+
+        $okCount = 0;
+        $errCount = 0;
+        $itemsTotal = 0;
+        foreach ($results as $r) {
+            if ($r->isOk()) {
+                $okCount++;
+                $itemsTotal += $r->count;
+            } elseif ($r->status === 'error') {
+                $errCount++;
+            }
+        }
+        $_SESSION['success'] = sprintf(
+            'Refresh all: %d ok (%d items), %d error, %d skipped.',
+            $okCount,
+            $itemsTotal,
+            $errCount,
+            count($results) - $okCount - $errCount
+        );
+
+        $this->redirectToDiagnostics();
+    }
+
+    public function refreshPlugin(): void
+    {
+        if (!$this->guardPost()) {
+            return;
+        }
+
+        $id = trim((string)($_POST['plugin_id'] ?? ''));
+        if ($id === '' || !(new PluginRegistry())->has($id)) {
+            $_SESSION['error'] = 'Unknown plugin id.';
+            $this->redirectToDiagnostics();
+
+            return;
+        }
+
+        try {
+            $pdo = getDbConnection();
+            $result = RefreshAllService::boot($pdo)->runPlugin($id, true);
+        } catch (\Throwable $e) {
+            error_log('Seismo diagnostics refresh_plugin: ' . $e->getMessage());
+            $_SESSION['error'] = 'Refresh ' . $id . ' failed: ' . $e->getMessage();
+            $this->redirectToDiagnostics();
+
+            return;
+        }
+
+        if ($result->isOk()) {
+            $_SESSION['success'] = sprintf('Refresh %s: %d row(s) processed.', $id, $result->count);
+        } elseif ($result->status === 'skipped') {
+            $_SESSION['error'] = 'Refresh ' . $id . ' skipped: ' . ($result->message ?? '');
+        } else {
+            $_SESSION['error'] = 'Refresh ' . $id . ' failed: ' . ($result->message ?? 'unknown error');
+        }
+
+        $this->redirectToDiagnostics();
+    }
+
+    public function test(): void
+    {
+        if (!$this->guardPost()) {
+            return;
+        }
+
+        $id = trim((string)($_POST['plugin_id'] ?? ''));
+        if ($id === '' || !(new PluginRegistry())->has($id)) {
+            $_SESSION['error'] = 'Unknown plugin id.';
+            $this->redirectToDiagnostics();
+
+            return;
+        }
+
+        try {
+            $pdo = getDbConnection();
+            $peek = RefreshAllService::boot($pdo)->testPlugin($id, 5);
+        } catch (\Throwable $e) {
+            error_log('Seismo diagnostics test: ' . $e->getMessage());
+            $_SESSION['error'] = 'Test ' . $id . ' failed: ' . $e->getMessage();
+            $this->redirectToDiagnostics();
+
+            return;
+        }
+
+        $_SESSION['plugin_test_result'] = [
+            'id'    => $id,
+            'count' => $peek['count'],
+            'error' => $peek['error'],
+            'items' => $peek['items'],
+        ];
+
+        $this->redirectToDiagnostics();
+    }
+
+    private function guardPost(): bool
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectToDiagnostics();
+
+            return false;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectToDiagnostics();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private function redirectToDiagnostics(): void
+    {
+        header('Location: ' . getBasePath() . '/index.php?action=diagnostics', true, 303);
+        exit;
+    }
+}

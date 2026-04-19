@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryFavouriteRepository;
 
 final class FavouriteController
@@ -30,9 +31,16 @@ final class FavouriteController
             return;
         }
 
+        $returnRaw = trim((string)($_POST['return_query'] ?? ''));
+
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectFromReturnQuery($returnRaw);
+            return;
+        }
+
         $entryType = trim((string)($_POST['entry_type'] ?? ''));
         $entryId   = (int)($_POST['entry_id'] ?? 0);
-        $returnRaw = trim((string)($_POST['return_query'] ?? ''));
 
         if (!in_array($entryType, EntryFavouriteRepository::ALLOWED_ENTRY_TYPES, true) || $entryId <= 0) {
             $_SESSION['error'] = 'Invalid favourite request.';

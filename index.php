@@ -16,10 +16,21 @@ error_reporting(E_ALL);
 ini_set('log_errors', '1');
 ini_set('display_errors', '0');
 
-session_start();
+$__action = $_GET['action'] ?? '';
+if (!is_string($__action)) {
+    $__action = '';
+}
+// Anonymous `?action=health` uptime checks rarely send a cookie; skip
+// session_start() so we do not allocate a session file per poll. Every other
+// route (and health with an existing session cookie) still opens the session.
+$__sessName = session_name();
+if ($__action !== 'health' || ($__sessName !== '' && !empty($_COOKIE[$__sessName]))) {
+    session_start();
+}
 
 require __DIR__ . '/bootstrap.php';
 
+use Seismo\Http\AuthGate;
 use Seismo\Http\Router;
 
 $router = new Router();
@@ -59,10 +70,69 @@ $router->register(
     \Seismo\Controller\LexController::class . '::saveLexCh',
     false
 );
+$router->register(
+    'leg',
+    \Seismo\Controller\LegController::class . '::show',
+    true
+);
+// Legacy ?action=calendar URL — redirect to ?action=leg (same slug 0.4 used).
+$router->register(
+    'calendar',
+    \Seismo\Controller\LegController::class . '::show',
+    true
+);
+$router->register(
+    'refresh_parl_ch',
+    \Seismo\Controller\LegController::class . '::refreshParlCh',
+    false
+);
+$router->register(
+    'save_leg_parl_ch',
+    \Seismo\Controller\LegController::class . '::saveLegParlCh',
+    false
+);
+$router->register(
+    'refresh_all',
+    \Seismo\Controller\DiagnosticsController::class . '::refreshAll',
+    false
+);
+$router->register(
+    'refresh_plugin',
+    \Seismo\Controller\DiagnosticsController::class . '::refreshPlugin',
+    false
+);
+$router->register(
+    'plugin_test',
+    \Seismo\Controller\DiagnosticsController::class . '::test',
+    false
+);
+$router->register(
+    'diagnostics',
+    \Seismo\Controller\DiagnosticsController::class . '::show',
+    false
+);
+$router->register(
+    'login',
+    \Seismo\Controller\AuthController::class . '::showLogin',
+    false
+);
+$router->register(
+    'logout',
+    \Seismo\Controller\AuthController::class . '::logout',
+    false
+);
 $router->setDefault('index');
 
-$action = $_GET['action'] ?? '';
-if (!is_string($action)) {
-    $action = '';
+$action = $__action;
+
+// POST to ?action=login uses showLogin's own path (the controller branches on
+// REQUEST_METHOD), so overlay the handler only on POST.
+if ($action === 'login' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $router->register('login', \Seismo\Controller\AuthController::class . '::handleLogin', false);
 }
+
+// Dormant-by-default auth gate — runs before dispatch. When
+// SEISMO_ADMIN_PASSWORD_HASH is empty/unset this is a no-op.
+AuthGate::check($action);
+
 $router->dispatch($action);

@@ -16,6 +16,9 @@ declare(strict_types=1);
 /** @var ?string $dashboardError */
 /** @var string $currentView 'newest'|'favourites' */
 /** @var string $emptyTimelineHint 'default'|'favourites'|'search' */
+/** @var string $csrfField CSRF hidden input HTML from DashboardController::show() */
+
+use Seismo\Http\AuthGate;
 
 $basePath = getBasePath();
 $accent   = seismoBrandAccent();
@@ -64,6 +67,17 @@ $clearSearchQs = http_build_query($clearSearchParams);
                 </span>
                 <?php if (!isSatellite()): ?>
                 <span class="top-bar-subtitle">ein Prototyp von hektopascal.org | v<?= e(SEISMO_VERSION) ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="top-bar-actions">
+                <a href="<?= e($basePath) ?>/index.php?action=lex" class="top-bar-btn" title="Lex">Lex</a>
+                <a href="<?= e($basePath) ?>/index.php?action=leg" class="top-bar-btn" title="Leg">Leg</a>
+                <a href="<?= e($basePath) ?>/index.php?action=diagnostics" class="top-bar-btn" title="Diagnostics">Diag</a>
+                <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" style="display:inline; margin:0;">
+                        <?= $csrfField ?>
+                        <button type="submit" class="top-bar-btn" title="Sign out">Logout</button>
+                    </form>
                 <?php endif; ?>
             </div>
         </div>

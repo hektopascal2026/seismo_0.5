@@ -28,6 +28,13 @@
 <body>
     <h1>Seismo health</h1>
 
+<?php if (!empty($data['degraded'])): ?>
+    <dl>
+        <dt>Status</dt>
+        <dd class="<?= $data['dbStatus'] === 'ok' ? 'ok' : 'err' ?>"><?= e((string)$data['dbStatus']) ?></dd>
+    </dl>
+    <p class="note">Sign in to see full diagnostics.</p>
+<?php else: ?>
     <dl>
         <dt>Seismo</dt>
         <dd><?= e((string)$data['seismoVersion']) ?></dd>
@@ -69,10 +76,10 @@
     </dl>
 
     <p class="note">
-        This is the default action during Slice 0 of the 0.5 consolidation. Once
-        the dashboard is ported, <code>?action=index</code> becomes the default
-        and this page stays available at <code>?action=health</code> for
-        uptime checks.
+        Default page for fresh 0.5 installs. Once the dashboard is ported,
+        <code>?action=index</code> becomes the default and this page stays
+        available at <code>?action=health</code> for uptime checks.
     </p>
+<?php endif; ?>
 </body>
 </html>

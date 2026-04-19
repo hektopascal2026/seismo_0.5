@@ -11,6 +11,7 @@
  * @var string $basePath
  * @var bool $satellite
  * @var array<string, mixed> $chCfg
+ * @var string $csrfField Hidden CSRF inputs (LexController)
  */
 
 declare(strict_types=1);
@@ -58,6 +59,8 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                 <span class="top-bar-subtitle">EU, Swiss &amp; German legislation</span>
             </div>
             <div class="top-bar-actions">
+                <a href="<?= e($basePath) ?>/index.php?action=leg" class="top-bar-btn" title="Leg">Leg</a>
+                <a href="<?= e($basePath) ?>/index.php?action=diagnostics" class="top-bar-btn" title="Diagnostics">Diag</a>
                 <a href="<?= e($basePath) ?>/index.php?action=index" class="top-bar-btn" title="Back to timeline">←</a>
             </div>
         </div>
@@ -117,6 +120,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
         <div class="latest-entries-section" style="margin-bottom: 24px;">
             <h2 class="section-title">Refresh Swiss Fedlex</h2>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_fedlex" style="display:inline;">
+                <?= $csrfField ?>
                 <button type="submit" class="btn btn-primary">Refresh Fedlex (CH)</button>
             </form>
         </div>
@@ -124,6 +128,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
         <div class="latest-entries-section" style="margin-bottom: 24px;">
             <h2 class="section-title">Fedlex settings (CH only)</h2>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_ch" style="max-width:520px;">
+                <?= $csrfField ?>
                 <div style="margin-bottom:12px;">
                     <label><input type="checkbox" name="ch_enabled" value="1" <?= !empty($chCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
                 </div>

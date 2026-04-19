@@ -154,21 +154,29 @@ if (!function_exists('seismo_council_label')) {
     }
 }
 
-if (!function_exists('seismo_format_lex_refresh_utc')) {
+if (!function_exists('seismo_format_utc')) {
     /**
-     * Format a UTC `fetched_at` for Lex "Refreshed:" lines in local (Zurich) time.
-     * Repositories stay UTC; this is view-time formatting only.
-     * When SEISMO_VIEW_TIMEZONE lands (Slice 5/6), wire it here.
+     * Format a UTC `DateTimeImmutable` in local (Zurich) time for view display.
      *
-     * @param \DateTimeImmutable|null $dtUtc Timestamp from the DB in UTC.
+     * Single entry point used by the Lex, Leg, and Diagnostics pages — keeps
+     * the "views are the only layer that converts to local time" rule in one
+     * place. When SEISMO_VIEW_TIMEZONE lands (Slice 5/6), wire it here.
      */
-    function seismo_format_lex_refresh_utc(?\DateTimeImmutable $dtUtc): ?string
+    function seismo_format_utc(?\DateTimeImmutable $dtUtc, string $format = 'd.m.Y H:i'): ?string
     {
         if ($dtUtc === null) {
             return null;
         }
         $local = $dtUtc->setTimezone(new \DateTimeZone('Europe/Zurich'));
 
-        return $local->format('d.m.Y H:i');
+        return $local->format($format);
+    }
+}
+
+if (!function_exists('seismo_format_lex_refresh_utc')) {
+    /** @deprecated use {@see seismo_format_utc()} — kept for existing lex.php call site. */
+    function seismo_format_lex_refresh_utc(?\DateTimeImmutable $dtUtc): ?string
+    {
+        return seismo_format_utc($dtUtc);
     }
 }

@@ -14,6 +14,8 @@
  * Defensive rendering (Slice 1.5+): never wrap titles in &lt;a href=""&gt; or
  * href="#"; promote description→body when stripped content is empty; legacy
  * rows stay readable until fetchers enforce a normalisation contract (Slice 3+).
+ *
+ * @var string $csrfField From DashboardController (CSRF hidden input HTML)
  */
 $searchQuery = $searchQuery ?? '';
 if (!isset($showFavourites)) {
@@ -133,6 +135,7 @@ $feedLoopPrevDayKey = null;
                                     <?php endif; ?>
                                     <?php if ($showFavourites): ?>
                                     <form method="POST" action="?action=toggle_favourite" class="favourite-form">
+                                        <?= $csrfField ?>
                                         <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
                                         <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
                                         <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">
@@ -193,6 +196,7 @@ $feedLoopPrevDayKey = null;
                                     <?php endif; ?>
                                     <?php if ($showFavourites): ?>
                                     <form method="POST" action="?action=toggle_favourite" class="favourite-form">
+                                        <?= $csrfField ?>
                                         <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
                                         <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
                                         <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">
@@ -321,6 +325,7 @@ $feedLoopPrevDayKey = null;
                                     <?php endif; ?>
                                     <?php if ($showFavourites): ?>
                                     <form method="POST" action="?action=toggle_favourite" class="favourite-form">
+                                        <?= $csrfField ?>
                                         <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
                                         <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
                                         <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">
@@ -393,6 +398,7 @@ $feedLoopPrevDayKey = null;
                                     <?php endif; ?>
                                     <?php if ($showFavourites): ?>
                                     <form method="POST" action="?action=toggle_favourite" class="favourite-form">
+                                        <?= $csrfField ?>
                                         <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
                                         <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
                                         <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">
@@ -470,6 +476,7 @@ $feedLoopPrevDayKey = null;
                                     <?php endif; ?>
                                     <?php if ($showFavourites): ?>
                                     <form method="POST" action="?action=toggle_favourite" class="favourite-form">
+                                        <?= $csrfField ?>
                                         <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
                                         <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
                                         <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">

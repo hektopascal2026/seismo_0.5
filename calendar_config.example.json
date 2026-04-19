@@ -1,0 +1,20 @@
+{
+    "parliament_ch": {
+        "enabled": true,
+        "api_base": "https://ws.parlament.ch/odata.svc",
+        "language": "DE",
+        "lookforward_days": 90,
+        "lookback_days": 7,
+        "limit": 100,
+        "business_types": {
+            "1": "Geschaeft des Bundesrates",
+            "3": "Standesinitiative",
+            "4": "Parlamentarische Initiative",
+            "5": "Motion",
+            "6": "Postulat",
+            "8": "Interpellation",
+            "12": "Einfache Anfrage"
+        },
+        "notes": ""
+    }
+}

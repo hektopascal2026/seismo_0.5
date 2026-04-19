@@ -19,6 +19,7 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use Seismo\Http\AuthGate;
 use Seismo\Repository\MagnituConfigRepository;
 use Seismo\Repository\SystemRepository;
 
@@ -39,17 +40,33 @@ final class HealthController
             $dbStatus = 'error: ' . $e->getMessage();
         }
 
-        $data = [
-            'seismoVersion' => SEISMO_VERSION,
-            'phpVersion'    => PHP_VERSION,
-            'dbStatus'      => $dbStatus,
-            'dbVersion'     => $dbVersion,
-            'schemaVersion' => $schemaVersion,
-            'satellite'     => isSatellite(),
-            'mothershipDb'  => SEISMO_MOTHERSHIP_DB,
-            'brandTitle'    => seismoBrandTitle(),
-            'basePath'      => getBasePath(),
-        ];
+        // When auth is enabled but the visitor is not logged in, hide anything
+        // that could help an attacker fingerprint the host: PHP version, MySQL
+        // version, schema number, satellite layout, brand title, base path.
+        // Uptime monitors still see a usable ok/not-ok status.
+        $degraded = AuthGate::isEnabled() && !AuthGate::isLoggedIn();
+
+        $isOk = $dbStatus === 'ok' && $schemaVersion !== null;
+
+        if ($degraded) {
+            $data = [
+                'degraded'      => true,
+                'dbStatus'      => $isOk ? 'ok' : 'not ok',
+            ];
+        } else {
+            $data = [
+                'degraded'      => false,
+                'seismoVersion' => SEISMO_VERSION,
+                'phpVersion'    => PHP_VERSION,
+                'dbStatus'      => $dbStatus,
+                'dbVersion'     => $dbVersion,
+                'schemaVersion' => $schemaVersion,
+                'satellite'     => isSatellite(),
+                'mothershipDb'  => SEISMO_MOTHERSHIP_DB,
+                'brandTitle'    => seismoBrandTitle(),
+                'basePath'      => getBasePath(),
+            ];
+        }
 
         require SEISMO_ROOT . '/views/health.php';
     }

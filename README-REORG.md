@@ -9,6 +9,83 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 3 — Unified refresh pipeline, master cron, auth backbone, diagnostics (`?action=diagnostics`, `?action=refresh_all`, `?action=refresh_plugin`, `?action=plugin_test`, `?action=leg`, `?action=login`, `?action=logout`, `refresh_cron.php`)
+
+**Why.** Slice 2 shipped a Fedlex-only `PluginRunner`. Slice 3 generalises it into the runner the rest of the consolidation is built on, ports the remaining "scrapes a 3rd-party API" surface (Parlament.ch — Leg) onto the same plugin contract, and lands the operational scaffolding the cron + UI need: a structured run log, a single Master Cron entry, web refresh routes, a diagnostics page, the dormant auth backbone, and CSRF on every mutating POST. After Slice 3, *new plugins are one folder + one PluginRegistry line + one row in the diagnostics table* — no controller / no cron / no view changes per plugin.
+
+**What moved.**
+
+| 0.4 | 0.5 |
+|---|---|
+| `controllers/calendar.php` `refreshParliamentChEvents()` + `refreshParliamentChSessions()` | `Seismo\Plugin\ParlCh\ParlChPlugin::fetch()` (`src/Plugin/ParlCh/ParlChPlugin.php`). No SQL. Uses `BaseClient` for HTTP; whitelists `language` against `LANGUAGE_CODES`; drops empty/invalid rows per the data normalization contract. `getMinIntervalSeconds(): 4 * 60 * 60`. |
+| Ad-hoc INSERTs into `calendar_events` from `controllers/calendar.php` | `Seismo\Repository\CalendarEventRepository` (`src/Repository/CalendarEventRepository.php`). `entryTable('calendar_events')` everywhere. Transactional `upsertBatch`. `prune()` is a no-op (Leg unlimited per default policy). `upsertBatch()` / `prune()` throw if `isSatellite()`. |
+| `getCalendarConfig()` / `saveCalendarConfig()` (0.4 `config.php`) | `Seismo\Config\CalendarConfigStore` (`src/Config/CalendarConfigStore.php`) reading/writing `calendar_config.json` next to `bootstrap.php`. **Gitignored**; `calendar_config.example.json` is the committed shape. |
+| `controllers/calendar.php::handleCalendarPage()` | `Seismo\Controller\LegController::show()` + `views/leg.php`. Date-grouped, future-first, status / council / event-type pills. Uses `seismo_format_utc()` for the "Refreshed" line (UTC → Europe/Zurich at the view layer). |
+| `?action=refresh_calendar` POST handler | Two routes: `?action=refresh_parl_ch` (per-plugin force=true) → `LegController::refreshParlCh` → `RefreshAllService::runPlugin('parl_ch', true)`; and `?action=save_leg_parl_ch` → `LegController::saveLegParlCh` (CSRF-checked, validates ranges, normalises language). Legacy `?action=calendar` URL still resolves (alias to `LegController::show`). |
+| `Seismo\Service\PluginRunner` (Slice 2 scaffolding) | **Renamed and generalised** to `Seismo\Service\RefreshAllService` (`src/Service/RefreshAllService.php`). One service for `runAll(force)`, `runPlugin($id, force)`, and `testPlugin($id, peek)`. Dispatches to the right family repo via `match($plugin->getEntryType())`. `boot(\PDO $pdo)` static factory shared by web + CLI. Slice 2's `PluginRunner.php` is deleted. |
+| `controllers/dashboard.php::refreshAllSources()` (mostly) | `RefreshAllService::runAll()`. Slice 3 covers plugin refreshes only — Core RSS / mail / scoring graduate in later slices, then the web "Refresh all" button can replace 0.4's button entirely. |
+| `cron/*.php` per-source CLI scripts (0.4) | **One** `refresh_cron.php` at the project root. CLI-only (refuses non-CLI), satellite no-op, calls `RefreshAllService::boot($pdo)->runAll(false)`. Throttled-skipped plugins go to stdout (cron mail) but *not* to `plugin_run_log`. See "Master Cron" below. |
+| (no equivalent) | `Seismo\Service\Http\BaseClient` + `Response` + `HttpClientException` (`src/Service/Http/`). Shared HTTP wrapper: 30s timeout, custom UA, single retry on 429/503, both cURL and stream backends. ParlChPlugin uses it; future plugins (LexEu, RechtBund, Légifrance) will inherit. |
+| (no equivalent) | `Seismo\Repository\PluginRunLogRepository` + `Migration002PluginRunLog` (schema **v18**). DDL appended to `docs/db-schema.sql`. `recentForPlugin()`, `latestPerPlugin()`, `lastSuccessfulRunAt()`. Missing-table tolerance via `PdoMysqlDiagnostics::isMissingTable()`. |
+| (no equivalent) | `Seismo\Service\PluginRunResult` DTO with `ok` / `skipped` / `error` factories. Persisted to `plugin_run_log` *except* throttle skips. |
+| (no equivalent) | `Seismo\Http\AuthGate` + `Seismo\Controller\AuthController` + `views/login.php`. Dormant unless `SEISMO_ADMIN_PASSWORD_HASH` is defined. `AuthGate::check($action)` runs before dispatch; whitelists `health`, `login`, `logout`, `migrate`, `magnitu_*`. |
+| (no equivalent) | `Seismo\Http\CsrfToken`. Wired into every mutating POST: `toggle_favourite`, `refresh_fedlex`, `save_lex_ch`, `refresh_parl_ch`, `save_leg_parl_ch`, `refresh_all`, `refresh_plugin`, `plugin_test`, `login`, `logout`. Single rotating session-bound token, single-use rotation on success. |
+| `?action=health` (full info, anyone) | `HealthController` degrades when auth is enabled and the visitor is not logged in: `dbStatus: ok|not ok` only. Full diagnostics require login. |
+| (no equivalent) | `Seismo\Controller\DiagnosticsController` + `views/diagnostics.php` at `?action=diagnostics`. One status row per registered plugin (latest run from `plugin_run_log`, throttle window, "next allowed run"), "Refresh all", "Refresh now (this plugin)", "Test fetch (no save)" buttons. Test result peek (first 5 rows) returned as a one-shot session flash. |
+| Nav was non-existent in 0.5 | Top-bar action buttons added on Dashboard / Lex / Leg pages: Lex, Leg, Diag, plus Logout (POST + CSRF) when auth is enabled. |
+
+Plugins registered for Slice 3: `fedlex` (LexFedlex, Slice 2) and `parl_ch` (ParlCh, this slice). Both use a 4-hour throttle.
+
+**New wiring.**
+
+```
+HTTP "Refresh all"          ──┐
+HTTP "Refresh now" / plugin ──┤
+HTTP "Test fetch" / plugin  ──┤
+                              │ all share
+   refresh_cron.php (CLI) ──┤  RefreshAllService::boot($pdo)
+                              │
+                              ▼
+              ┌── runAll(force=false) ── PluginRegistry::all()
+              ├── runPlugin($id, force=true)
+              └── testPlugin($id, peek=5)   ─── plugin->fetch() only
+
+Inside runOne():
+  isSatellite()         → skipped(satellite)              [logged]
+  throttle && !force    → skipped(throttled)              [stdout only]
+  empty($block.enabled) → skipped(disabled)               [logged]
+  fetch() throws        → error(message)                  [logged]
+  success               → ok(count)                       [logged]
+  on success: family repo upsertBatch() (transactional)
+```
+
+Throttle source of truth: `SourceFetcherInterface::getMinIntervalSeconds()` + `PluginRunLogRepository::lastSuccessfulRunAt($id)`. `error` and `skipped` rows are *not* counted as "last run" — a broken upstream gets retried on every cron tick instead of being silenced for the throttle window.
+
+Single-cron migration note: on the host, the existing 0.4 per-source crontab lines should be replaced with one entry, e.g. `*/5 * * * * /usr/bin/php /var/www/seismo/refresh_cron.php`. The mail and scraper crons in 0.4 stay in place until Core RSS / Mail port (later slice).
+
+**Gotchas.**
+
+- **Throttled skips are not in `plugin_run_log`.** A 5-minute master cron with two plugins on a 4h throttle would otherwise write ~576 rows/day of pure noise. The "is throttled?" indicator in diagnostics is computed from `last_ok + min_interval` against `now()`, not by reading skipped rows.
+- **`PluginRunLogRepository::lastSuccessfulRunAt` only counts `status = 'ok'`.** Don't bump the throttle window via fake "ok" writes; the diagnostics page also reads from this column.
+- **`diagnostics` is registered as NOT read-only** so the controller's `unset($_SESSION['plugin_test_result'])` after rendering actually persists. Lex/Leg/Dashboard stay read-only.
+- **Login form's POST handler is overlay-registered** (`index.php` swaps the `login` action to `AuthController::handleLogin` only when `REQUEST_METHOD === POST`). Slightly unusual but keeps the route table flat.
+- **`AuthGate::check` runs before dispatch and after `Router::register` calls.** Whitelisted public actions: `health`, `login`, `logout`, `migrate`, `magnitu_*`. Anything else redirects to `?action=login` when auth is on.
+- **CSRF token rotates on accepted POST.** A user with two forms loaded simultaneously will see "session expired" on the second submit; this is acceptable for a single-user admin app and is the documented behaviour. If we ever want concurrent forms (Slice 6 polish), graduate to per-form tokens.
+- **`refresh_cron.php` refuses non-CLI requests** with HTTP 403. Anyone discovering the file in the URL bar can't trigger an upstream hit.
+- **Satellite mode is a no-op for everything plugin-related.** `refresh_cron.php` exits 0 immediately on satellites; `RefreshAllService::runOne()` records a `skipped` row (one per plugin) so diagnostics doesn't look broken; `LegController::refreshParlCh` and `LexController::refreshFedlex` still POST cleanly but the runner short-circuits.
+- **`PluginRunResult::message` is null on `ok`.** When you want the count, read `$result->count`. The `record()` writer also stores `null` in `error_message` for `ok` rows so the column is meaningful.
+- **`RefreshAllService::resolveConfigBlock()` only knows two `entry_type`s** (`lex_item`, `calendar_event`). Adding a Core family (e.g. `feed_item` from RSS) requires teaching this method *and* `persist()` about the new repo; the contract is local to this one file by design.
+
+**Test URLs.**
+
+- `?action=diagnostics` — lists Fedlex + ParlCh; "never run" until the first cron tick or a manual refresh.
+- `?action=refresh_all` (POST from diagnostics) — populates `plugin_run_log`; flash summary visible.
+- `?action=leg` — date-grouped Parlament CH list; refresh + settings forms work; legacy `?action=calendar` resolves to the same controller.
+- `?action=login` — only useful when `SEISMO_ADMIN_PASSWORD_HASH` is set in `config.local.php`. To generate a hash: `php -r "echo password_hash('yourpass', PASSWORD_DEFAULT) . PHP_EOL;"`.
+- `php refresh_cron.php` (manual SSH or Plesk "run task now") — produces stdout per plugin; rerunning within 4h shows throttle skip lines but no new DB rows for the skipped plugins.
+
+---
+
 ## Slice 2 — Lex / Fedlex reference plugin (`?action=lex`, `?action=refresh_fedlex`, `?action=save_lex_ch`)
 
 **Why.** Establish the Core vs Plugin boundary with a real third-party adapter (Fedlex SPARQL) before Slice 3’s unified refresh service. The Lex page must stay useful on a shared DB populated by 0.4: list all enabled `lex_items` sources with pills, while 0.5 only *writes* Swiss Fedlex rows.

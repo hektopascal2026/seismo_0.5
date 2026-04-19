@@ -7,8 +7,10 @@
  * features.
  *
  * Two concerns that existed in the 0.4 front controller and are preserved here:
- *   1. Read-only actions release the session lock early so PHP's file-based
- *      session handler doesn't serialise concurrent requests.
+ *   1. Most read-only actions release the session lock early so PHP's file-based
+ *      session handler doesn't serialise concurrent requests. Routes that render
+ *      CSRF forms (`index`, `lex`, `leg`, `calendar`) skip early release — see
+ *      {@see READONLY_KEEP_SESSION_FOR_CSRF}.
  *   2. Unknown actions fall back to a configured default rather than 404'ing,
  *      so the app stays usable when the default page isn't ported yet.
  *
@@ -22,6 +24,21 @@ namespace Seismo\Http;
 
 final class Router
 {
+    /**
+     * Read-only routes that render CSRF-protected GET forms. We keep the
+     * session open for the full request so the controller can call
+     * {@see CsrfToken::field()} once and pass HTML into the view without
+     * {@see session_write_close()} + a second {@see session_start()} in the view.
+     *
+     * @var array<string, true>
+     */
+    private const READONLY_KEEP_SESSION_FOR_CSRF = [
+        'index'    => true,
+        'lex'      => true,
+        'leg'      => true,
+        'calendar' => true,
+    ];
+
     /** @var array<string, string> action => "Class::method" */
     private array $routes = [];
 
@@ -82,6 +99,9 @@ final class Router
     private function maybeReleaseSession(string $action): void
     {
         if (!isset($this->readOnly[$action])) {
+            return;
+        }
+        if (isset(self::READONLY_KEEP_SESSION_FOR_CSRF[$action])) {
             return;
         }
         if (session_status() !== PHP_SESSION_ACTIVE) {
