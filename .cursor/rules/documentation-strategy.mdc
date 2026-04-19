@@ -1,0 +1,39 @@
+---
+description: How README, README-REORG, and the about page evolve during the 0.5 consolidation
+alwaysApply: true
+---
+
+# Documentation strategy (0.5 consolidation)
+
+Three documents, three purposes. Do not conflate them.
+
+## `README.md` — the 0.5 codebase README
+
+- **Audience:** a developer opening `seismo_0.5/` for the first time at the **end** of the consolidation.
+- **Content:** final architecture, install/setup, directory map, how to run locally and in prod, where the extension points are.
+- **When finalised:** at the end of consolidation, in a single polish pass.
+- **During consolidation:** keep it short and honest ("0.5 is mid-consolidation, see README-REORG.md for per-slice status"). Do not try to grow it incrementally into the final doc — that invariably means rewriting the same paragraph five times.
+
+## `README-REORG.md` — the migration log
+
+- **Audience:** anyone (including future-me) who knows 0.4 and needs to find where something went in 0.5. Also the source of truth for the eventual 0.4 → 0.5 upgrade notes.
+- **Content:** one section per slice, newest on top. For each slice:
+  - **Why** — what problem in 0.4 this slice addresses.
+  - **What moved** — concrete "0.4 function/file → 0.5 class/file" mappings.
+  - **New wiring** — how the pieces call each other now.
+  - **Gotchas** — anything that bit us on the webspace, anything deliberately deferred.
+- **When updated:** append a new section at the end of every slice, before the slice is called done. No slice ships to the webspace without its reorg entry.
+- **References:** use file paths, not line numbers (line numbers drift).
+
+## `views/about.php` — the in-app product doc
+
+- **Audience:** users / journalists / admins looking at the running site.
+- **Content:** what Seismo does, what the sources are, what Leg / Magnitu / Lex etc. mean.
+- **When finalised:** only **after** the feature set has stopped shifting — i.e. at the end of the consolidation, *after* the code README is polished and all slices are accepted. One pass, user-language, not developer-language.
+- **During consolidation:** only touch for strict factual correctness (e.g. the "Calendar → Leg" rename). No architectural or UX rewrites until the end.
+
+## What this means in practice
+
+- Each slice's commit sequence ends with a `README-REORG.md` append.
+- Do not "preview" 0.5 architecture in `README.md` mid-flight.
+- Do not rewrite the about page per-slice.
