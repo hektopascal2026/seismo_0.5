@@ -72,14 +72,11 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
  - Top-bar "Refresh all" button and `?action=refresh_all` → **Slice 3** (unified refresh pipeline).
  - Navigation drawer with links to other pages → **Slice 6** (admin/settings polish), unless navigability pain surfaces sooner as Slices 2–4 land pages that need to be reachable from the dashboard.
 
-### Slice 1.5 — Dashboard filters (read-only)
+### Slice 1.5 — Dashboard filters (read-only) — **shipped (1.5b)**
 
 - Search box: `EntryRepository::searchTimeline(string $q, int $limit, int $offset)`. Runs `LIKE` across title + description + content for feed_items, subject + body for emails, title + description for lex_items and calendar_events. Bounded + satellite-safe like Slice 1.
-- Newest / Favourites view toggle: second repository method `EntryRepository::getFavouritesTimeline(int $limit, int $offset)` that filters by the **local** `entry_favourites` table (never wrapped in `entryTable()`). Read-only — the star POST stays out of this slice.
-- Per-card star buttons rendered when `$showFavourites = true` in the view. Their form posts to `?action=toggle_favourite`, which still returns a 404/500 in this slice — so the buttons are re-enabled here **only if Slice 3 lands first or Slice 1.5 is paired with the minimum toggle-favourite POST route**. Choose one of:
- - **1.5a:** render stars now, wire the POST in Slice 3. Cleaner split but ships a broken star click.
- - **1.5b:** render stars and ship just `?action=toggle_favourite` (single POST endpoint + repo write) alongside 1.5. Minimal write surface, no broken state.
- Defaults to 1.5b so the dashboard is coherent after each slice.
+- Newest / Favourites view toggle: `EntryRepository::getFavouritesTimeline(int $limit, int $offset)` — **local** `entry_favourites` only (never wrapped in `entryTable()`).
+- **1.5b (chosen):** per-card star buttons + `?action=toggle_favourite` → `EntryFavouriteRepository::toggle()` + `FavouriteController` (POST, redirect back with preserved query). Single-row writes to local `entry_favourites` only.
 - **Definition of done:** `?q=` filters the merged timeline without regressions; `?view=favourites` shows only starred entries; star click toggles favourite state and reloads; no query exceeds 200 rows; no HTML in the repository layer.
 
 ### Slice 2 — Lex as the reference plugin port

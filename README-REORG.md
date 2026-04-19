@@ -79,6 +79,34 @@ Reviewers scanning future slices should reject any commit whose message or reorg
 
 ---
 
+## Slice 1.5 — Search, favourites view, star toggle (`?q=`, `?view=favourites`, `?action=toggle_favourite`)
+
+**Why.** Slice 1 deliberately shipped without search, favourites mode, or working stars so the read path could be reviewed in isolation. This slice restores those dashboard affordances without tag pills (Slice 4) or refresh/nav (Slices 3 / 6). Variant **1.5b**: the POST route ships alongside star buttons so nothing 404s.
+
+**What moved.**
+
+- `EntryRepository::searchTimeline($q, $limit, $offset)` — `LIKE` across feed_items (joined to feeds), resolved email table (column list from `INFORMATION_SCHEMA` per family), lex_items (`title`/`description`), calendar_events (`title`/`description`/`content`). Prepared statements only; same merge/sort/score attach as `getLatestTimeline`.
+- `EntryRepository::getFavouritesTimeline($limit, $offset)` — reads local `entry_favourites` (never `entryTable()`), hydrates rows per family with chunked `IN` queries, caps pair-list at 5000 favourites (newest-starred first via `created_at`), merge by date, slice.
+- `Seismo\Repository\EntryFavouriteRepository` — `toggle()` mirrors 0.4 `toggleEntryFavourite()` (`INSERT IGNORE` / `DELETE`).
+- `Seismo\Controller\FavouriteController::toggle` — POST-only, validates `entry_type` / `entry_id`, redirects with relative `?` + preserved `return_query` (from `DashboardController::buildReturnQuery()`).
+- `DashboardController::show` — branches newest vs favourites vs search; `$showFavourites = true`; builds `return_query` from current `$_GET`.
+- `views/index.php` — GET search form, Newest/Favourites links, session flash for errors, three empty-state messages (default / favourites / search).
+
+**New wiring.**
+
+1. `index.php` registers `toggle_favourite` → `FavouriteController::toggle` (not a read-only route — session stays writable for flash).
+2. `DashboardController` passes `$currentView`, `$emptyTimelineHint`, and keeps `MAX_OFFSET = 0`.
+
+**Gotchas.**
+
+- **Favourites + search:** In this slice, `?view=favourites` ignores `?q=` for the repository call (favourites list is not filtered by search). The search box still appears; clearing search or switching to Newest restores search behaviour. A tighter merge can wait until tag filters (Slice 4) or explicit product spec.
+- **Per-table email search:** Searchable columns are chosen from a fixed allowlist intersected with `INFORMATION_SCHEMA` so `emails` vs `fetched_emails` both work.
+- **Email date-column cache** is now keyed by table name so `resolveEmailDateColumns()` cannot return the wrong column set if multiple shapes were ever probed in one request.
+
+**Test URL.** `https://www.hektopascal.org/seismo/?action=index` — search, toggle favourites view, star a card, confirm redirect and persistence. `?action=toggle_favourite` POST only.
+
+---
+
 ## Decision 2026-04-19 (d) — Shared-host hardening (Slice 0 code + Slice 1/2 rules)
 
 A final review raised four shared-hosting / stateless-LLM-integration concerns. All four accepted; three became rules effective from Slice 1, one required a code change in Slice 0 applied retroactively.

@@ -2,13 +2,8 @@
 /**
  * Dashboard / timeline view.
  *
- * Slice 1 is intentionally stripped down: branding, timeline, and not much
- * else. Search, tag-filter pills, scraper-source pills, Favourites mode, the
- * refresh button, and the navigation drawer return as their own slices so
- * every intermediate commit still renders something reviewable.
- *
- * All user-visible strings use the e() helper for escaping. The sacred
- * dashboard_entry_loop.php partial handles per-card rendering.
+ * Slice 1.5: search (GET), newest/favourites toggle, star buttons, session flash.
+ * Tag-filter pills, refresh, and nav drawer remain future slices.
  */
 
 declare(strict_types=1);
@@ -19,9 +14,29 @@ declare(strict_types=1);
 /** @var bool $showFavourites */
 /** @var string $returnQuery */
 /** @var ?string $dashboardError */
+/** @var string $currentView 'newest'|'favourites' */
+/** @var string $emptyTimelineHint 'default'|'favourites'|'search' */
 
 $basePath = getBasePath();
 $accent   = seismoBrandAccent();
+
+$indexLinkParams = ['action' => 'index'];
+if ($searchQuery !== '') {
+    $indexLinkParams['q'] = $searchQuery;
+}
+$indexNewestQs = http_build_query($indexLinkParams);
+
+$indexFavParams = ['action' => 'index', 'view' => 'favourites'];
+if ($searchQuery !== '') {
+    $indexFavParams['q'] = $searchQuery;
+}
+$indexFavouritesQs = http_build_query($indexFavParams);
+
+$clearSearchParams = ['action' => 'index'];
+if ($currentView === 'favourites') {
+    $clearSearchParams['view'] = 'favourites';
+}
+$clearSearchQs = http_build_query($clearSearchParams);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -53,9 +68,38 @@ $accent   = seismoBrandAccent();
             </div>
         </div>
 
+        <?php if (isset($_SESSION['success'])): ?>
+            <div class="message message-success"><?= e((string)$_SESSION['success']) ?></div>
+            <?php unset($_SESSION['success']); ?>
+        <?php endif; ?>
+
+        <?php if (isset($_SESSION['error'])): ?>
+            <div class="message message-error"><?= e((string)$_SESSION['error']) ?></div>
+            <?php unset($_SESSION['error']); ?>
+        <?php endif; ?>
+
         <?php if ($dashboardError !== null): ?>
             <div class="message message-error"><?= e($dashboardError) ?></div>
         <?php endif; ?>
+
+        <div class="search-section" style="margin-bottom: 1rem;">
+            <form method="get" class="search-form" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                <input type="hidden" name="action" value="index">
+                <?php if ($currentView === 'favourites'): ?>
+                    <input type="hidden" name="view" value="favourites">
+                <?php endif; ?>
+                <input type="search" name="q" placeholder="Search entries…" class="search-input" value="<?= e($searchQuery) ?>" style="min-width: 12rem; flex: 1;">
+                <button type="submit" class="btn btn-primary">Search</button>
+                <?php if ($searchQuery !== ''): ?>
+                    <a href="?<?= e($clearSearchQs) ?>" class="btn btn-secondary">Clear search</a>
+                <?php endif; ?>
+            </form>
+            <div class="view-toggle" style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+                <span style="opacity: 0.85; margin-right: 0.25rem;">View:</span>
+                <a href="?<?= e($indexNewestQs) ?>" class="btn <?= $currentView === 'newest' ? 'btn-primary' : 'btn-secondary' ?>">Newest</a>
+                <a href="?<?= e($indexFavouritesQs) ?>" class="btn <?= $currentView === 'favourites' ? 'btn-primary' : 'btn-secondary' ?>">Favourites</a>
+            </div>
+        </div>
 
         <div class="latest-entries-section">
             <div class="section-title-row">
@@ -66,20 +110,24 @@ $accent   = seismoBrandAccent();
             </div>
 
             <?php if ($dashboardError !== null): ?>
-                <?php // Error banner above already explains the situation — no empty-state. ?>
+                <?php // Error banner above — no empty-state. ?>
             <?php elseif ($allItems !== []): ?>
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
                 <div class="empty-state">
-                    <p>No entries yet. Run <code>?action=migrate</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
+                    <?php if ($emptyTimelineHint === 'favourites'): ?>
+                        <p>No favourites yet. Star entries with the ☆ button on each card, or switch back to <a href="?<?= e($indexNewestQs) ?>">Newest</a>.</p>
+                    <?php elseif ($emptyTimelineHint === 'search'): ?>
+                        <p>No entries match your search. Try different words or <a href="?action=index">clear the query</a>.</p>
+                    <?php else: ?>
+                        <p>No entries yet. Run <code>?action=migrate</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
         </div>
     </div>
 
     <script>
-    // Per-card expand / collapse. Matches the 0.4 behaviour so the partial
-    // stays unchanged.
     (function() {
         function collapse(card, btn) {
             var preview = card.querySelector('.entry-preview');

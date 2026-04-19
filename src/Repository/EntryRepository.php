@@ -23,7 +23,7 @@
  *     so a satellite reads cross-DB from the mothership. Score and favourite
  *     tables stay local (never wrapped).
  *   - Raw output: rows are returned unescaped, as MariaDB stores them.
- *     Escaping is the view's job (e(), or the highlightSearchTerm helper).
+ *     Escaping is the view's job (e(), or seismo_highlight_search_term()).
  *   - Resilient: missing entry tables (e.g. calendar_events before Leg is
  *     migrated, no fetched_emails yet) are treated as "no rows" not fatals.
  *     Fatal-hiding is limited to table-missing errors so real schema bugs
@@ -58,8 +58,12 @@ final class EntryRepository
 
     private ?string $cachedEmailTable = null;
 
-    /** @var array<int, string>|null Cached per-instance — see resolveEmailDateColumns(). */
-    private ?array $cachedEmailDateColumns = null;
+    /**
+     * Per resolved email table — see resolveEmailDateColumns().
+     *
+     * @var array<string, array<int, string>>
+     */
+    private array $cachedEmailDateColumns = [];
 
     public function __construct(private PDO $pdo)
     {
@@ -116,6 +120,123 @@ final class EntryRepository
 
         return $items;
     }
+
+    /**
+     * Full-text-ish search across all entry families (LIKE %term%).
+     * Empty `$q` returns [] — callers should use getLatestTimeline instead.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function searchTimeline(string $q, int $limit, int $offset = 0): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+        $perSource = $limit + $offset;
+        $term = '%' . $q . '%';
+
+        $items = [];
+        foreach ($this->fetchFeedItemsSearch($term, $perSource) as $row) {
+            $items[] = $this->wrapFeedItem($row);
+        }
+        foreach ($this->searchEmailRows($term, $perSource) as $row) {
+            $items[] = $this->wrapEmail($row);
+        }
+        foreach ($this->fetchLexItemsSearch($term, $perSource) as $row) {
+            $items[] = $this->wrapLexItem($row);
+        }
+        foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
+            $items[] = $this->wrapCalendarEvent($row);
+        }
+
+        usort($items, static fn ($a, $b) => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
+        $items = array_slice($items, $offset, $limit);
+
+        $this->attachScores($items);
+        $this->attachFavourites($items);
+
+        return $items;
+    }
+
+    /**
+     * All starred entries, merged and sorted by entry date (newest first).
+     *
+     * Loads up to {@see self::FAVOURITES_MAX_PAIRS} favourite rows from the
+     * local `entry_favourites` table (most recently starred first). If a user
+     * exceeds that cap, older stars are omitted until we add paging — a
+     * deliberate shared-host guard.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getFavouritesTimeline(int $limit, int $offset = 0): array
+    {
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+
+        try {
+            $stmt = $this->pdo->query(
+                'SELECT entry_type, entry_id FROM entry_favourites
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ' . (int)self::FAVOURITES_MAX_PAIRS
+            );
+            $pairs = $stmt->fetchAll();
+        } catch (PDOException $e) {
+            return [];
+        }
+
+        $byType = [
+            'feed_item'        => [],
+            'email'            => [],
+            'lex_item'         => [],
+            'calendar_event'   => [],
+        ];
+        foreach ($pairs as $row) {
+            $t = (string)($row['entry_type'] ?? '');
+            $id = (int)($row['entry_id'] ?? 0);
+            if (!isset($byType[$t]) || $id <= 0) {
+                continue;
+            }
+            $byType[$t][] = $id;
+        }
+        foreach ($byType as $t => $ids) {
+            $byType[$t] = array_values(array_unique($ids));
+        }
+
+        $items = [];
+        foreach ($this->fetchFeedRowsByIds($byType['feed_item']) as $row) {
+            $items[] = $this->wrapFeedItem($row);
+        }
+        foreach ($this->fetchEmailRowsByIds($byType['email']) as $row) {
+            $items[] = $this->wrapEmail($row);
+        }
+        foreach ($this->fetchLexRowsByIds($byType['lex_item']) as $row) {
+            $items[] = $this->wrapLexItem($row);
+        }
+        foreach ($this->fetchCalendarRowsByIds($byType['calendar_event']) as $row) {
+            $items[] = $this->wrapCalendarEvent($row);
+        }
+
+        foreach ($items as &$it) {
+            $it['is_favourite'] = true;
+        }
+        unset($it);
+
+        usort($items, static fn ($a, $b) => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
+        $items = array_slice($items, $offset, $limit);
+
+        $this->attachScores($items);
+
+        return $items;
+    }
+
+    /**
+     * Safety cap on how many (entry_type, entry_id) pairs we hydrate for the
+     * favourites view. Unlikely to bite real users; keeps memory bounded.
+     */
+    private const FAVOURITES_MAX_PAIRS = 5000;
 
     /**
      * Total timeline size approximation (sum of per-family counts).
@@ -314,6 +435,281 @@ final class EntryRepository
     }
 
     // ------------------------------------------------------------------
+    // Search + favourites-by-id helpers (Slice 1.5)
+    // ------------------------------------------------------------------
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchFeedItemsSearch(string $term, int $limit): array
+    {
+        $sql = '
+            SELECT fi.*,
+                   f.title       AS feed_title,
+                   f.category    AS feed_category,
+                   f.source_type AS feed_source_type,
+                   f.url         AS feed_url,
+                   f.title       AS feed_name
+            FROM ' . entryTable('feed_items') . ' fi
+            JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
+            WHERE f.disabled = 0
+              AND fi.hidden = 0
+              AND (
+                    fi.title LIKE ?
+                 OR fi.description LIKE ?
+                 OR fi.content LIKE ?
+              )
+            ORDER BY fi.published_date DESC, fi.cached_at DESC
+            LIMIT ' . (int)$limit;
+        $p = [$term, $term, $term];
+        return $this->selectPreparedOrEmpty($sql, $p);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function searchEmailRows(string $term, int $limit): array
+    {
+        $table = $this->resolveEmailTable();
+        if ($table === null) {
+            return [];
+        }
+        $cols = $this->resolveEmailSearchColumns($table);
+        if ($cols === []) {
+            return [];
+        }
+        $parts = [];
+        $params = [];
+        foreach ($cols as $c) {
+            $parts[] = '`' . str_replace('`', '``', $c) . '` LIKE ?';
+            $params[] = $term;
+        }
+        $where = '(' . implode(' OR ', $parts) . ')';
+        $orderBy = $this->buildEmailOrderByClause($table);
+        $sql = 'SELECT * FROM ' . entryTable($table) . '
+                WHERE ' . $where . '
+                ' . $orderBy . '
+                LIMIT ' . (int)$limit;
+        return $this->selectPreparedOrEmpty($sql, $params);
+    }
+
+    /**
+     * Subset of columns we are willing to search on an email table.
+     *
+     * @var array<int, string>
+     */
+    private const EMAIL_SEARCH_COLUMNS = [
+        'subject', 'text_body', 'html_body', 'from_email', 'from_name',
+        'from_addr', 'body_text', 'body_html',
+    ];
+
+    /** @var array<string, array<int, string>> memo: table name -> columns */
+    private array $emailSearchColumnsCache = [];
+
+    /**
+     * @return array<int, string>
+     */
+    private function resolveEmailSearchColumns(string $table): array
+    {
+        if (isset($this->emailSearchColumnsCache[$table])) {
+            return $this->emailSearchColumnsCache[$table];
+        }
+        $placeholders = implode(', ', array_fill(0, count(self::EMAIL_SEARCH_COLUMNS), '?'));
+        $sql = 'SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = ' . entryDbSchemaExpr() . '
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME IN (' . $placeholders . ')';
+        $params = array_merge([$table], self::EMAIL_SEARCH_COLUMNS);
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            $present = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (PDOException $e) {
+            return $this->emailSearchColumnsCache[$table] = [];
+        }
+        $presentSet = array_flip(array_map('strval', $present));
+        $ordered = [];
+        foreach (self::EMAIL_SEARCH_COLUMNS as $col) {
+            if (isset($presentSet[$col])) {
+                $ordered[] = $col;
+            }
+        }
+        return $this->emailSearchColumnsCache[$table] = $ordered;
+    }
+
+    private function buildEmailOrderByClause(string $table): string
+    {
+        $dateCols = $this->resolveEmailDateColumns($table);
+        if ($dateCols === []) {
+            return 'ORDER BY id DESC';
+        }
+        if (count($dateCols) === 1) {
+            return 'ORDER BY `' . $dateCols[0] . '` DESC';
+        }
+        $coalesce = implode(
+            ', ',
+            array_map(static fn (string $c) => '`' . $c . '`', $dateCols)
+        );
+        return 'ORDER BY COALESCE(' . $coalesce . ') DESC';
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchLexItemsSearch(string $term, int $limit): array
+    {
+        $sql = 'SELECT * FROM ' . entryTable('lex_items') . '
+                WHERE title LIKE ?
+                   OR description LIKE ?
+                ORDER BY document_date DESC, created_at DESC
+                LIMIT ' . (int)$limit;
+        return $this->selectPreparedOrEmpty($sql, [$term, $term]);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchCalendarEventsSearch(string $term, int $limit): array
+    {
+        $sql = 'SELECT * FROM ' . entryTable('calendar_events') . '
+                WHERE title LIKE ?
+                   OR description LIKE ?
+                   OR content LIKE ?
+                ORDER BY event_date DESC
+                LIMIT ' . (int)$limit;
+        return $this->selectPreparedOrEmpty($sql, [$term, $term, $term]);
+    }
+
+    /**
+     * @param array<int, int> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchFeedRowsByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $out = [];
+        foreach ($this->chunkIds($ids, 400) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+            $sql = '
+                SELECT fi.*,
+                       f.title       AS feed_title,
+                       f.category    AS feed_category,
+                       f.source_type AS feed_source_type,
+                       f.url         AS feed_url,
+                       f.title       AS feed_name
+                FROM ' . entryTable('feed_items') . ' fi
+                JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
+                WHERE fi.id IN (' . $ph . ')
+                  AND fi.hidden = 0';
+            foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
+                $out[] = $row;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * @param array<int, int> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchEmailRowsByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $table = $this->resolveEmailTable();
+        if ($table === null) {
+            return [];
+        }
+        $out = [];
+        foreach ($this->chunkIds($ids, 400) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+            $sql = 'SELECT * FROM ' . entryTable($table) . '
+                    WHERE id IN (' . $ph . ')';
+            foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
+                $out[] = $row;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * @param array<int, int> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchLexRowsByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $out = [];
+        foreach ($this->chunkIds($ids, 400) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+            $sql = 'SELECT * FROM ' . entryTable('lex_items') . '
+                    WHERE id IN (' . $ph . ')';
+            foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
+                $out[] = $row;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * @param array<int, int> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchCalendarRowsByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $out = [];
+        foreach ($this->chunkIds($ids, 400) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+            $sql = 'SELECT * FROM ' . entryTable('calendar_events') . '
+                    WHERE id IN (' . $ph . ')';
+            foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
+                $out[] = $row;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * @param array<int, int> $ids
+     * @return array<int, array<int, int>>
+     */
+    private function chunkIds(array $ids, int $chunk): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn ($n) => $n > 0)));
+        if ($ids === []) {
+            return [];
+        }
+        return array_chunk($ids, max(1, $chunk));
+    }
+
+    /**
+     * @param array<int, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    private function selectPreparedOrEmpty(string $sql, array $params): array
+    {
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+        } catch (PDOException $e) {
+            if ($this->isMissingTableError($e)) {
+                return [];
+            }
+            throw $e;
+        }
+        return $stmt->fetchAll();
+    }
+
+    // ------------------------------------------------------------------
     // Score + favourite joins. Both live in local tables (never wrapped).
     // ------------------------------------------------------------------
 
@@ -507,8 +903,8 @@ final class EntryRepository
      */
     private function resolveEmailDateColumns(string $table): array
     {
-        if ($this->cachedEmailDateColumns !== null) {
-            return $this->cachedEmailDateColumns;
+        if (isset($this->cachedEmailDateColumns[$table])) {
+            return $this->cachedEmailDateColumns[$table];
         }
         $placeholders = implode(', ', array_fill(0, count(self::EMAIL_DATE_COLUMNS), '?'));
         $sql = 'SELECT COLUMN_NAME
@@ -527,7 +923,7 @@ final class EntryRepository
             // column doesn't exist we'd previously 500; now we still might
             // if the fallback is wrong. Better than silently dropping all
             // email rows, and the whole path dies in Slice 4 anyway.
-            return $this->cachedEmailDateColumns = self::EMAIL_DATE_COLUMNS;
+            return $this->cachedEmailDateColumns[$table] = self::EMAIL_DATE_COLUMNS;
         }
         $presentSet = array_flip(array_map('strval', $present));
         $ordered = [];
@@ -536,7 +932,7 @@ final class EntryRepository
                 $ordered[] = $col;
             }
         }
-        return $this->cachedEmailDateColumns = $ordered;
+        return $this->cachedEmailDateColumns[$table] = $ordered;
     }
 
     private function clampLimit(int $limit): int

@@ -39,6 +39,11 @@ $router->register(
     \Seismo\Controller\MigrateController::class . '::runWeb',
     true
 );
+$router->register(
+    'toggle_favourite',
+    \Seismo\Controller\FavouriteController::class . '::toggle',
+    false
+);
 $router->setDefault('index');
 
 $action = $_GET['action'] ?? '';

@@ -2,13 +2,8 @@
 /**
  * Dashboard / timeline controller.
  *
- * Slice 1 scope: a read-only, merged newest-first timeline. No tag filters,
- * no search, no favourites view, no refresh button — those return as their
- * own slices land so the diff stays reviewable.
- *
- * All SQL is delegated to EntryRepository. This class is a thin orchestrator:
- * pull the bounded query parameters, call the repo, hand the result to the
- * view, and let the sacred dashboard_entry_loop.php partial render cards.
+ * Slice 1.5 adds read-only search (`?q=`), favourites view (`?view=favourites`),
+ * per-card star buttons, and delegates the POST toggle to FavouriteController.
  */
 
 declare(strict_types=1);
@@ -23,48 +18,67 @@ final class DashboardController
     private const DEFAULT_LIMIT = 30;
 
     /**
-     * Deep-paging guard. EntryRepository's per-source over-fetch produces a
-     * valid merged window at the head but isn't deep-page-safe under heavy
-     * skew (see the paging caveat on EntryRepository::getLatestTimeline).
-     * Slice 1 ships no pagination UI, so we clamp `?offset=N` to 0 rather
-     * than letting scripts/crawlers probe a misleading deep-paging path.
-     * When pagination returns we'll switch to cursor-based paging (per-
-     * family `since_id`), which side-steps the skew problem.
+     * Deep-paging guard — see EntryRepository::getLatestTimeline().
      */
     private const MAX_OFFSET = 0;
 
     public function show(): void
     {
-        $limit  = $this->clampLimit($_GET['limit']  ?? null);
+        $limit  = $this->clampLimit($_GET['limit'] ?? null);
         $offset = $this->clampOffset($_GET['offset'] ?? null);
+
+        $searchQuery = trim((string)($_GET['q'] ?? ''));
+        $currentView = (isset($_GET['view']) && (string)$_GET['view'] === 'favourites')
+            ? 'favourites'
+            : 'newest';
+
+        $dashboardError = null;
+        $allItems        = [];
 
         try {
             $pdo  = getDbConnection();
             $repo = new EntryRepository($pdo);
-            $allItems = $repo->getLatestTimeline($limit, $offset);
+            if ($currentView === 'favourites') {
+                $allItems = $repo->getFavouritesTimeline($limit, $offset);
+            } elseif ($searchQuery !== '') {
+                $allItems = $repo->searchTimeline($searchQuery, $limit, $offset);
+            } else {
+                $allItems = $repo->getLatestTimeline($limit, $offset);
+            }
         } catch (\Throwable $e) {
-            // Surface the failure on-screen rather than a blank 500 page —
-            // the dashboard is where most 0.5 smoke tests will land.
             error_log('Seismo dashboard: ' . $e->getMessage());
-            $allItems = [];
             $dashboardError = 'Database error. Check error_log for details.';
         }
 
-        // View-level helpers (seismo_magnitu_day_heading etc.). Loaded here
-        // so controllers that need them don't also need to know which view
-        // partial they end up rendering.
         require_once SEISMO_ROOT . '/views/helpers.php';
 
-        // Variables consumed by views/index.php and the partial. Kept minimal
-        // for Slice 1 — the partial tolerates missing optional fields via
-        // isset()/empty() checks.
-        $searchQuery       = '';
         $showDaySeparators = true;
-        $showFavourites    = false; // favourites POST route ports in a later slice
-        $returnQuery       = 'action=index';
-        $dashboardError    = $dashboardError ?? null;
+        $showFavourites    = true;
+        $returnQuery       = $this->buildReturnQuery();
+
+        $emptyTimelineHint = 'default';
+        if ($dashboardError === null) {
+            if ($currentView === 'favourites') {
+                $emptyTimelineHint = 'favourites';
+            } elseif ($searchQuery !== '') {
+                $emptyTimelineHint = 'search';
+            }
+        }
 
         require SEISMO_ROOT . '/views/index.php';
+    }
+
+    /**
+     * Preserve dashboard GET state for favourite form round-trips (no leading "?").
+     */
+    private function buildReturnQuery(): string
+    {
+        $p = $_GET;
+        if (!is_array($p)) {
+            $p = [];
+        }
+        $p['action'] = 'index';
+        return http_build_query($p);
     }
 
     private function clampLimit(mixed $raw): int
