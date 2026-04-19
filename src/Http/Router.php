@@ -1,0 +1,92 @@
+<?php
+/**
+ * Minimal action-based router.
+ *
+ * Routes are registered by the single string key Seismo has used since 0.4:
+ * `?action=<name>`. This keeps every existing URL shape valid as we port more
+ * features.
+ *
+ * Two concerns that existed in the 0.4 front controller and are preserved here:
+ *   1. Read-only actions release the session lock early so PHP's file-based
+ *      session handler doesn't serialise concurrent requests.
+ *   2. Unknown actions fall back to a configured default rather than 404'ing,
+ *      so the app stays usable when the default page isn't ported yet.
+ *
+ * This class has no framework-ish ambitions. It's a glorified switch that
+ * knows how to instantiate a controller.
+ */
+
+declare(strict_types=1);
+
+namespace Seismo\Http;
+
+final class Router
+{
+    /** @var array<string, string> action => "Class::method" */
+    private array $routes = [];
+
+    /** @var array<string, bool> action => true if read-only */
+    private array $readOnly = [];
+
+    private string $default = '';
+
+    /**
+     * Register an action. Handler format: "Fully\\Qualified\\Class::method".
+     */
+    public function register(string $action, string $handler, bool $readOnly = false): void
+    {
+        $this->routes[$action] = $handler;
+        if ($readOnly) {
+            $this->readOnly[$action] = true;
+        }
+    }
+
+    public function setDefault(string $action): void
+    {
+        $this->default = $action;
+    }
+
+    public function dispatch(string $action): void
+    {
+        if ($action === '' || !isset($this->routes[$action])) {
+            $action = $this->default;
+        }
+        if ($action === '' || !isset($this->routes[$action])) {
+            http_response_code(404);
+            echo 'Unknown action.';
+            return;
+        }
+
+        $this->maybeReleaseSession($action);
+
+        [$class, $method] = explode('::', $this->routes[$action], 2);
+        /** @var object $controller */
+        $controller = new $class();
+        $controller->{$method}();
+    }
+
+    /**
+     * Release the session write lock for read-only routes while preserving
+     * pending flash messages. Mirrors the pattern from 0.4's index.php.
+     */
+    private function maybeReleaseSession(string $action): void
+    {
+        if (!isset($this->readOnly[$action])) {
+            return;
+        }
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return;
+        }
+
+        $flashSuccess = $_SESSION['success'] ?? null;
+        $flashError   = $_SESSION['error']   ?? null;
+        unset($_SESSION['success'], $_SESSION['error']);
+        session_write_close();
+        if ($flashSuccess !== null) {
+            $_SESSION['success'] = $flashSuccess;
+        }
+        if ($flashError !== null) {
+            $_SESSION['error'] = $flashError;
+        }
+    }
+}
