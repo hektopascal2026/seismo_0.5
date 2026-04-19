@@ -15,43 +15,45 @@ use PDOException;
 
 final class EntryFavouriteRepository
 {
-    private const ALLOWED_TYPES = ['feed_item', 'email', 'lex_item', 'calendar_event'];
+    /** @var list<string> Single source of truth — add new entry families here only. */
+    public const ALLOWED_ENTRY_TYPES = ['feed_item', 'email', 'lex_item', 'calendar_event'];
 
     public function __construct(private PDO $pdo)
     {
     }
 
     /**
-     * Flip favourite state. Returns the new `is_favourite` value (true = now starred).
+     * Flip favourite state atomically: DELETE first; if no row removed, INSERT.
+     * Returns the new starred state (true = now in favourites).
+     *
+     * @throws PDOException On real DB failures (missing table, etc.) — not swallowed.
      */
     public function toggle(string $entryType, int $entryId): bool
     {
-        if (!in_array($entryType, self::ALLOWED_TYPES, true) || $entryId <= 0) {
-            return false;
-        }
-        try {
-            $stmt = $this->pdo->prepare(
-                'SELECT 1 FROM entry_favourites
-                 WHERE entry_type = ? AND entry_id = ? LIMIT 1'
-            );
-            $stmt->execute([$entryType, $entryId]);
-            $exists = (bool)$stmt->fetchColumn();
-        } catch (PDOException $e) {
+        if (!in_array($entryType, self::ALLOWED_ENTRY_TYPES, true) || $entryId <= 0) {
             return false;
         }
 
-        if ($exists) {
+        try {
             $del = $this->pdo->prepare(
                 'DELETE FROM entry_favourites WHERE entry_type = ? AND entry_id = ?'
             );
             $del->execute([$entryType, $entryId]);
-            return false;
-        }
+            if ($del->rowCount() > 0) {
+                return false;
+            }
 
-        $ins = $this->pdo->prepare(
-            'INSERT IGNORE INTO entry_favourites (entry_type, entry_id) VALUES (?, ?)'
-        );
-        $ins->execute([$entryType, $entryId]);
-        return true;
+            $ins = $this->pdo->prepare(
+                'INSERT INTO entry_favourites (entry_type, entry_id) VALUES (?, ?)'
+            );
+            $ins->execute([$entryType, $entryId]);
+            return true;
+        } catch (PDOException $e) {
+            // Concurrent double-star: duplicate key — row already exists, treat as starred.
+            if ((int)($e->errorInfo[1] ?? 0) === 1062) {
+                return true;
+            }
+            throw $e;
+        }
     }
 }

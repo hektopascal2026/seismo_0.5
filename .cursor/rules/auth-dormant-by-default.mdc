@@ -37,6 +37,10 @@ Auth is controlled by a single constant in `config.local.php`:
 
 Everything else (dashboard, settings, refresh, plugin-test, diagnostics) requires login when the switch is on.
 
+## CSRF when auth is on
+
+When `SEISMO_ADMIN_PASSWORD_HASH` is set, the browser holds a logged-in session cookie. Any state-changing POST reachable from a third-party page (favourite toggle, refresh, settings save, …) must include a **session-bound CSRF token** validated before the action runs. When auth is dormant, CSRF is lower priority but the same forms may still ship tokens for consistency. Full contract: Slice 3 in `docs/consolidation-plan.md`.
+
 ## Hard rules
 
 - **Never** require auth to run by default. A fresh checkout + filled-in DB credentials must load the dashboard without a login form. The point of the backbone is that it's switchable, not mandatory.

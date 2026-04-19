@@ -136,7 +136,8 @@ final class EntryRepository
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
         $perSource = $limit + $offset;
-        $term = '%' . $q . '%';
+        // Escape LIKE wildcards in user input so "%" and "_" are literal (MariaDB default escape \).
+        $term = '%' . $this->escapeLikePattern($q) . '%';
 
         $items = [];
         foreach ($this->fetchFeedItemsSearch($term, $perSource) as $row) {
@@ -168,6 +169,10 @@ final class EntryRepository
      * local `entry_favourites` table (most recently starred first). If a user
      * exceeds that cap, older stars are omitted until we add paging — a
      * deliberate shared-host guard.
+     *
+     * `$offset` is wired for API symmetry; {@see DashboardController} clamps
+     * `MAX_OFFSET = 0` until cursor-based paging exists, so deep offsets do
+     * not apply yet.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -275,6 +280,7 @@ final class EntryRepository
             FROM ' . entryTable('feed_items') . ' fi
             JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
             WHERE f.disabled = 0
+              AND fi.hidden = 0
             ORDER BY fi.published_date DESC, fi.cached_at DESC
             LIMIT ' . (int)$limit;
         return $this->selectOrEmpty($sql);
@@ -933,6 +939,15 @@ final class EntryRepository
             }
         }
         return $this->cachedEmailDateColumns[$table] = $ordered;
+    }
+
+    /**
+     * Escape `\`, `%`, and `_` for use inside SQL LIKE patterns (MariaDB
+     * default escape character is backslash).
+     */
+    private function escapeLikePattern(string $q): string
+    {
+        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q);
     }
 
     private function clampLimit(int $limit): int

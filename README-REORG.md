@@ -105,6 +105,8 @@ Reviewers scanning future slices should reject any commit whose message or reorg
 
 **Test URL.** `https://www.hektopascal.org/seismo/?action=index` — search, toggle favourites view, star a card, confirm redirect and persistence. `?action=toggle_favourite` POST only.
 
+**Amendment — Slice 1.5 review fixes (fetch + favourite + plan).** `fetchFeedItems()` gains `fi.hidden = 0` to match search and 0.4. `searchTimeline()` escapes SQL LIKE wildcards in `?q`. `EntryFavouriteRepository::toggle()` is DELETE-then-INSERT (atomic vs SELECT/DELETE race); `ALLOWED_ENTRY_TYPES` is a single public const; duplicate key 1062 treated as starred. `FavouriteController` whitelists `return_query` to `q`, `view`, `limit`, `offset`; POST→GET redirect uses **303**; success flash on star/unstar. `docs/consolidation-plan.md` Slice 3 gains CSRF in DoD; Slice 6 notes optional FULLTEXT for heavy `feed_items` search.
+
 **Amendment — defensive cards (same slice, follow-up).** Thin RSS rows (title-only, or teaser-only) and blank/`#` links are common in real feeds. `views/partials/dashboard_entry_loop.php` now: promotes stripped `description` when stripped `content` is empty, then falls back to title for the preview body; uses `seismo_is_navigable_url()` so titles are not wrapped in `href=""` or `href="#"` (feed/substack already guarded; scraper, Lex, Leg fixed). Lex falls back from `eurlex_url` to `work_uri`. Email shows `(No body text)` when both text and HTML bodies are empty. `docs/consolidation-plan.md` records a future **fetcher output contract** (minimum viable entry at ingest) plus optional per-feed full-text extraction later — not implemented until the Core RSS / `RefreshAllService` port.
 
 ---

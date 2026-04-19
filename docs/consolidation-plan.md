@@ -107,8 +107,9 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - Rebuild `refresh_cron.php` as a thin shell that calls `RefreshAllService`.
 - Add **Leg** (ParlCh plugin) to the shared pipeline so cron and web match.
 - **Auth backbone (dormant by default).** `Seismo\Http\AuthGate`, `AuthController`, login view, `SEISMO_ADMIN_PASSWORD_HASH` switch in `config.local.php.example`. No behaviour change unless the admin opts in. See `auth-dormant-by-default.mdc`.
+- **CSRF for state-changing POSTs.** When auth is enabled, cross-site POST (e.g. to `?action=toggle_favourite`) could flip favourites on the victim's session. Ship **session-bound CSRF tokens** (or one-time form nonces) on all mutating forms that run behind `AuthGate`, starting with favourite toggle and expanding to refresh/settings as those routes port. Tokens are a no-op when auth is dormant (no session secret surface). Coupled to this slice so login is never shipped without CSRF.
 - **Diagnostics surface.** Extend `?action=health` (or new `?action=diagnostics`) with a plugin-status panel: last run per plugin, item count, last error. Adds a "Test" button per plugin that calls `fetch()` without persisting — free given the plugin contract.
-- **Definition of done:** cron and "Refresh all" execute the same steps; Leg is included in both; a failing plugin logs + shows red in diagnostics and the rest of the pipeline keeps running; `SEISMO_ADMIN_PASSWORD_HASH` toggles login on/off; plugin Test button shows first N items of a dry-run fetch.
+- **Definition of done:** cron and "Refresh all" execute the same steps; Leg is included in both; a failing plugin logs + shows red in diagnostics and the rest of the pipeline keeps running; `SEISMO_ADMIN_PASSWORD_HASH` toggles login on/off; plugin Test button shows first N items of a dry-run fetch; **with auth enabled, mutating POSTs require a valid CSRF token**.
 
 ### Slice 4 — Remaining entry sources
 
@@ -137,6 +138,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 ### Slice 6 — Admin / settings polish
 
+- **Dashboard search performance (optional).** `EntryRepository::searchTimeline` uses `LIKE %term%` on `feed_items` (incl. `MEDIUMTEXT content`) — fine at current volume; if the host slows down, add a MySQL **FULLTEXT** index on `(title, description, content)` (and/or switch the feed leg of search to `MATCH … AGAINST`) — evaluate with real corpus sizes first.
 - **Main feed page size (user setting).** Persist a default number of entries for `?action=index` (today `DashboardController` uses hardcoded `DEFAULT_LIMIT = 30`; `EntryRepository::MAX_LIMIT` stays the hard cap at 200). Store in `system_config` after Slice 5a, or interim key in `magnitu_config` if settings land before rename. Settings UI: numeric field + validation; dashboard reads saved default when `?limit=` is absent.
 - Settings tabs split into clean partials (one concern each).
 - Retention UI polish (family toggles, per-family overrides, "last pruned N rows on DATE" readout).

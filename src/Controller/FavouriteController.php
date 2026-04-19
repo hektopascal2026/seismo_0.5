@@ -3,7 +3,7 @@
  * POST-only favourite (star) toggle for dashboard entries.
  *
  * Slice 1.5 — mirrors 0.4's handleToggleFavourite: validates input, toggles
- * the local entry_favourites row, redirects back preserving query string.
+ * the local entry_favourites row, redirects back preserving a whitelisted query.
  */
 
 declare(strict_types=1);
@@ -14,7 +14,14 @@ use Seismo\Repository\EntryFavouriteRepository;
 
 final class FavouriteController
 {
-    private const ALLOWED_TYPES = ['feed_item', 'email', 'lex_item', 'calendar_event'];
+    /**
+     * Params echoed back on redirect after POST. Keep tight — do not replay
+     * arbitrary `parse_str` output (open redirect shape). Extend when tag
+     * filters ship (Slice 4), e.g. `tags_submitted`, `tags`.
+     *
+     * @var list<string>
+     */
+    private const RETURN_QUERY_ALLOW = ['q', 'view', 'limit', 'offset'];
 
     public function toggle(): void
     {
@@ -27,7 +34,7 @@ final class FavouriteController
         $entryId   = (int)($_POST['entry_id'] ?? 0);
         $returnRaw = trim((string)($_POST['return_query'] ?? ''));
 
-        if (!in_array($entryType, self::ALLOWED_TYPES, true) || $entryId <= 0) {
+        if (!in_array($entryType, EntryFavouriteRepository::ALLOWED_ENTRY_TYPES, true) || $entryId <= 0) {
             $_SESSION['error'] = 'Invalid favourite request.';
             $this->redirectFromReturnQuery($returnRaw);
             return;
@@ -36,7 +43,10 @@ final class FavouriteController
         try {
             $pdo  = getDbConnection();
             $repo = new EntryFavouriteRepository($pdo);
-            $repo->toggle($entryType, $entryId);
+            $nowStarred = $repo->toggle($entryType, $entryId);
+            $_SESSION['success'] = $nowStarred
+                ? 'Starred.'
+                : 'Removed from favourites.';
         } catch (\Throwable $e) {
             error_log('Seismo toggle_favourite: ' . $e->getMessage());
             $_SESSION['error'] = 'Could not update favourite. Try again.';
@@ -46,7 +56,7 @@ final class FavouriteController
     }
 
     /**
-     * Parse `return_query` (no leading "?") or fall back to index.
+     * Parse `return_query` (no leading "?") and keep only {@see RETURN_QUERY_ALLOW}.
      */
     private function redirectFromReturnQuery(string $returnRaw): void
     {
@@ -54,19 +64,41 @@ final class FavouriteController
         if ($returnRaw !== '') {
             parse_str(ltrim($returnRaw, '?'), $params);
         }
-        $this->redirectToIndex($params);
+        $this->redirectToIndex($this->sanitizeReturnParams($params));
     }
 
     /**
-     * @param array<string, scalar|array> $params
+     * @param array<string, mixed> $params
+     * @return array<string, scalar>
+     */
+    private function sanitizeReturnParams(array $params): array
+    {
+        $out = [];
+        foreach (self::RETURN_QUERY_ALLOW as $key) {
+            if (!array_key_exists($key, $params)) {
+                continue;
+            }
+            $v = $params[$key];
+            if (is_array($v)) {
+                continue;
+            }
+            if (is_scalar($v)) {
+                $out[$key] = $v;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * @param array<string, scalar> $params
      */
     private function redirectToIndex(array $params): void
     {
         $params['action'] = 'index';
         unset($params['entry_type'], $params['entry_id']);
         $qs = http_build_query($params);
-        // Relative `?…` keeps subfolder installs working (same as 0.4).
-        header('Location: ?' . $qs);
+        // 303 = POST→GET; relative `?…` keeps subfolder installs working (same as 0.4).
+        header('Location: ?' . $qs, true, 303);
         exit;
     }
 }
