@@ -36,6 +36,17 @@ Code is split into **Core** (things we control; stable by nature — RSS parsing
 
 Full rule: `.cursor/rules/core-plugin-architecture.mdc`.
 
+### Fetcher output contract (planned — Slice 3 unified refresh / Core RSS)
+
+RSS and scrapers vary wildly: some publishers ship full `<content:encoded>`, some only a teaser `<description>`, some almost nothing beyond `<title>` and `<link>`. **Views cannot fix bad upstream data at ingest time** — they only make legacy rows tolerable (`views/partials/dashboard_entry_loop.php` defensive link/body fallbacks).
+
+When Core fetchers feed `RefreshAllService`, normalise **before** the repository persists:
+
+1. **No title** → omit the item (do not insert).
+2. **No navigable URL** for feed-like entries (not email) → omit — avoids dead dashboard cards.
+3. **Empty body but non-empty description** → treat description as the body so cards always have expandable text when upstream provided a teaser.
+4. **Optional later (not Slice 2):** per-feed setting *Attempt full-text extraction* — if the feed is title+link only, optionally pass the URL through the existing scraper/readability path to backfill body text. Lives with feed settings + retention, not the Lex plugin port.
+
 ### Guardrails to keep in Cursor rules
 
 1. **Move off global procedural handlers.** `handleLexPage()` → `LexController::show()`; DB reads → `LexRepository`; HTTP → `LexFetcherService`.
@@ -159,6 +170,7 @@ Revisit a templating engine only if real pain emerges (duplicated markup, escapi
 
 ## Open decisions
 
+- **Per-feed full-text backfill** — when to add "readability" / scraper fetch for thin RSS items (see Fetcher output contract). Product/settings decision once Slice 3 feed settings exist.
 - **Email schema unification** — exact column mapping from `emails` → unified structure. Needs a migration draft before Slice 4.
 - **`ai_view`** — keep as admin-only, retire, or fold into Magnitu UI? Decide before Slice 6.
 - **Magnitu Leg API** — when (or whether) to lift the `calendar_event` exclusion. Product decision, not technical.

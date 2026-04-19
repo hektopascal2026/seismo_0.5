@@ -105,6 +105,8 @@ Reviewers scanning future slices should reject any commit whose message or reorg
 
 **Test URL.** `https://www.hektopascal.org/seismo/?action=index` — search, toggle favourites view, star a card, confirm redirect and persistence. `?action=toggle_favourite` POST only.
 
+**Amendment — defensive cards (same slice, follow-up).** Thin RSS rows (title-only, or teaser-only) and blank/`#` links are common in real feeds. `views/partials/dashboard_entry_loop.php` now: promotes stripped `description` when stripped `content` is empty, then falls back to title for the preview body; uses `seismo_is_navigable_url()` so titles are not wrapped in `href=""` or `href="#"` (feed/substack already guarded; scraper, Lex, Leg fixed). Lex falls back from `eurlex_url` to `work_uri`. Email shows `(No body text)` when both text and HTML bodies are empty. `docs/consolidation-plan.md` records a future **fetcher output contract** (minimum viable entry at ingest) plus optional per-feed full-text extraction later — not implemented until the Core RSS / `RefreshAllService` port.
+
 ---
 
 ## Decision 2026-04-19 (d) — Shared-host hardening (Slice 0 code + Slice 1/2 rules)

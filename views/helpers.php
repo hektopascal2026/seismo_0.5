@@ -70,6 +70,20 @@ if (!function_exists('seismo_feed_item_resolved_link')) {
     }
 }
 
+if (!function_exists('seismo_is_navigable_url')) {
+    /**
+     * True when a value is safe to use as an external href without producing a
+     * dead control (empty string, whitespace-only, or "#" reload the page or
+     * jump nowhere). Feed/Lex/Leg rows occasionally store "#" or blank when
+     * upstream metadata is incomplete.
+     */
+    function seismo_is_navigable_url(?string $url): bool
+    {
+        $u = trim((string)$url);
+        return $u !== '' && $u !== '#';
+    }
+}
+
 if (!function_exists('seismo_highlight_search_term')) {
     /**
      * Wrap matches of $searchQuery in a <mark> while escaping everything else.

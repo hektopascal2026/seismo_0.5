@@ -10,6 +10,10 @@
  * achievement this partial defends; every style, class name, and branch here
  * was ground out against real content and should not be "modernised" casually.
  * Changes here must be matched to a consolidation-plan.md slice.
+ *
+ * Defensive rendering (Slice 1.5+): never wrap titles in &lt;a href=""&gt; or
+ * href="#"; promote description→body when stripped content is empty; legacy
+ * rows stay readable until fetchers enforce a normalisation contract (Slice 3+).
  */
 $searchQuery = $searchQuery ?? '';
 if (!isset($showFavourites)) {
@@ -61,8 +65,12 @@ $feedLoopPrevDayKey = null;
                         <?php $item = $itemWrapper['data']; ?>
                         <?php
                             $itemUrl = seismo_feed_item_resolved_link($item);
-                            $fullContent = trim(strip_tags((string) ($item['content'] ?: $item['description'])));
-                            if ($fullContent === '' && $itemUrl !== '' && !empty($item['title'])) {
+                            // Prefer stripped HTML body; then stripped description (teaser); then title
+                            // so "title only" RSS rows still show something in the card body.
+                            $fromContent = trim(strip_tags((string)($item['content'] ?? '')));
+                            $fromDesc = trim(strip_tags((string)($item['description'] ?? '')));
+                            $fullContent = $fromContent !== '' ? $fromContent : $fromDesc;
+                            if ($fullContent === '' && !empty($item['title'])) {
                                 $fullContent = trim((string) $item['title']);
                             }
                             $contentPreview = mb_substr($fullContent, 0, 200);
@@ -82,7 +90,7 @@ $feedLoopPrevDayKey = null;
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
-                                <?php if ($itemUrl !== ''): ?>
+                                <?php if (seismo_is_navigable_url($itemUrl)): ?>
                                     <a href="<?= htmlspecialchars($itemUrl) ?>" target="_blank" rel="noopener">
                                         <?php if (!empty($searchQuery)): ?>
                                             <?= seismo_highlight_search_term($item['title'], $searchQuery) ?>
@@ -107,7 +115,7 @@ $feedLoopPrevDayKey = null;
                                             echo htmlspecialchars($contentPreview);
                                         }
                                     ?>
-                                    <?php if ($itemUrl !== ''): ?>
+                                    <?php if (seismo_is_navigable_url($itemUrl)): ?>
                                         <a href="<?= htmlspecialchars($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link" style="margin-left: 4px;">Read more →</a>
                                     <?php endif; ?>
                                 </div>
@@ -137,7 +145,13 @@ $feedLoopPrevDayKey = null;
                     <?php elseif ($itemWrapper['type'] === 'scraper'): ?>
                         <?php $item = $itemWrapper['data']; ?>
                         <?php
-                            $scraperContent = strip_tags($item['content'] ?? '');
+                            $scraperLink = seismo_feed_item_resolved_link($item);
+                            $rawSc = trim(strip_tags((string)($item['content'] ?? '')));
+                            $rawDesc = trim(strip_tags((string)($item['description'] ?? '')));
+                            $scraperContent = $rawSc !== '' ? $rawSc : $rawDesc;
+                            if ($scraperContent === '' && !empty($item['title'])) {
+                                $scraperContent = trim((string)$item['title']);
+                            }
                             $scraperPreview = mb_substr($scraperContent, 0, 200);
                             if (mb_strlen($scraperContent) > 200) $scraperPreview .= '...';
                             $scraperHasMore = mb_strlen($scraperContent) > 200;
@@ -150,14 +164,20 @@ $feedLoopPrevDayKey = null;
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
-                                <a href="<?= htmlspecialchars($item['link'] ?? '#') ?>" target="_blank" rel="noopener">
-                                    <?= htmlspecialchars($item['title']) ?>
-                                </a>
+                                <?php if (seismo_is_navigable_url($scraperLink)): ?>
+                                    <a href="<?= htmlspecialchars($scraperLink) ?>" target="_blank" rel="noopener">
+                                        <?= htmlspecialchars($item['title'] ?? '') ?>
+                                    </a>
+                                <?php else: ?>
+                                    <?= htmlspecialchars($item['title'] ?? '') ?>
+                                <?php endif; ?>
                             </h3>
                             <?php if (!empty($scraperContent)): ?>
                                 <div class="entry-content entry-preview">
                                     <?= htmlspecialchars($scraperPreview) ?>
-                                    <a href="<?= htmlspecialchars($item['link'] ?? '#') ?>" target="_blank" rel="noopener" class="entry-link" style="margin-left: 4px;">Open page &rarr;</a>
+                                    <?php if (seismo_is_navigable_url($scraperLink)): ?>
+                                    <a href="<?= htmlspecialchars($scraperLink) ?>" target="_blank" rel="noopener" class="entry-link" style="margin-left: 4px;">Open page &rarr;</a>
+                                    <?php endif; ?>
                                 </div>
                                 <div class="entry-full-content" style="display:none"><?= htmlspecialchars($scraperContent) ?></div>
                             <?php endif; ?>
@@ -212,7 +232,11 @@ $feedLoopPrevDayKey = null;
                                 $lexSourceLabel = 'EU';
                             }
                             $lexDocType = $lexItem['document_type'] ?? 'Legislation';
-                            $lexUrl = $lexItem['eurlex_url'] ?? '#';
+                            $lexUrl = trim((string)($lexItem['eurlex_url'] ?? ''));
+                            if ($lexUrl === '') {
+                                $lexUrl = trim((string)($lexItem['work_uri'] ?? ''));
+                            }
+                            $lexHasUrl = seismo_is_navigable_url($lexUrl);
                             $lexDate = $lexItem['document_date'] ? date('d.m.Y', strtotime($lexItem['document_date'])) : '';
                             $isJus = in_array($lexSource, ['ch_bger', 'ch_bge', 'ch_bvger']);
                             
@@ -257,13 +281,21 @@ $feedLoopPrevDayKey = null;
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
-                                <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener">
+                                <?php if ($lexHasUrl): ?>
+                                    <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener">
+                                        <?php if (!empty($searchQuery)): ?>
+                                            <?= seismo_highlight_search_term($lexItem['title'], $searchQuery) ?>
+                                        <?php else: ?>
+                                            <?= htmlspecialchars($lexItem['title']) ?>
+                                        <?php endif; ?>
+                                    </a>
+                                <?php else: ?>
                                     <?php if (!empty($searchQuery)): ?>
                                         <?= seismo_highlight_search_term($lexItem['title'], $searchQuery) ?>
                                     <?php else: ?>
                                         <?= htmlspecialchars($lexItem['title']) ?>
                                     <?php endif; ?>
-                                </a>
+                                <?php endif; ?>
                             </h3>
                             <?php if (!empty($lexDesc)): ?>
                                 <div class="entry-content entry-preview"><?= nl2br(htmlspecialchars($lexPreview)) ?></div>
@@ -278,7 +310,9 @@ $feedLoopPrevDayKey = null;
                                     <?php endif; ?>
                                     <?php if ($lexSource !== 'parl_mm'): ?>
                                         <span style="font-family: monospace;<?= $isJus ? ' font-size: 12px; font-weight: 600;' : '' ?>"><?= htmlspecialchars($lexCelexDisplay) ?></span>
+                                        <?php if ($lexHasUrl): ?>
                                         <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= $lexLinkLabel ?></a>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 </div>
                                 <div class="entry-meta-right">
@@ -301,7 +335,8 @@ $feedLoopPrevDayKey = null;
                         <?php
                             $calTypeLabel = seismo_calendar_event_type_label($calEvent['event_type'] ?? '');
                             $calCouncil = seismo_council_label($calEvent['council'] ?? '');
-                            $calUrl = $calEvent['url'] ?? '#';
+                            $calUrl = trim((string)($calEvent['url'] ?? ''));
+                            $calHasUrl = seismo_is_navigable_url($calUrl);
                             $calEventDate = $calEvent['event_date'] ?? null;
                             $calDaysUntil = $calEventDate ? (int)((strtotime($calEventDate) - strtotime('today')) / 86400) : null;
                             $calDateLabel = '';
@@ -328,9 +363,13 @@ $feedLoopPrevDayKey = null;
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
-                                <a href="<?= htmlspecialchars($calUrl) ?>" target="_blank" rel="noopener">
+                                <?php if ($calHasUrl): ?>
+                                    <a href="<?= htmlspecialchars($calUrl) ?>" target="_blank" rel="noopener">
+                                        <?= htmlspecialchars($calEvent['title']) ?>
+                                    </a>
+                                <?php else: ?>
                                     <?= htmlspecialchars($calEvent['title']) ?>
-                                </a>
+                                <?php endif; ?>
                             </h3>
                             <?php if ($calDesc): ?>
                                 <div class="entry-content entry-preview"><?= htmlspecialchars($calPreview) ?></div>
@@ -341,7 +380,9 @@ $feedLoopPrevDayKey = null;
                                     <?php if (!empty($calMeta['business_number'])): ?>
                                         <span style="font-family: monospace;"><?= htmlspecialchars($calMeta['business_number']) ?></span>
                                     <?php endif; ?>
+                                    <?php if ($calHasUrl): ?>
                                     <a href="<?= htmlspecialchars($calUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch &rarr;</a>
+                                    <?php endif; ?>
                                     <?php if ($calHasMore): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                     <?php endif; ?>
@@ -379,9 +420,15 @@ $feedLoopPrevDayKey = null;
                                 $body = strip_tags((string)($email['html_body'] ?? ''));
                             }
                             $body = trim(preg_replace('/\s+/', ' ', $body ?? ''));
-                            $bodyPreview = mb_substr($body, 0, 200);
-                            if (mb_strlen($body) > 200) $bodyPreview .= '...';
-                            $hasMore = mb_strlen($body) > 200;
+                            if ($body === '') {
+                                $bodyPreview = '';
+                            } else {
+                                $bodyPreview = mb_substr($body, 0, 200);
+                                if (mb_strlen($body) > 200) {
+                                    $bodyPreview .= '...';
+                                }
+                            }
+                            $hasMore = $body !== '' && mb_strlen($body) > 200;
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
@@ -401,7 +448,9 @@ $feedLoopPrevDayKey = null;
                             </h3>
                             <div class="entry-content entry-preview">
                                 <?php 
-                                    if (!empty($searchQuery)) {
+                                    if ($bodyPreview === '' && $body === '') {
+                                        echo '<span class="entry-muted">(No body text)</span>';
+                                    } elseif (!empty($searchQuery)) {
                                         echo seismo_highlight_search_term($bodyPreview, $searchQuery);
                                     } else {
                                         echo htmlspecialchars($bodyPreview);

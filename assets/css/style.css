@@ -408,6 +408,11 @@ h3 {
     font-size: 12px;                /* small */
 }
 
+.entry-muted {
+    opacity: 0.75;
+    font-style: italic;
+}
+
 .feed-description {
     color: #000000;
     margin-bottom: 8px;
