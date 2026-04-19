@@ -1,0 +1,36 @@
+---
+description: Every 0.5 slice is smoke-tested on the live webspace alongside running 0.4
+alwaysApply: true
+---
+
+# Webspace testing (Seismo 0.5)
+
+The 0.5 consolidation is **validated on the user's actual webspace**, not only locally. Each slice ends with an upload + live smoke test before the next slice starts.
+
+## Hard rules
+
+- **0.4 keeps running.** Deploy 0.5 to a **sibling directory** on the same host (e.g. `/seismo_0.5/` next to `/seismo/`). Never overwrite 0.4 until the full consolidation is accepted.
+- **No destructive DB operations** in any slice that ships to the shared host, unless the user has explicitly confirmed a backup or a dedicated test DB. Read-only slices may point at the existing 0.4 DB; schema-changing slices MUST use a fresh DB or an explicit, reversible migration.
+- **`config.local.php` is created on the server**, never committed, never uploaded with real credentials from the dev machine. Ship the `.example` file; the user (or wizard) fills it in on the host.
+- **No FTP automation by the agent.** The agent prepares a concrete, copy-pasteable upload list per slice and the user performs the upload. Never assume a deploy path that hasn't been confirmed.
+
+## What every slice must produce
+
+1. A **one-line test URL** the user can open (e.g. `https://<host>/seismo_0.5/?action=health`).
+2. A **checklist of expected output** for that URL (dbStatus ok, schema version, mode, etc.).
+3. An **upload list** showing exactly which files/folders to transfer, and which to skip (`.git`, `.cursor`, `docs/`, local-only configs).
+4. A **rollback note**: what the user does if the slice misbehaves (usually "delete `/seismo_0.5/`; 0.4 is untouched").
+
+## Portability bugs found on the webspace
+
+When something breaks on the host but works locally (path, header, PHP extension, mod_rewrite, session dir, …):
+
+1. Fix it in 0.5 directly (don't re-exile it to 0.4).
+2. **Append** the finding to `docs/setup-wizard-notes.md` so the future first-run wizard catches it.
+3. If it affects 0.4 too, mirror the fix there with a short commit; don't leave the user on a broken mothership while 0.5 matures.
+
+## Slice → URL map (updated as we go)
+
+- **Slice 0 (skeleton):** `?action=health` — PHP/DB reachable, schema version reported, mothership/satellite mode detected.
+- **Slice 1 (read-only dashboard):** `?action=index` — renders existing 0.4 entries via the new `EntryRepository` using `dashboard_entry_loop.php`.
+- **Slice 2+ …** add here.
