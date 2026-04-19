@@ -9,6 +9,34 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Correction 2026-04-19 — Slice 3 logout CSRF + top-bar logout button
+
+**Why this entry exists.** A post-Slice-3 review found two gaps between the Slice 3 reorg entry below and the shipped code. Both were minor, neither had made it to the webspace as of this correction — filing here so the failure mode is visible rather than quietly patched.
+
+**What was wrong.**
+
+1. **`?action=logout` accepted GET and bypassed CSRF.** `AuthController::logout()` only enforced the CSRF check on `POST` — any `GET` (including a cross-origin `<img src=".../index.php?action=logout">`) would silently drop the session. Logout is a state-changing operation and belongs under the same "all mutating POSTs require CSRF" contract the slice committed to.
+2. **Logout button was only on the dashboard top-bar.** The Slice 3 entry below says "Top-bar action buttons added on Dashboard / Lex / Leg pages: Lex, Leg, Diag, plus Logout (POST + CSRF) when auth is enabled." In reality only `views/index.php` rendered the conditional logout form. Lex / Leg / Diagnostics showed no way to log out without retyping a URL.
+
+**What moved.**
+
+- `Seismo\Controller\AuthController::logout()` now rejects any non-`POST` method and redirects home, *then* requires `CsrfToken::verifyRequest()`. Short comment in the controller explains why (third-party image/link GETs never carry the token).
+- `views/lex.php`, `views/leg.php`, `views/diagnostics.php` gain the same conditional logout form as `views/index.php`: shown only when `AuthGate::isEnabled() && AuthGate::isLoggedIn()`, POSTs to `?action=logout` with `$csrfField` (Lex/Leg — already passed by their controllers) or `CsrfToken::field()` direct (Diagnostics — already imports `CsrfToken`).
+- `views/diagnostics.php` also gains the missing **Lex** and **Leg** top-bar links so its nav shape matches the other pages.
+
+**Gotchas.**
+
+- **CSRF-token-after-logout quirk.** `AuthGate::logout()` calls `session_regenerate_id(true)` (it rotates the session) and then `redirectToLogin()`. The next request starts a fresh session; the old token is gone. This is intended — once you're logged out, there's nothing to protect.
+- **Dormant auth still hides the button.** With `SEISMO_ADMIN_PASSWORD_HASH` unset, `AuthGate::isEnabled()` is `false` and the logout form renders nowhere. No behaviour change for the default single-user workflow.
+- **No DB / schema change.** This is a controller + views fix only; `plugin_run_log`, migrations, CSRF token plumbing, and the rest of Slice 3's surface are untouched.
+
+**Test URLs.**
+
+- When auth is **dormant** (`SEISMO_ADMIN_PASSWORD_HASH` unset): `?action=index`, `?action=lex`, `?action=leg`, `?action=diagnostics` all render without a Logout button. `GET ?action=logout` redirects home without side effects.
+- When auth is **enforced**: log in, then confirm each of those four pages shows the Logout button in its top-bar, and that clicking it ends the session and lands on the login form. Manually visiting `GET ?action=logout` (URL bar) should *not* log you out — it should bounce you back to the dashboard.
+
+---
+
 ## Slice 3 — Unified refresh pipeline, master cron, auth backbone, diagnostics (`?action=diagnostics`, `?action=refresh_all`, `?action=refresh_plugin`, `?action=plugin_test`, `?action=leg`, `?action=login`, `?action=logout`, `refresh_cron.php`)
 
 **Why.** Slice 2 shipped a Fedlex-only `PluginRunner`. Slice 3 generalises it into the runner the rest of the consolidation is built on, ports the remaining "scrapes a 3rd-party API" surface (Parlament.ch — Leg) onto the same plugin contract, and lands the operational scaffolding the cron + UI need: a structured run log, a single Master Cron entry, web refresh routes, a diagnostics page, the dormant auth backbone, and CSRF on every mutating POST. After Slice 3, *new plugins are one folder + one PluginRegistry line + one row in the diagnostics table* — no controller / no cron / no view changes per plugin.

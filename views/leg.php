@@ -19,6 +19,8 @@
 
 declare(strict_types=1);
 
+use Seismo\Http\AuthGate;
+
 if (!function_exists('seismo_format_utc')) {
     require_once __DIR__ . '/helpers.php';
 }
@@ -56,6 +58,12 @@ $todayLocal = (new DateTimeImmutable('now', new DateTimeZone('Europe/Zurich')))-
                 <a href="<?= e($basePath) ?>/index.php?action=lex" class="top-bar-btn" title="Lex">Lex</a>
                 <a href="<?= e($basePath) ?>/index.php?action=diagnostics" class="top-bar-btn" title="Diagnostics">Diag</a>
                 <a href="<?= e($basePath) ?>/index.php?action=index" class="top-bar-btn" title="Back to timeline">←</a>
+                <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" style="display:inline; margin:0;">
+                        <?= $csrfField ?>
+                        <button type="submit" class="top-bar-btn" title="Sign out">Logout</button>
+                    </form>
+                <?php endif; ?>
             </div>
         </div>
 

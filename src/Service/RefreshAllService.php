@@ -132,9 +132,9 @@ final class RefreshAllService
 
         if (!$force && $this->isThrottled($plugin)) {
             $msg = 'Throttled — last successful run is fresher than ' . $plugin->getMinIntervalSeconds() . 's.';
-            if (PHP_SAPI === 'cli') {
-                fwrite(STDOUT, '[seismo] plugin ' . $id . ' skipped: ' . $msg . "\n");
-            }
+            // Throttle skips are not persisted to plugin_run_log. Stdout for CLI is
+            // refresh_cron.php's responsibility (one line per plugin) — do not
+            // duplicate here or cron mail shows two lines per throttled plugin.
 
             return PluginRunResult::skipped($msg);
         }

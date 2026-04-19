@@ -207,6 +207,23 @@ This replaces the scattered 0.4 pattern (`consecutive_failures` in `feeds`, `lex
 
 Non-plugin errors (PHP fatals, unhandled exceptions) stay in `error_log()`. We don't build a parallel `system_logs` table for those; PHP's native log is fine.
 
+## Master Cron + per-plugin throttling
+
+Shared-host admins should configure **one** cron entry — `refresh_cron.php` — typically every 5 minutes. The script delegates to `RefreshAllService::runAll(force: false)`. Each plugin opts in to a throttle via `SourceFetcherInterface::getMinIntervalSeconds()`; the runner skips a plugin when its last `ok` row in `plugin_run_log` is fresher than that interval.
+
+Hard rules:
+
+- **`getMinIntervalSeconds()` is the only throttle source of truth.** Hardcoded per plugin in v0.5 (Fedlex 4h, ParlCh 4h). No Settings UI for tuning until usage shows we need one.
+- **Throttle skips are NOT persisted to `plugin_run_log`.** A 5-minute master cron with N plugins on a 4h throttle would otherwise write `~288·N` rows/day of pure noise. The runner emits `[seismo] plugin <id> skipped: throttled — last successful run is fresher than <N>s.` to stdout (cron mail) instead. Diagnostics computes "next allowed run" from `last_ok + min_interval` against `now()`.
+- **Other skip reasons ARE persisted** (satellite mode, plugin disabled in config) so the diagnostics page reflects them.
+- **Web routes always pass `force=true`.** `?action=refresh_all` (master) and `?action=refresh_plugin&plugin_id=…` (single-plugin) bypass the throttle because the human is more important than the rate-limit cost. CLI cron always passes `force=false`.
+- **`lastSuccessfulRunAt` only counts `status='ok'`.** Don't use `error` rows to extend the throttle window — a broken upstream gets retried on every cron tick instead of being silenced. Don't write fake `ok` rows to silence a noisy plugin; pause it via `enabled = false` in its config block instead.
+- **CLI-only.** `refresh_cron.php` MUST refuse non-CLI requests (HTTP 403). A browser-discoverable cron URL is a DoS / rate-limit-cost vector.
+- **Satellite is a no-op.** `refresh_cron.php` exits 0 immediately when `isSatellite()` is true; the runner also short-circuits per plugin. Satellites read entries cross-DB from the mothership; they have no upstreams.
+- **`testPlugin($id, $peek)`** calls `fetch()` without persisting. Used by the Diagnostics "Test fetch (no save)" button and never writes a `plugin_run_log` row. Free feature given the no-SQL plugin contract.
+
+When adding a plugin: pick a sensible throttle (most APIs are happy with 4–24h refresh), document it in the plugin's class docblock, and confirm it shows up in `?action=diagnostics` after the first cron tick.
+
 ## When is something Core vs Plugin?
 
 Rule of thumb: **if the upstream is owned by a third party and has broken on us even once, it's a Plugin.** RSS is borderline (upstream feeds break) but we're the parser — it's Core. SPARQL endpoints for EU Lex change quarterly — that's a Plugin.
