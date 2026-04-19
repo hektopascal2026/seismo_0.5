@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Seismo\Controller;
 
 use Seismo\Http\CsrfToken;
+use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\RetentionService;
 
@@ -16,10 +17,27 @@ final class SettingsController
     /** Persisted default timeline page size when `?limit=` is absent. */
     public const KEY_DASHBOARD_LIMIT = 'ui:dashboard_limit';
 
+    /**
+     * `system_config` keys rendered on the Magnitu tab. Kept here (not in the
+     * partial) so the controller stays the single place that decides which
+     * columns the view needs — the view is a dumb renderer.
+     */
+    private const MAGNITU_CONFIG_KEYS = [
+        'api_key',
+        'alert_threshold',
+        'sort_by_relevance',
+        'recipe_version',
+        'last_sync_at',
+        'model_name',
+        'model_version',
+        'model_description',
+        'model_trained_at',
+    ];
+
     public function show(): void
     {
         $tab = (string)($_GET['tab'] ?? 'general');
-        if (!in_array($tab, ['general', 'retention'], true)) {
+        if (!in_array($tab, ['general', 'magnitu', 'retention'], true)) {
             $tab = 'general';
         }
 
@@ -40,6 +58,12 @@ final class SettingsController
         $defaults  = RetentionService::DEFAULT_POLICIES;
         $satellite = isSatellite();
 
+        // Magnitu tab variables — default to empty so the view can always
+        // reference them unconditionally when $tab === 'magnitu'.
+        $magnituConfig     = array_fill_keys(self::MAGNITU_CONFIG_KEYS, null);
+        $magnituScoreStats = ['total' => 0, 'magnitu' => 0, 'recipe' => 0];
+        $seismoApiUrl      = '';
+
         if ($tab === 'retention') {
             try {
                 $service = RetentionService::boot($pdo);
@@ -47,6 +71,19 @@ final class SettingsController
             } catch (\Throwable $e) {
                 error_log('Seismo settings retention: ' . $e->getMessage());
                 $pageError = 'Could not load retention state. Check error_log for details.';
+            }
+        }
+
+        if ($tab === 'magnitu') {
+            try {
+                foreach (self::MAGNITU_CONFIG_KEYS as $key) {
+                    $magnituConfig[$key] = $config->get($key);
+                }
+                $magnituScoreStats = (new EntryScoreRepository($pdo))->getScoreCounts();
+                $seismoApiUrl      = self::deriveSeismoApiUrl($basePath);
+            } catch (\Throwable $e) {
+                error_log('Seismo settings magnitu: ' . $e->getMessage());
+                $pageError = 'Could not load Magnitu state. Check error_log for details.';
             }
         }
 
@@ -96,5 +133,33 @@ final class SettingsController
     {
         header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
         exit;
+    }
+
+    /**
+     * Build the full `scheme://host/basepath/index.php` URL an admin pastes
+     * into Magnitu's `magnitu_config.json`. Mirrors the 0.4 derivation in
+     * `views/settings.php` (the Magnitu tab). Reads only `$_SERVER` keys —
+     * no constants, no config rows — so it works identically whether the
+     * instance lives at `/` or at `/seismo/` or behind a reverse proxy.
+     *
+     * HTTPS detection falls through:
+     *   1. `HTTPS` SAPI var (Apache mod_ssl, most direct deployments).
+     *   2. `HTTP_X_FORWARDED_PROTO = https` (shared hosts with a TLS
+     *      terminator in front of PHP — what hektopascal.org uses).
+     *   3. Default `http` — matches 0.4's fallback behaviour.
+     */
+    private static function deriveSeismoApiUrl(string $basePath): string
+    {
+        $scheme = 'http';
+        $httpsFlag = (string)($_SERVER['HTTPS'] ?? '');
+        if ($httpsFlag !== '' && strtolower($httpsFlag) !== 'off') {
+            $scheme = 'https';
+        } elseif (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') {
+            $scheme = 'https';
+        }
+
+        $host = (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost');
+
+        return $scheme . '://' . $host . $basePath . '/index.php';
     }
 }

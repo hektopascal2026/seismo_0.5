@@ -9,6 +9,54 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 7 — Magnitu settings tab (admin UI for the Magnitu contract)
+
+**Why.** Slice 5 ported the Bearer-authenticated Magnitu HTTP surface (`MagnituController` + `BearerAuth`), but the 0.4 **Settings → Magnitu** admin tab never came along. A fresh 0.5 install had no `api_key` in `system_config`, so `BearerAuth::guardMagnitu()` rejected every Magnitu request with 401 and there was no URL-only way for an admin to provision or rotate the key. Slice 7 closes the gap by porting the 0.4 tab wholesale.
+
+**What moved.**
+
+| Area | 0.5 |
+|---|---|
+| Admin controller | `Seismo\Controller\MagnituAdminController` (**new**) — session-auth + CSRF, explicitly disjoint from `MagnituController` (Bearer-only). Three POST handlers: `saveConfig`, `regenerateKey`, `clearScores`. Nothing here ever touches `BearerAuth`; nothing in `MagnituController` ever touches `CsrfToken` or `$_SESSION`. |
+| View | `views/partials/settings_magnitu.php` (**new**) — API key row (click-to-copy + Regenerate), Seismo API URL row (click-to-copy — what the admin pastes into Magnitu's `magnitu_config.json` as `seismo_url`), score-counts 3-tile panel + last-sync / recipe-version line + optional "Connected model" block when `model_meta` has been pushed, scoring preferences form (alert threshold + sort-by-relevance checkbox), and the "Danger zone" clear-all-scores form. Matches the 0.4 tab section-for-section. |
+| Settings controller | `SettingsController::show()` accepts `tab=magnitu`. Populates a nine-key slice of `system_config` (`api_key`, `alert_threshold`, `sort_by_relevance`, `recipe_version`, `last_sync_at`, `model_name`, `model_version`, `model_description`, `model_trained_at`) into `$magnituConfig`, fetches `$magnituScoreStats` from `EntryScoreRepository::getScoreCounts()`, and derives `$seismoApiUrl` via a new private `deriveSeismoApiUrl()` helper that reads `$_SERVER` only (honouring `HTTP_X_FORWARDED_PROTO` so shared hosts like hektopascal produce the correct `https://` URL). |
+| Settings view | `views/settings.php` gains a **Magnitu** tab link between General and Retention; tab dispatch `elseif ($tab === 'magnitu')` requires the new partial. No structural change to General or Retention. |
+| Routes | `index.php` registers three new POST routes with `readOnly=false`: `settings_save_magnitu`, `settings_regenerate_magnitu_key`, `settings_clear_magnitu_scores`. GET `?action=settings&tab=magnitu` is served by the existing `settings` route, which is already in `Router::READONLY_KEEP_SESSION_FOR_CSRF` from Slice 6, so the CSRF form renders correctly without a second `session_start()`. |
+| Rule sync | `.cursor/rules/magnitu-integration.mdc` updated: Key Tables entry for `system_config` now names Slice 7 / `MagnituAdminController`; the "has not been ported yet" banner is replaced with the shipped-slice chronology; `model_meta` config keys (`model_name`, `model_description`, `model_version`, `model_trained_at`) added to the documented keys list. |
+
+**New wiring.**
+
+```
+?action=settings&tab=magnitu  → SettingsController::show()
+                                 → SystemConfigRepository (9 keys)
+                                 → EntryScoreRepository::getScoreCounts()
+                                 → derive seismoApiUrl from $_SERVER
+                                 → views/partials/settings_magnitu.php
+
+POST ?action=settings_save_magnitu             → MagnituAdminController::saveConfig
+POST ?action=settings_regenerate_magnitu_key   → MagnituAdminController::regenerateKey
+POST ?action=settings_clear_magnitu_scores     → MagnituAdminController::clearScores
+
+all three redirect 303 → ?action=settings&tab=magnitu (flash via $_SESSION)
+```
+
+**Gotchas.**
+
+- **`alert_threshold` and `sort_by_relevance` are written but not yet consumed.** The 0.5 dashboard and calendar don't read either value yet — that wiring is a separate slice. The form has an inline note so saving them isn't misread as "the timeline will now reorder". Both keys need to be writable now so they're ready when the consumers are wired; skipping the form would force another `system_config` insert path in a later slice.
+- **Regenerate is a hard rotation.** The old key stops working immediately (single-row upsert in `system_config.api_key`). Magnitu will start returning 401 until the admin pastes the new key into `magnitu_config.json` and restarts `sync.py`.
+- **Clear all scores does not clear labels.** Deletes `entry_scores`, resets `recipe_json` / `recipe_version` / `last_sync_at`. `magnitu_labels` is training data and is preserved — that table is never auto-deleted anywhere in 0.5.
+- **API key stored in plaintext.** Matches 0.4 and what `BearerAuth::verifyMagnituKey` expects (`hash_equals` against the raw value). Hashing at rest would require a matching change in `BearerAuth`; it's a separate slice, not smuggled in here.
+- **Satellite mode is fine.** `system_config` and `entry_scores` are always local, so key rotation, preference save, and Clear All Scores all work on a satellite without touching the mothership.
+
+**Test URLs.**
+
+- `?action=settings&tab=magnitu` — renders the tab; confirm the score counts match `SELECT COUNT(*) FROM entry_scores ...`.
+- Click **Regenerate** → key flips in the text input; flash confirms; `?action=magnitu_status&api_key=<new>` returns 200, `&api_key=<old>` returns 401.
+- Save preferences (`alert_threshold=0.8`, check `sort_by_relevance`) → reload the tab → values persist → `?action=magnitu_status` shows the new `alert_threshold` in its JSON body.
+- **Danger zone** with scores present → confirm → flash shows deleted row count → score tiles go to 0 → `?action=magnitu_status` shows all three score counts as 0.
+
+---
+
 ## Slice 6 — Admin / settings polish
 
 **Why.** Slice 5a left retention on a standalone page and deferred a unified settings shell, navigation across feature pages, and small UX polish called out in `docs/consolidation-plan.md`. Slice 6 folds retention into a settings tab, adds a shared top bar with a navigation drawer, persists the dashboard’s default page size in `system_config`, centralises view-layer timezone handling for day labels and clocks, surfaces recent plugin/core run history on diagnostics, removes the transitional `magnitu_config` fallback from `SystemConfigRepository`, and adds a short session cache for dashboard filter-pill option queries.

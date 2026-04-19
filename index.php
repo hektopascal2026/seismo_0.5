@@ -133,6 +133,24 @@ $router->register(
     \Seismo\Controller\SettingsController::class . '::saveGeneral',
     false
 );
+// Settings → Magnitu tab actions (session-auth + CSRF; Bearer API lives on
+// MagnituController instead). Port of 0.4's `save_magnitu_config` /
+// `regenerate_magnitu_key` / `clear_magnitu_scores`.
+$router->register(
+    'settings_save_magnitu',
+    \Seismo\Controller\MagnituAdminController::class . '::saveConfig',
+    false
+);
+$router->register(
+    'settings_regenerate_magnitu_key',
+    \Seismo\Controller\MagnituAdminController::class . '::regenerateKey',
+    false
+);
+$router->register(
+    'settings_clear_magnitu_scores',
+    \Seismo\Controller\MagnituAdminController::class . '::clearScores',
+    false
+);
 $router->register(
     'styleguide',
     \Seismo\Controller\StyleguideController::class . '::show',

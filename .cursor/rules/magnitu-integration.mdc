@@ -7,16 +7,22 @@ alwaysApply: true
 
 Seismo has a companion project called **Magnitu** (separate repo at `../../../magnitu/`). Magnitu is a local Python app that learns which entries are relevant via ML and pushes scores back to Seismo via API.
 
-The Magnitu HTTP surface **has not been ported to 0.5 yet** — it lives in 0.4 (`controllers/magnitu.php` on the reference instance at `/seismo-staging/`). The port lands in **Slice 5** (web surface) and **Slice 5a** (config unification: `magnitu_config` → `system_config`). Everything below is load-bearing: the contract must survive the port unchanged so Magnitu's `sync.py` keeps working against both 0.4 and 0.5 with zero changes.
+The Magnitu HTTP surface is ported: **Slice 5** shipped the web contract (`MagnituController`), **Slice 5a** renamed `magnitu_config` → `system_config`, and **Slice 7** ported the admin UI (`MagnituAdminController` + Settings → Magnitu tab). The 0.4 reference still runs at `/seismo-staging/`; everything below is load-bearing — the contract must keep working against Magnitu's current `sync.py` on both 0.4 and 0.5 with zero Magnitu-side changes.
 
 ## API contract (Seismo is the server)
 
-Magnitu connects via these actions in `index.php`. All require `Authorization: Bearer <api_key>` header:
+Magnitu connects via these actions in `index.php`:
 
 - `GET ?action=magnitu_entries` — export entries (params: `since`, `type`, `limit`).
-- `POST ?action=magnitu_scores` — receive batch scores (body: `{scores: [...], model_version}`).
-- `GET/POST ?action=magnitu_recipe` — GET returns recipe; POST receives new recipe + triggers re-scoring.
-- `GET ?action=magnitu_status` — connectivity check + score coverage stats.
+- `POST ?action=magnitu_scores` — receive batch scores (body: `{scores: [...], model_version, model_meta?}`).
+- `GET/POST ?action=magnitu_recipe` — GET returns recipe JSON; POST receives new recipe + triggers re-scoring.
+- `GET ?action=magnitu_labels` — dump labels (training data).
+- `POST ?action=magnitu_labels` — batch label ingest (body: `{labels: [...]}`).
+- `GET ?action=magnitu_status` — connectivity check + per-family entry and score counts.
+
+**Auth — two accepted transports.** All six actions are gated by `BearerAuth::guardMagnitu()`, which accepts the presented token via **either**:
+1. `Authorization: Bearer <api_key>` (preferred, modern); or
+2. `?api_key=<api_key>` query-string or POST-body parameter — a **load-bearing 0.4-compat fallback** relied on by Magnitu's current `sync.py` (it passes `params["api_key"] = cfg["api_key"]` in `httpx.Client.request`). Do NOT remove the fallback from `BearerAuth::presentedToken()` without coordinating a matching `sync.py` release; a silent drop will break every deployed Magnitu overnight.
 
 The `magnitu_*` prefix is whitelisted by `AuthGate::check()` so the Bearer-token endpoints are not redirected through the session login flow. See `auth-dormant-by-default.mdc`.
 
@@ -56,7 +62,7 @@ In 0.5 these will be registered through the `Router` like every other action, po
 
 - `entry_scores` — local, per-instance. **Never** wrap with `entryTable()`.
 - `magnitu_labels` — local, per-instance. **Never** wrap with `entryTable()`.
-- `magnitu_config` — local key/value store. **To be renamed `system_config` in Slice 5a** (it has been misnamed since 0.3; it's always been a generic k/v store). Same-file rename: one migration, no data reshaping. The rules below still apply to the renamed table.
+- `system_config` — local key/value store (renamed from `magnitu_config` in Slice 5a, schema 21). Holds both the `api_key` / `export:api_key` Magnitu keys and the `alert_threshold` / `sort_by_relevance` preferences. Never wrap with `entryTable()`. Managed from the UI via **Settings → Magnitu** (`?action=settings&tab=magnitu`, Slice 7) — `MagnituAdminController` handles key rotation, preference save, and the "Clear all scores" danger-zone action.
 
 ## Shared styleguide
 
@@ -70,9 +76,9 @@ Seismo supports a **satellite mode** so a second, lightweight Seismo instance ca
 
 - Set `SEISMO_MOTHERSHIP_DB` in the satellite's `config.local.php` to the mothership's MySQL database name (same server / user).
 - Entry-source tables (`feed_items`, `feeds`, `scraper_configs`, `lex_items`, `calendar_events`, `sender_tags`, and the resolved email table) are cross-DB read via `` `mothership_db`.tablename `` SQL references.
-- Scoring tables (`entry_scores`, `magnitu_config` / future `system_config`, `magnitu_labels`) are **always local** to each instance.
+- Scoring tables (`entry_scores`, `system_config`, `magnitu_labels`) are **always local** to each instance.
 - Plugin state tables (`plugin_run_log`, `entry_favourites`, any future plugin-owned sidecars) are **always local** — satellites don't run plugins, so these either stay empty or track the satellite's own local behaviour.
-- Each satellite has its own API key in its own `magnitu_config` table.
+- Each satellite has its own API key in its own `system_config` table.
 - The mothership runs with `SEISMO_MOTHERSHIP_DB = ''` (default) — zero behaviour change.
 
 ### Implementation touchpoints (0.5)
@@ -85,7 +91,7 @@ Seismo supports a **satellite mode** so a second, lightweight Seismo instance ca
 
 ### Rules
 
-- **`entryTable()` and `entryDbSchemaExpr()` are only for entry-source tables.** Never use them for `entry_scores`, `magnitu_config` / `system_config`, `magnitu_labels`, `plugin_run_log`, `entry_favourites`, `feeds` config metadata (feed definitions live with the mothership; feed items do too — `entryTable('feeds')` is correct, but writes to the mothership's `feeds` from a satellite are forbidden).
+- **`entryTable()` and `entryDbSchemaExpr()` are only for entry-source tables.** Never use them for `entry_scores`, `system_config`, `magnitu_labels`, `plugin_run_log`, `entry_favourites`, `feeds` config metadata (feed definitions live with the mothership; feed items do too — `entryTable('feeds')` is correct, but writes to the mothership's `feeds` from a satellite are forbidden).
 - **Clearest test:** if writing to this table from a satellite would corrupt the mothership, it's an entry-source table (use `entryTable()` for reads, forbid writes on satellite). If it's something each instance tracks independently (per-satellite API key, per-satellite labels, per-satellite cron log), it's local — never wrap.
 - The MySQL user for the satellite DB must have `SELECT` granted on the mothership database. The setup wizard is responsible for prompting this; see `docs/setup-wizard-notes.md`.
 - **Do NOT reuse the mothership API key** — generate a fresh one for each satellite.
@@ -96,8 +102,20 @@ Seismo supports a **satellite mode** so a second, lightweight Seismo instance ca
 - Do NOT change the API response format without updating Magnitu's `sync.py`.
 - Do NOT rename `entry_type` values — Magnitu depends on: `feed_item`, `email`, `lex_item`. `calendar_event` exists in the ENUM but is excluded from the API; see `calendar-events.mdc`.
 - The recipe JSON format (`keywords`, `source_weights`, `classes`, `class_weights`) is a contract — changes require updating both the Seismo scoring code (currently 0.4 `scoreEntryWithRecipe()` in `config.php`; future `src/Core/Scoring/` in 0.5 per the Slice 5 plan) **and** `distiller.py` in Magnitu.
-- Config keys in `magnitu_config` (future `system_config`): `api_key`, `export:api_key` (Slice 5, read-only briefing key — **must never share a value with `api_key`**; `BearerAuth::verifyExportKey` rejects the write key even if the admin accidentally seeds it here), `alert_threshold`, `sort_by_relevance`, `recipe_json`, `recipe_version`, `last_sync_at`.
-- **`magnitu_status` response shape (Slice 5).** 0.5 returns `{"status": "ok", "score_counts": {...}, "schema_version": <int>, "recipe_version": <int>}`. The legacy 0.4 monolithic `"version"` string is gone — `sync.py` already consumes the split fields, so this matches the effective contract. If you are changing `MagnituController::status()`, update **both** ends in the same push and note it here, not post-hoc in a review.
+- Config keys in `system_config`: `api_key`, `export:api_key` (Slice 5, read-only briefing key — **must never share a value with `api_key`**; `BearerAuth::verifyExportKey` rejects the write key even if the admin accidentally seeds it here), `alert_threshold`, `sort_by_relevance`, `recipe_json`, `recipe_version`, `last_sync_at`, `model_name` / `model_description` / `model_version` / `model_trained_at` (written by `magnitu_scores` POST when Magnitu includes `model_meta`).
+- **`magnitu_status` response shape (Slice 5, verified against current Magnitu).** 0.5 returns:
+  ```json
+  {
+    "status": "ok",
+    "version": "<SEISMO_VERSION>",
+    "entries": {"feed_items": N, "emails": N, "lex_items": N, "total": N},
+    "scores":  {"total": N, "magnitu": N, "recipe": N},
+    "recipe_version": <int>,
+    "alert_threshold": <float>,
+    "last_sync_at": "<Y-m-d H:i:s>" | null
+  }
+  ```
+  Magnitu's `sync.py` (`test_connection`) and `main.py` (`_sync_pull_impl`) consume `status`, `entries.total`, `entries.feed_items`, `entries.emails`, and `entries.lex_items`. Those five keys and the `entries.*` nesting are the part of this contract that is actually load-bearing — renaming `entries` to `score_counts`, or flattening `entries.*` to top-level `schema_version`-style keys, breaks Magnitu. If you are changing `MagnituController::status()`, update `sync.py` / `main.py` in the same push and note it here, not post-hoc in a review.
 - **0.4 subscription-based email hiding is NOT ported in 0.5.** v0.4 Magnitu responses filtered emails by `email_subscriptions.show_in_magnitu = 1`. v0.5 exposes every email row. Re-adding the filter is a product decision tracked in `docs/consolidation-plan.md`; do not sneak it back into a repository query without pairing it with a slice entry.
 - When changing Seismo's styleguide or CSS, be aware that Magnitu's UI depends on the same design system.
 - When adding new entry-source table queries (e.g. a new content type), wrap them with `entryTable()` inside the owning repository so satellites stay in sync. Never do entry-source SQL outside a repository — see `core-plugin-architecture.mdc` ("Repositories return raw data").

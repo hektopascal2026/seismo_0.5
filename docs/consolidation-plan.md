@@ -177,6 +177,32 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - **Retention UI:** family toggles, per-family overrides, “last pruned on DATE” readout — not built.
 - **`ai_view`** — no 0.5 code to retire; revisit if a route appears.
 
+### Slice 7 — Magnitu settings tab (admin UI for the Magnitu contract) — **shipped**
+
+Port of 0.4's `Settings → Magnitu` tab. Slice 5 shipped the HTTP contract but left the admin surface unported, so a fresh 0.5 instance had no browser-only path to provision the `api_key` that `BearerAuth::guardMagnitu()` reads. Slice 7 closes that gap.
+
+- **`MagnituAdminController`** (new) — session-auth + CSRF, strictly separate from `MagnituController` (which is Bearer-only). Three POST handlers:
+  - `?action=settings_save_magnitu` — writes `alert_threshold` (clamped 0.0–1.0) and `sort_by_relevance` to `system_config`.
+  - `?action=settings_regenerate_magnitu_key` — mints `bin2hex(random_bytes(16))` and upserts `system_config.api_key`.
+  - `?action=settings_clear_magnitu_scores` — `EntryScoreRepository::clearAll()` + reset `recipe_json` / `recipe_version` / `last_sync_at` rows. The "Danger Zone" action.
+- **`views/partials/settings_magnitu.php`** — five sections matching 0.4's layout: API key row (click-to-copy + Regenerate), Seismo API URL row (click-to-copy), 3-tile score counts + last-sync line + optional Connected Model block, Scoring Settings form (alert_threshold + sort_by_relevance), Danger Zone.
+- **`SettingsController::show()`** — accepts `tab=magnitu`; loads the nine-key `$magnituConfig` slice of `system_config`, the score-source-split `$magnituScoreStats` from `EntryScoreRepository::getScoreCounts()`, and a derived `$seismoApiUrl` (`scheme://host` + `getBasePath()` + `/index.php`, honouring `HTTP_X_FORWARDED_PROTO` for shared hosts like hektopascal).
+- **Routes** (`index.php`) — three POSTs registered with `readOnly=false`; GET tab is served by the existing `settings` route, so `READONLY_KEEP_SESSION_FOR_CSRF` already covers it.
+- **Docs + rule** — `magnitu-integration.mdc` updated: "has not been ported yet" banner replaced with the shipped-slice chronology; the Key Tables entry for `system_config` now names Slice 7 / `MagnituAdminController`; `model_meta` config keys added to the keys list.
+
+**Explicitly out of Slice 7**:
+
+- Wiring `alert_threshold` into the dashboard / calendar and `sort_by_relevance` into timeline sort. The inputs persist, the consumers don't exist yet — tracked as a follow-up below.
+- Hashing the API key at rest. `BearerAuth::verifyMagnituKey` expects the raw value via `hash_equals`, matching 0.4; changing that model is its own slice.
+- Per-profile / per-satellite key management UI. Each satellite already keeps its own `system_config`; this tab manages the local instance's key, which is all the rule requires.
+- Porting `views/magnitu.php` (the "Magnitu highlights" standalone feed page). It's a feature view, not a settings page, and needs the dashboard to read `alert_threshold` first to be meaningful.
+
+**Tracked follow-ups**:
+
+- Wire `alert_threshold` into the dashboard's "alert" highlight + the calendar badge.
+- Wire `sort_by_relevance` into `DashboardController` / `EntryRepository` ordering (default sort flip, not a per-request param).
+- Port `views/magnitu.php` once the above wiring lands — only useful with real scores in place.
+
 ## Portability checklist (applies to every slice)
 
 - [ ] No hardcoded domains or absolute URL prefixes except intentional (`SEISMO_MOTHERSHIP_URL`, OAuth, external APIs).

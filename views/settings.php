@@ -1,8 +1,8 @@
 <?php
 /**
- * Settings — tabs: General, Retention.
+ * Settings — tabs: General, Magnitu, Retention.
  *
- * @var string $tab 'general'|'retention'
+ * @var string $tab 'general'|'magnitu'|'retention'
  * @var string $csrfField
  * @var string $basePath
  * @var int $dashboardLimitSaved
@@ -11,6 +11,9 @@
  * @var array<string, mixed> $defaults
  * @var list<string> $families
  * @var bool $satellite
+ * @var array<string, string|null> $magnituConfig
+ * @var array{total:int, magnitu:int, recipe:int} $magnituScoreStats
+ * @var string $seismoApiUrl
  */
 
 declare(strict_types=1);
@@ -69,11 +72,17 @@ $tabQs = static function (string $t) use ($basePath): string {
 
         <nav class="settings-tabs" aria-label="Settings sections">
             <a href="<?= e($tabQs('general')) ?>" class="<?= $tab === 'general' ? 'active' : '' ?>">General</a>
+            <a href="<?= e($tabQs('magnitu')) ?>" class="<?= $tab === 'magnitu' ? 'active' : '' ?>">Magnitu</a>
             <a href="<?= e($tabQs('retention')) ?>" class="<?= $tab === 'retention' ? 'active' : '' ?>">Retention</a>
         </nav>
 
         <?php if ($tab === 'general'): ?>
             <?php require __DIR__ . '/partials/settings_general.php'; ?>
+        <?php elseif ($tab === 'magnitu'): ?>
+            <?php if ($pageError !== null): ?>
+                <div class="message message-error"><?= e($pageError) ?></div>
+            <?php endif; ?>
+            <?php require __DIR__ . '/partials/settings_magnitu.php'; ?>
         <?php else: ?>
             <?php if ($pageError !== null): ?>
                 <div class="message message-error"><?= e($pageError) ?></div>

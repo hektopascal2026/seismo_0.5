@@ -1,0 +1,111 @@
+---
+description: How new features land in Seismo 0.5 — layers, satellites, plugins, config, docs, and review. Companion to the narrower rules below.
+alwaysApply: true
+---
+
+# Feature development — architecture map (Seismo 0.5)
+
+This rule is the **routing table** for future work. It does not replace the specialist rules; it tells you **which constraints apply** and **where to put code**. When in doubt, read the linked rule file in `.cursor/rules/`.
+
+## Specialist rules (read the relevant one before coding)
+
+| Topic | Rule file |
+|-------|-----------|
+| Core vs plugin, repos, UTC, bounded queries, retention, plugin_run_log | `core-plugin-architecture.mdc` |
+| Session auth (dormant), CSRF, public whitelist | `auth-dormant-by-default.mdc` |
+| Magnitu / export API contract, satellite DB split, `entryTable()` ownership | `magnitu-integration.mdc` |
+| Leg / `calendar_events`, Magnitu exclusion for Leg | `calendar-events.mdc` |
+| Paths, base path, cron vs web refresh parity | `deployment-portability.mdc` |
+| Webspace smoke tests, upload lists, host URLs | `webspace-testing.mdc` |
+| Slice scope, no silent scope creep | `slice-scope-fidelity.mdc` |
+| README vs README-REORG vs about page | `documentation-strategy.mdc` |
+| External review before closing a slice | `gemini-spot-check.mdc` |
+
+## Layers — non-negotiable shape
+
+```
+HTTP request
+    → index.php (Router) + AuthGate (session UI only)
+    → Controller (orchestration: read $_GET/$_POST, validate, delegate, include view)
+    → Service / Fetcher / RefreshAllService (no SQL; I/O and business logic)
+    → Repository (**only place raw SQL lives** for DB access)
+    → PDO (local) — entry-source reads may qualify table names via entryTable()
+Views / formatters: escape (e() / htmlspecialchars), local time for display only
+```
+
+- **Plugins** (`src/Plugin/<Name>/`): implement `SourceFetcherInterface`; **no SQL**, no globals; may throw; `RefreshAllService` catches and logs.
+- **Repositories** (`src/Repository/`): return **raw** arrays/DTOs — **no** `htmlspecialchars`, no presentation.
+- **Controllers** (`src/Controller/`): **no SQL**; thin orchestration.
+
+## Satellite / mothership — entry vs local tables
+
+- **Entry-source data** (feeds, feed_items, emails, lex_items, calendar_events, sender_tags, …): reads in repositories **must** use `entryTable()` / `entryDbSchemaExpr()` where applicable so satellites read the mothership DB. See `magnitu-integration.mdc` and `bootstrap.php`.
+- **Always local** (never `entryTable()`): `entry_scores`, `system_config`, `magnitu_labels`, `plugin_run_log`, `entry_favourites`, plugin sidecars.
+- **Writes** to entry tables from satellites: forbidden; runners short-circuit; repos may throw if satellite (defence in depth).
+
+When adding a **new** entry-family table: decide if it is mothership-owned entry data (use `entryTable()` in the owning repo only) or instance-local (no wrapper).
+
+## Bounded queries and time
+
+- Every list-returning repository method takes **`$limit` and `$offset`** with a hard cap (see `EntryRepository::MAX_LIMIT` pattern in `core-plugin-architecture.mdc`).
+- **UTC** everywhere below the view: `bootstrap.php` + DB session timezone; `DateTimeImmutable` with explicit UTC in repos; views/formatters may convert to `SEISMO_VIEW_TIMEZONE` for display.
+
+## Configuration
+
+- **Instance / app keys**: `system_config` (not ad-hoc JSON files for new features unless the slice explicitly introduces a file).
+- **Plugin blocks**: `plugin:<identifier>` rows; **shared** filters that are not a plugin block may use another agreed prefix (e.g. `lex:…`) — see Slice 5a patterns in `README-REORG.md`.
+- **Secrets**: `config.local.php` only (never commit); use `.example` for shape.
+
+## HTTP surface — how to add routes
+
+1. Register in `index.php` on `Router`: action string → `Class::method`, read-only flag as appropriate.
+2. **Session-protected UI**: not on `AuthGate` public whitelist unless it is `health`, `login`, `logout`, `migrate`, or `magnitu_*` / `export_*` (Bearer-only inside controller).
+3. **Mutating POST** from the browser: **CSRF** (`CsrfToken::field()` + `verifyRequest()`). Magnitu/export use Bearer tokens — no CSRF.
+4. **Links and redirects**: `getBasePath()` — no hardcoded host/path for app URLs.
+
+If `CsrfToken::field()` is rendered on a GET page, add the action to `Router::READONLY_KEEP_SESSION_FOR_CSRF` (see comment in `src/Http/Router.php`) so flash messages are not lost.
+
+## New data sources
+
+| Kind | Where it goes |
+|------|----------------|
+| Third-party API that breaks occasionally | **New plugin** under `src/Plugin/<Name>/` + one line in `PluginRegistry` (no filesystem scanning). |
+| RSS, mail, scraper (core-owned) | **Core** fetcher/service + existing family repo; follow `RefreshAllService` / `CoreRunner` patterns. |
+| New “family” of stored entries | Extend the **appropriate family table** (`lex_items`, `calendar_events`, …) via repository `upsertBatch` + plugin DTOs — **no** per-plugin tables unless a slice explicitly adds a sidecar table (see `core-plugin-architecture.mdc`). |
+
+## Magnitu and machine exports
+
+- Do **not** change JSON shapes or `entry_type` strings without coordinating **Magnitu** (`sync.py`) and docs in `magnitu-integration.mdc`.
+- **Leg (`calendar_event`)** remains excluded from Magnitu API until product explicitly re-enables — see `calendar-events.mdc`.
+
+## Schema and migrations
+
+- **No** DDL on arbitrary requests. New tables/columns → **numbered migration** in `src/Migration/`, runner in `MigrationRunner.php`, append to `docs/db-schema.sql` as required by the project.
+- After schema changes, document deploy/test steps per `webspace-testing.mdc`.
+
+## Consolidation process (numbered slices)
+
+- **Scope** lives in `docs/consolidation-plan.md`. Do not expand scope mid-slice; use `slice-scope-fidelity.mdc`.
+- **Migration log**: append **`README-REORG.md`** when a slice ships (newest section on top) — paths, not line numbers.
+- **README.md**: final polish at end of consolidation; do not bloat it slice-by-slice (`documentation-strategy.mdc`).
+- **In-app about**: user-facing, only when features stabilise.
+- **Slice done**: run **Gemini spot-check** handoff from `gemini-spot-check.mdc` before treating the next slice as started.
+
+## Quick checklist before opening a PR / uploading
+
+- [ ] No SQL outside `src/Repository/` (except migrations).
+- [ ] Entry tables use `entryTable()` in repos; scoring/config local.
+- [ ] Lists bounded; exports respect caps.
+- [ ] No HTML in repository return values.
+- [ ] Internal URLs use `getBasePath()`.
+- [ ] New mutating POSTs have CSRF when under session auth.
+- [ ] UTC below views; ISO output with `Z` / offset where applicable.
+- [ ] Cron and web refresh share the same pipeline when the feature is part of “full refresh” (`deployment-portability.mdc`).
+
+## Anti-patterns (do not introduce)
+
+- New templating engine / heavy framework “for one feature”.
+- Hardcoded `https://` or install path in PHP views/controllers (except documented env like `SEISMO_MOTHERSHIP_URL`).
+- Unbounded `SELECT *` list endpoints.
+- `calendar_event` in Magnitu API without explicit product approval.
+- Circuit-breaking plugins silently — use logs + diagnostics (`core-plugin-architecture.mdc`).
