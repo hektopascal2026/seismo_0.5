@@ -1,0 +1,79 @@
+{
+    "eu": {
+        "enabled": true,
+        "endpoint": "https://publications.europa.eu/webapi/rdf/sparql",
+        "language": "ENG",
+        "lookback_days": 90,
+        "limit": 100,
+        "document_class": "cdm:legislation_secondary",
+        "notes": "Queries the EU CELLAR for finalized secondary legislation (regulations, directives, decisions) in English."
+    },
+    "ch": {
+        "enabled": true,
+        "endpoint": "https://fedlex.data.admin.ch/sparqlendpoint",
+        "language": "DEU",
+        "lookback_days": 90,
+        "limit": 100,
+        "resource_types": [
+            { "id": 21, "label": "Bundesgesetz" },
+            { "id": 22, "label": "Dringliches Bundesgesetz" },
+            { "id": 29, "label": "Verordnung des Bundesrates" },
+            { "id": 26, "label": "Departementsverordnung" },
+            { "id": 27, "label": "Amtsverordnung" },
+            { "id": 28, "label": "Verordnung der Bundesversammlung" },
+            { "id": 8,  "label": "Einfacher Bundesbeschluss (andere)" },
+            { "id": 9,  "label": "Bundesbeschluss (fakultatives Referendum)" },
+            { "id": 10, "label": "Bundesbeschluss (obligatorisches Referendum)" },
+            { "id": 31, "label": "Internationaler Rechtstext bilateral" },
+            { "id": 32, "label": "Internationaler Rechtstext multilateral" }
+        ],
+        "notes": "Queries Fedlex for Swiss federal legislation (Acts) published in the Bundesblatt, in German."
+    },
+    "ch_bger": {
+        "enabled": true,
+        "base_url": "https://entscheidsuche.ch",
+        "lookback_days": 90,
+        "limit": 100,
+        "notes": "Swiss Federal Supreme Court decisions via entscheidsuche.ch index manifests."
+    },
+    "ch_bge": {
+        "enabled": false,
+        "base_url": "https://entscheidsuche.ch",
+        "lookback_days": 90,
+        "limit": 50,
+        "notes": "Published leading decisions (Leitentscheide / BGE) via entscheidsuche.ch."
+    },
+    "ch_bvger": {
+        "enabled": true,
+        "base_url": "https://entscheidsuche.ch",
+        "lookback_days": 90,
+        "limit": 100,
+        "notes": "Swiss Federal Administrative Court decisions via entscheidsuche.ch."
+    },
+    "de": {
+        "enabled": true,
+        "feed_url": "https://www.recht.bund.de/rss/feeds/rss_bgbl-1-2.xml?nn=211452",
+        "lookback_days": 90,
+        "limit": 100,
+        "notes": ""
+    },
+    "parl_mm": {
+        "enabled": true,
+        "api_base": "https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items",
+        "language": "de",
+        "lookback_days": 90,
+        "limit": 50,
+        "notes": ""
+    },
+    "fr": {
+        "enabled": false,
+        "client_id": "",
+        "client_secret": "",
+        "fond": "JORF",
+        "natures": ["LOI", "ORDONNANCE", "DECRET"],
+        "lookback_days": 90,
+        "limit": 100,
+        "notes": ""
+    },
+    "jus_banned_words": []
+}

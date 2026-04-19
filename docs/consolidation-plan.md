@@ -92,24 +92,25 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 ### Slice 2 — Lex as the reference plugin port
 
-- Introduce `Seismo\Service\SourceFetcherInterface` and a shared HTTP base client.
+- Introduce `Seismo\Service\SourceFetcherInterface`. **Shared HTTP / SPARQL client wrapper** (timeouts, user-agent, retry policy for HTTP plugins) is **deferred to Slice 3** — see Slice 3 bullet below; Fedlex uses `EasyRdf\Sparql\Client` directly inside `LexFedlexPlugin` for this slice only.
 - Add `composer.json` pulling EasyRdf (SPARQL) and any other genuine vendor needs for Lex; Composer's `vendor/autoload.php` is already wired in Slice 0's bootstrap.
-- Implement `LexFedlexPlugin` (first plugin) + `LexItemRepository` (first family repo) + `LexController` + Lex page + settings tab for Lex only.
+- **Pull-forward (documented here, not a deferral):** a **minimal** `PluginRegistry` (Fedlex only) and `PluginRunner` (Fedlex-only `runFedlex()` entry point) shipped in Slice 2 so the Lex refresh path is not a one-off; Slice 3 **generalises** them into the full registry list + `RefreshAllService` + CLI — see `README-REORG.md` Slice 2 and `.cursor/rules/slice-scope-fidelity.mdc` (pull-forwards).
+- Implement `LexFedlexPlugin` (first plugin) + `LexItemRepository` (first family repo) + `LexController` + Lex page + Fedlex (`ch`) settings on the Lex page.
 - Plugin writes nothing directly; controller/refresh handler calls plugin → repository.
 - `LexItemRepository` exposes `prune()` from day one (repository contract, see `core-plugin-architecture.mdc`). Default policy: unlimited for `lex_items`.
 - `LexItemRepository::upsertBatch()` is **transactional** (begin / commit / rollback on any row failure). Plugin batches go in whole or not at all.
-- **Definition of done:** Lex list view and “Refresh Lex” work end-to-end through the new plugin layering — template for every subsequent plugin and family repo; intentionally inserting a bad row in a test batch rolls the whole batch back and leaves `lex_items` untouched.
+- **Definition of done:** Lex list view and Fedlex refresh work end-to-end through the new plugin layering — template for every subsequent plugin and family repo; intentionally inserting a bad row in a test batch rolls the whole batch back and leaves `lex_items` untouched. Manual verification of the bad-row case is recorded in `README-REORG.md` (Slice 2).
 
 ### Slice 3 — Unified refresh pipeline, runtime boundary, auth backbone, diagnostics
 
-- `Seismo\Service\PluginRegistry` (hardcoded array of instantiated plugins).
-- `Seismo\Service\RefreshAllService` shared by web + CLI: iterates Core fetchers first, then plugins with `try/catch` per plugin. Writes to `plugin_run_log` table (`plugin_id`, `run_at`, `status`, `item_count`, `error_message`, `duration_ms`).
+- **Extend** the Slice 2 `PluginRegistry` / runner pattern into `Seismo\Service\RefreshAllService` shared by web + CLI: iterates Core fetchers first, then plugins with `try/catch` per plugin. Writes to `plugin_run_log` table (`plugin_id`, `run_at`, `status`, `item_count`, `error_message`, `duration_ms`).
+- Introduce a **small shared HTTP client helper** (or documented wrapper) for plugins that use raw HTTP (EU Lex, RechtBund, Légifrance OAuth, etc.): timeouts, User-Agent, and conservative retry on 429/503 — so Slice 4+ plugins do not each invent their own stack. Fedlex may keep EasyRdf or adopt the helper if it reduces duplication.
 - Rebuild `refresh_cron.php` as a thin shell that calls `RefreshAllService`.
 - Add **Leg** (ParlCh plugin) to the shared pipeline so cron and web match.
 - **Auth backbone (dormant by default).** `Seismo\Http\AuthGate`, `AuthController`, login view, `SEISMO_ADMIN_PASSWORD_HASH` switch in `config.local.php.example`. No behaviour change unless the admin opts in. See `auth-dormant-by-default.mdc`.
-- **CSRF for state-changing POSTs.** When auth is enabled, cross-site POST (e.g. to `?action=toggle_favourite`) could flip favourites on the victim's session. Ship **session-bound CSRF tokens** (or one-time form nonces) on all mutating forms that run behind `AuthGate`, starting with favourite toggle and expanding to refresh/settings as those routes port. Tokens are a no-op when auth is dormant (no session secret surface). Coupled to this slice so login is never shipped without CSRF.
+- **CSRF for state-changing POSTs.** When auth is enabled, cross-site POSTs could act on the victim's session. Ship **session-bound CSRF tokens** (or one-time form nonces) on **all** mutating routes: `toggle_favourite`, `refresh_fedlex`, `save_lex_ch`, and every later POST as it ports. Tokens are a no-op when auth is dormant. Coupled to this slice so login is never shipped without CSRF.
 - **Diagnostics surface.** Extend `?action=health` (or new `?action=diagnostics`) with a plugin-status panel: last run per plugin, item count, last error. Adds a "Test" button per plugin that calls `fetch()` without persisting — free given the plugin contract.
-- **Definition of done:** cron and "Refresh all" execute the same steps; Leg is included in both; a failing plugin logs + shows red in diagnostics and the rest of the pipeline keeps running; `SEISMO_ADMIN_PASSWORD_HASH` toggles login on/off; plugin Test button shows first N items of a dry-run fetch; **with auth enabled, mutating POSTs require a valid CSRF token**.
+- **Definition of done:** cron and "Refresh all" execute the same steps; Leg is included in both; a failing plugin logs + shows red in diagnostics and the rest of the pipeline keeps running; `SEISMO_ADMIN_PASSWORD_HASH` toggles login on/off; plugin Test button shows first N items of a dry-run fetch; **with auth enabled, mutating POSTs require a valid CSRF token** (including `toggle_favourite`, `refresh_fedlex`, `save_lex_ch`).
 
 ### Slice 4 — Remaining entry sources
 

@@ -153,3 +153,22 @@ if (!function_exists('seismo_council_label')) {
         };
     }
 }
+
+if (!function_exists('seismo_format_lex_refresh_utc')) {
+    /**
+     * Format a UTC `fetched_at` for Lex "Refreshed:" lines in local (Zurich) time.
+     * Repositories stay UTC; this is view-time formatting only.
+     * When SEISMO_VIEW_TIMEZONE lands (Slice 5/6), wire it here.
+     *
+     * @param \DateTimeImmutable|null $dtUtc Timestamp from the DB in UTC.
+     */
+    function seismo_format_lex_refresh_utc(?\DateTimeImmutable $dtUtc): ?string
+    {
+        if ($dtUtc === null) {
+            return null;
+        }
+        $local = $dtUtc->setTimezone(new \DateTimeZone('Europe/Zurich'));
+
+        return $local->format('d.m.Y H:i');
+    }
+}

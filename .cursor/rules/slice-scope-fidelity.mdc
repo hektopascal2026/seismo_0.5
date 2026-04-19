@@ -57,3 +57,11 @@ Reviewers (the user, future-me reading back, or any reviewer agent) should rejec
 unaccompanied by a numbered plan entry that can be grep'd for.
 
 If the agent writes one of those phrases, the agent is required to stop and either (a) confirm or (b) update the plan, per the hard rule above.
+
+## Pull-forwards (scope in the other direction)
+
+**Silently landing work planned for Slice N+K inside Slice N is the same class of drift as deferrals** — the deliverable is bigger than the plan file promised, and readers grep'ing "PluginRegistry" or "HTTP client" will look at the wrong slice unless we name it.
+
+**Hard rule:** If the agent implements something that `docs/consolidation-plan.md` currently attributes to a **later** numbered slice (infra, route, repository contract), the agent must **append or edit the plan in the same change** so the item is explicitly listed under the slice that actually shipped it (or add a "Pull-forward from Slice N" note under the later slice). Same bar as deferrals: **"we already did X in Slice N"** must be grep-able.
+
+**README-REORG.md** should mention the pull-forward in the slice entry (one sentence: what landed early and why).

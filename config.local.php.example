@@ -24,6 +24,14 @@ define('DB_PASS', 'CHANGE_ME');
 // define('DB_PORT', '3306'); // optional — omit to use the driver default (3306)
 
 /**
+ * Lex legislation JSON (optional).
+ *
+ * Copy `lex_config.example.json` to `lex_config.json` in the install root if you want a
+ * mutable file on disk. `lex_config.json` is git-ignored. If the file is absent,
+ * `LexConfigStore` uses the same defaults as the example file.
+ */
+
+/**
  * Optional — protect Settings → Feed diagnostics with ?key= on the URL.
  * Leave unset/empty to keep diagnostics open on localhost only, or set it on a
  * public host to require the matching key.

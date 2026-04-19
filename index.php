@@ -44,6 +44,21 @@ $router->register(
     \Seismo\Controller\FavouriteController::class . '::toggle',
     false
 );
+$router->register(
+    'lex',
+    \Seismo\Controller\LexController::class . '::show',
+    true
+);
+$router->register(
+    'refresh_fedlex',
+    \Seismo\Controller\LexController::class . '::refreshFedlex',
+    false
+);
+$router->register(
+    'save_lex_ch',
+    \Seismo\Controller\LexController::class . '::saveLexCh',
+    false
+);
 $router->setDefault('index');
 
 $action = $_GET['action'] ?? '';

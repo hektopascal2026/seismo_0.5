@@ -1,0 +1,11 @@
+{
+    "name": "hektopascal/seismo",
+    "description": "Seismo 0.5 — legislation / feed monitor",
+    "require": {
+        "php": ">=8.2",
+        "easyrdf/easyrdf": "^1.1"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

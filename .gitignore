@@ -1,3 +1,5 @@
+/vendor/
+lex_config.json
 config.local.php
 srf/config.local.php
 fetcher/scraper/config.php

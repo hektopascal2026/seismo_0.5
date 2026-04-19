@@ -707,7 +707,7 @@ final class EntryRepository
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute($params);
         } catch (PDOException $e) {
-            if ($this->isMissingTableError($e)) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
                 return [];
             }
             throw $e;
@@ -973,7 +973,7 @@ final class EntryRepository
         try {
             $stmt = $this->pdo->query($sql);
         } catch (PDOException $e) {
-            if ($this->isMissingTableError($e)) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
                 return [];
             }
             throw $e;
@@ -986,23 +986,10 @@ final class EntryRepository
         try {
             return (int)$this->pdo->query($sql)->fetchColumn();
         } catch (PDOException $e) {
-            if ($this->isMissingTableError($e)) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
                 return 0;
             }
             throw $e;
         }
-    }
-
-    private function isMissingTableError(PDOException $e): bool
-    {
-        // MySQL error 1146 = "Table '…' doesn't exist".
-        // Embedded in $e->errorInfo[1] for most drivers; match by code
-        // *and* message for belt-and-braces compatibility.
-        $code = $e->errorInfo[1] ?? null;
-        if ((int)$code === 1146) {
-            return true;
-        }
-        return stripos($e->getMessage(), "doesn't exist") !== false
-            || stripos($e->getMessage(), 'Unknown table') !== false;
     }
 }

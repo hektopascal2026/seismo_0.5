@@ -9,6 +9,43 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 2 — Lex / Fedlex reference plugin (`?action=lex`, `?action=refresh_fedlex`, `?action=save_lex_ch`)
+
+**Why.** Establish the Core vs Plugin boundary with a real third-party adapter (Fedlex SPARQL) before Slice 3’s unified refresh service. The Lex page must stay useful on a shared DB populated by 0.4: list all enabled `lex_items` sources with pills, while 0.5 only *writes* Swiss Fedlex rows.
+
+**Pull-forward (plan traceability).** `PluginRegistry` + `PluginRunner` were originally sketched for Slice 3 in an early plan outline; they ship here as **Fedlex-only** scaffolding so the refresh path is not a one-off. Slice 3 generalises into `RefreshAllService` + full plugin list + `plugin_run_log`. Documented in `docs/consolidation-plan.md` Slice 2 / Slice 3 and `.cursor/rules/slice-scope-fidelity.mdc` (pull-forwards).
+
+**What moved.**
+
+- `refreshFedlexItems()` + `parseFedlexType()` (0.4 `controllers/lex_jus.php`) → `Seismo\Plugin\LexFedlex\LexFedlexPlugin::fetch()` (0.5 `src/Plugin/LexFedlex/LexFedlexPlugin.php`). No SQL in the plugin; returns normalised rows for `lex_items`; empty titles / bad act URIs dropped before persist.
+- Ad-hoc Lex INSERT (0.4) → `Seismo\Repository\LexItemRepository::upsertBatch()` with `entryTable('lex_items')`, transaction-wrapped all-or-nothing upsert. `listBySources()` + `getLastFetchedBySources()` for the page; `prune()` returns 0 (Lex unlimited per default policy). `upsertBatch()` / `prune()` throw if `isSatellite()` (defence in depth — runner already skips fetch on satellites).
+- `getLexConfig()` file I/O (0.4 `config.php`) → `Seismo\Config\LexConfigStore` reading/writing `lex_config.json` beside `bootstrap.php`, with `defaultConfig()` merged when keys are missing. **`lex_config.json` is gitignored** (mutable per deploy); **`lex_config.example.json`** is the committed shape reference (like `config.local.php.example`).
+- Missing-table tolerance for `lex_items` queries shares `Seismo\Repository\PdoMysqlDiagnostics::isMissingTable()` with `EntryRepository` (same 1146 + message fallback as the latter used privately before).
+- `handleLexPage()` (0.4) → `Seismo\Controller\LexController::show()` + `views/lex.php`. POST refresh → `LexController::refreshFedlex` → `Seismo\Service\PluginRunner::runFedlex()` only (not multi-source Lex refresh).
+- `SourceFetcherInterface`, `PluginRegistry` (Fedlex only), `PluginRunResult`, `PluginRunner` under `src/Service/`.
+- **Deferred to Slice 3 (named):** shared HTTP/SPARQL wrapper with timeouts / UA / retry — Fedlex uses `EasyRdf\Sparql\Client` directly in Slice 2 only; see plan Slice 3.
+
+**New wiring.**
+
+1. `index.php` registers `lex` (read-only), `refresh_fedlex` (POST), `save_lex_ch` (POST, CH block only).
+2. `PluginRunner` loads Lex config → `ch` block → `LexFedlexPlugin::fetch()` → `LexItemRepository::upsertBatch()`. Failures `error_log` with plugin id; no `plugin_run_log` until Slice 3.
+3. `isSatellite()` short-circuits fetch in the runner (same spirit as 0.4); the Lex page hides refresh/save and explains read-only satellite behaviour.
+4. Composer: `easyrdf/easyrdf` in `composer.json` / `composer.lock`. Bootstrap loads `vendor/autoload.php` first. `vendor/` is gitignored; run `composer install` after deploy.
+5. Lex “Refreshed:” timestamps: repository returns UTC `DateTimeImmutable`; `views/helpers.php::seismo_format_lex_refresh_utc()` converts to **Europe/Zurich** for display (view layer only).
+
+**Gotchas.**
+
+- Only `source = ch` is refreshed in 0.5; EU/DE/FR/Parl MM rows are read-only until their plugins ship (Slice 4+). The Lex view states this explicitly.
+- Full multi-source “Refresh Lex” and cron parity remain Slice 3 (`RefreshAllService`).
+- CH Fedlex `ch_language` is whitelisted (`DEU`,`FRA`,`ITA`,`ENG`,`ROH`) in `LexFedlexPlugin::normalizeFedlexLanguage()` (used from save + fetch) to block SPARQL injection via the language URI segment.
+- CSRF tokens for `refresh_fedlex` / `save_lex_ch` / `toggle_favourite` are **Slice 3** together with `AuthGate` — see amended `docs/consolidation-plan.md` Slice 3 DoD.
+
+**Transactional DoD (manual verification).** There is no automated test harness yet. To confirm all-or-nothing behaviour: temporarily inject a second row into the batch inside `LexFedlexPlugin::fetch()` with an intentionally invalid `celex` (e.g. 300+ chars if your schema limits `celex`), run `POST ?action=refresh_fedlex`, then confirm `SELECT COUNT(*)`, `MAX(fetched_at)`, or row checksum for `source='ch'` is unchanged vs. before — the transaction should roll back entirely. Remove the inject before shipping.
+
+**Test URL.** `?action=lex` — multi-source list when the DB has rows; `POST ?action=refresh_fedlex` updates Fedlex only when not satellite and `ch.enabled` is true.
+
+---
+
 ## Correction 2026-04-19 — Slice 1 scope drop was unilateral
 
 **Why this entry exists.** The Slice 1 commit (`8458dda`) dropped four 0.4 affordances from the delivered scope — search box, tag filter pills, favourites view toggle, navigation drawer — and labelled them "deliberately out of scope — they come back in later slices" in the commit message. No slice was named for any of them, `docs/consolidation-plan.md` was not updated, and the user was not asked. The refresh button was also dropped but that one belongs to Slice 3 by the existing plan, so it isn't part of this correction.
