@@ -30,16 +30,16 @@
 
     <dl>
         <dt>Seismo</dt>
-        <dd><?= htmlspecialchars((string)$data['seismoVersion']) ?></dd>
+        <dd><?= e((string)$data['seismoVersion']) ?></dd>
 
         <dt>PHP</dt>
-        <dd><?= htmlspecialchars((string)$data['phpVersion']) ?></dd>
+        <dd><?= e((string)$data['phpVersion']) ?></dd>
 
         <dt>Database</dt>
         <dd class="<?= $data['dbStatus'] === 'ok' ? 'ok' : 'err' ?>">
-            <?= htmlspecialchars((string)$data['dbStatus']) ?>
+            <?= e((string)$data['dbStatus']) ?>
             <?php if (!empty($data['dbVersion'])): ?>
-                (MySQL <?= htmlspecialchars((string)$data['dbVersion']) ?>)
+                (MySQL <?= e((string)$data['dbVersion']) ?>)
             <?php endif; ?>
         </dd>
 
@@ -55,17 +55,17 @@
         <dt>Mode</dt>
         <dd>
             <?php if ($data['satellite']): ?>
-                satellite (reads from <code><?= htmlspecialchars((string)$data['mothershipDb']) ?></code>)
+                satellite (reads from <code><?= e((string)$data['mothershipDb']) ?></code>)
             <?php else: ?>
                 mothership
             <?php endif; ?>
         </dd>
 
         <dt>Brand title</dt>
-        <dd><?= htmlspecialchars((string)$data['brandTitle']) ?></dd>
+        <dd><?= e((string)$data['brandTitle']) ?></dd>
 
         <dt>Base path</dt>
-        <dd><code><?= htmlspecialchars($data['basePath'] === '' ? '/' : (string)$data['basePath']) ?></code></dd>
+        <dd><code><?= e($data['basePath'] === '' ? '/' : (string)$data['basePath']) ?></code></dd>
     </dl>
 
     <p class="note">

@@ -8,14 +8,19 @@
  *   - The database is reachable.
  *   - Satellite / mothership mode is detected correctly.
  *
- * Also reports the current schema version so operators can tell whether
+ * Reports the current schema version so operators can tell whether
  * `php migrate.php` still needs to run. Once real features land this route
  * stays useful for uptime checks.
+ *
+ * All SQL is delegated to repositories; this controller only orchestrates.
  */
 
 declare(strict_types=1);
 
 namespace Seismo\Controller;
+
+use Seismo\Repository\MagnituConfigRepository;
+use Seismo\Repository\SystemRepository;
 
 final class HealthController
 {
@@ -27,22 +32,9 @@ final class HealthController
 
         try {
             $pdo = getDbConnection();
-            $dbStatus  = 'ok';
-            $dbVersion = (string)$pdo->query('SELECT VERSION()')->fetchColumn();
-
-            // The schema_version row lives in magnitu_config, which may not
-            // exist yet on a fresh install. Treat that as "not migrated".
-            try {
-                $stmt = $pdo->query(
-                    "SELECT config_value FROM magnitu_config WHERE config_key = 'schema_version'"
-                );
-                $schemaVersion = $stmt ? $stmt->fetchColumn() : null;
-                if ($schemaVersion === false) {
-                    $schemaVersion = null;
-                }
-            } catch (\Throwable $e) {
-                $schemaVersion = null;
-            }
+            $dbStatus      = 'ok';
+            $dbVersion     = (new SystemRepository($pdo))->mysqlVersion();
+            $schemaVersion = (new MagnituConfigRepository($pdo))->getSchemaVersion();
         } catch (\Throwable $e) {
             $dbStatus = 'error: ' . $e->getMessage();
         }

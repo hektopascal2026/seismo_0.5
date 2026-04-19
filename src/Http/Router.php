@@ -60,6 +60,16 @@ final class Router
         $this->maybeReleaseSession($action);
 
         [$class, $method] = explode('::', $this->routes[$action], 2);
+        if (!class_exists($class) || !method_exists($class, $method)) {
+            error_log(sprintf(
+                "Seismo router: handler '%s' not found for action '%s'",
+                $this->routes[$action],
+                $action
+            ));
+            http_response_code(500);
+            echo 'Internal server error.';
+            return;
+        }
         /** @var object $controller */
         $controller = new $class();
         $controller->{$method}();

@@ -64,7 +64,7 @@ spl_autoload_register(static function (string $class): void {
     $relative = substr($class, strlen($prefix));
     $path = __DIR__ . '/src/' . str_replace('\\', '/', $relative) . '.php';
     if (is_file($path)) {
-        require $path;
+        require_once $path;
     }
 });
 
@@ -166,4 +166,18 @@ function seismoBrandTitle(): string
 function seismoBrandAccent(): ?string
 {
     return SEISMO_BRAND_ACCENT !== '' ? (string)SEISMO_BRAND_ACCENT : null;
+}
+
+/**
+ * HTML-escape helper for views.
+ *
+ * Always double-encodes, escapes both quote styles, and assumes UTF-8 input.
+ * Keeping this in bootstrap (rather than a templating engine) lets views
+ * stay plain PHP while still having a consistent, short escape idiom:
+ *
+ *   <?= e($user['name']) ?>
+ */
+function e(?string $value): string
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
