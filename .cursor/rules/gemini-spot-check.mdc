@@ -1,0 +1,46 @@
+---
+description: After each vertical slice hits Definition of Done, STOP and output the Gemini external review handoff; do not propose the next slice until the user returns Gemini’s verdict.
+alwaysApply: true
+---
+
+# Gemini spot-check protocol (every slice)
+
+To limit architectural drift, **each vertical slice** must pass an **independent external review** (Gemini or equivalent architectural LLM) **before** work on the next slice begins.
+
+## Hard rules for the agent
+
+1. When you believe the slice’s **Definition of Done** in `docs/consolidation-plan.md` is met, you **STOP**. Do **not** ask to proceed to the next slice, start the next slice, or merge scope without the spot-check handoff.
+2. **Output exactly one** handoff block using the template below (same headings and structure). Adapt the slice number, goal, and file list to **this** slice.
+3. **Wait** for the user to paste the external reviewer’s feedback. If they report **BLOCKERS**, fix them before moving on. If **PASS** (or blockers resolved), the user may authorize the next slice.
+
+## What to attach (2–4 files)
+
+Prioritise **Repositories**, **Services**, **core Controllers**, migration/bootstrap touchpoints that affect `entryTable()` / satellite rules. **Exclude** boilerplate, trivial CSS, and thin view shells unless the slice’s risk is entirely in the view.
+
+## Output template (copy verbatim structure)
+
+```markdown
+### 🛑 GEMINI SPOT-CHECK REQUIRED
+
+**Files to copy to Gemini:**
+- `seismo_0.5/...` (2–4 paths)
+
+**Prompt to copy to Gemini:**
+
+"I just completed Slice [X] of the Seismo 0.5 consolidation. My goal was to [one short sentence].
+
+Please act as the **Senior Architectural Reviewer** and check the attached files against our core rules:
+
+1. Did the implementation respect **`entryTable()`** and **satellite / mothership** rules where entry-source tables are queried? Are scoring/config tables local (never wrapped with mothership DB)?
+2. Is the **fetch/persist boundary** respected (**Repositories = SQL**; Fetchers/Services **no SQL**; controllers orchestrate only)?
+3. **Vanilla PHP 8.2** — no unauthorized dependencies or frameworks beyond what the slice allows?
+4. Do **repositories return raw data** (no HTML escaping in the repo layer)?
+
+**Files attached:**
+- [repeat the same 2–4 paths]"
+```
+
+## After the user returns feedback
+
+- **BLOCKERS** → address in code/docs, then re-run spot-check if the fix is non-trivial.
+- **PASS** → user may say to continue; only then start the **next** numbered slice per `docs/consolidation-plan.md`.
