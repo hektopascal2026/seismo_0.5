@@ -65,7 +65,9 @@ $accent   = seismoBrandAccent();
                 <button class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button>
             </div>
 
-            <?php if ($allItems !== []): ?>
+            <?php if ($dashboardError !== null): ?>
+                <?php // Error banner above already explains the situation — no empty-state. ?>
+            <?php elseif ($allItems !== []): ?>
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
                 <div class="empty-state">

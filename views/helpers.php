@@ -70,15 +70,15 @@ if (!function_exists('seismo_feed_item_resolved_link')) {
     }
 }
 
-if (!function_exists('highlightSearchTerm')) {
+if (!function_exists('seismo_highlight_search_term')) {
     /**
      * Wrap matches of $searchQuery in a <mark> while escaping everything else.
      *
      * Slice 1 doesn't expose search UI, but the partial calls this function
      * in its "search active" branch. Ship a working implementation now so the
-     * partial stays byte-identical once search returns in a later slice.
+     * partial stays functionally identical once search returns in Slice 1.5.
      */
-    function highlightSearchTerm(?string $text, string $searchQuery): string
+    function seismo_highlight_search_term(?string $text, string $searchQuery): string
     {
         $text = (string)$text;
         if ($searchQuery === '' || $text === '') {
@@ -95,13 +95,13 @@ if (!function_exists('highlightSearchTerm')) {
     }
 }
 
-if (!function_exists('getCalendarEventTypeLabel')) {
+if (!function_exists('seismo_calendar_event_type_label')) {
     /**
      * Friendly label for a Leg (calendar_events) event type. Input values
      * come straight from the Parlament.ch OData feed, which is inconsistent
      * about diacritics ("Geschäft" vs "Geschaeft") — both variants map here.
      */
-    function getCalendarEventTypeLabel(?string $type): string
+    function seismo_calendar_event_type_label(?string $type): string
     {
         return match ($type) {
             'session'                                      => 'Session',
@@ -125,11 +125,11 @@ if (!function_exists('getCalendarEventTypeLabel')) {
     }
 }
 
-if (!function_exists('getCouncilLabel')) {
+if (!function_exists('seismo_council_label')) {
     /**
      * Expand a council code from Parlament.ch into a readable label.
      */
-    function getCouncilLabel(?string $code): string
+    function seismo_council_label(?string $code): string
     {
         return match ($code) {
             'NR'    => 'Nationalrat',

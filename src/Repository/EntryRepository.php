@@ -49,7 +49,17 @@ final class EntryRepository
      */
     public const MAX_LIMIT = 200;
 
+    /**
+     * Columns fetchEmails() will try to use for newest-first ordering, in
+     * preference order. The subset that actually exists on the resolved email
+     * table is detected at query time — see resolveEmailDateColumns().
+     */
+    private const EMAIL_DATE_COLUMNS = ['date_received', 'date_utc', 'created_at', 'date_sent'];
+
     private ?string $cachedEmailTable = null;
+
+    /** @var array<int, string>|null Cached per-instance — see resolveEmailDateColumns(). */
+    private ?array $cachedEmailDateColumns = null;
 
     public function __construct(private PDO $pdo)
     {
@@ -57,6 +67,19 @@ final class EntryRepository
 
     /**
      * Merged newest-first timeline across every entry family.
+     *
+     * **Paging caveat.** Per-source fetches are capped at `$limit + $offset`
+     * each, so `$offset` is *valid* (the merged slice is well-defined at the
+     * head) but not *deep-page-safe* under heavy skew. If one family dumps
+     * its whole per-source window into the most recent day while a quieter
+     * family has rows further back, a caller asking for a deep offset will
+     * be missing interleaved rows from the quieter family that exist but
+     * weren't fetched.
+     *
+     * Slice 1 has no pagination UI, so `DashboardController` clamps
+     * `MAX_OFFSET = 0` in practice. When paging UI returns we'll switch to
+     * cursor-based paging (e.g. `?since_id=<id>` per family) rather than
+     * offset, which side-steps the skew problem entirely.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -67,7 +90,8 @@ final class EntryRepository
 
         // Per-source fetch size. Taking $limit + $offset from each source
         // guarantees we have enough rows to slice a valid offset/limit window
-        // from the merged result, even when one source dominates the head.
+        // at the head. See the paging caveat above for why deep offsets are
+        // not safe under heavy skew.
         $perSource = $limit + $offset;
 
         $items = [];
@@ -144,8 +168,27 @@ final class EntryRepository
         if ($table === null) {
             return [];
         }
+        // 0.4 shipped two email schemas (`emails` and `fetched_emails`) with
+        // different date column sets. Build the ORDER BY from whichever of
+        // EMAIL_DATE_COLUMNS the resolved table actually has, so an installer
+        // running the older `emails` shape doesn't 500 on a missing
+        // `date_received`. Slice 4's email unification retires this.
+        $dateCols = $this->resolveEmailDateColumns($table);
+        if ($dateCols === []) {
+            // No recognised date column — fall back to id DESC. Ugly but
+            // stable; the email unification migration resolves this properly.
+            $orderBy = 'ORDER BY id DESC';
+        } elseif (count($dateCols) === 1) {
+            $orderBy = 'ORDER BY `' . $dateCols[0] . '` DESC';
+        } else {
+            $coalesce = implode(
+                ', ',
+                array_map(static fn (string $c) => '`' . $c . '`', $dateCols)
+            );
+            $orderBy = 'ORDER BY COALESCE(' . $coalesce . ') DESC';
+        }
         $sql = 'SELECT * FROM ' . entryTable($table) . '
-                ORDER BY COALESCE(date_received, date_utc, created_at, date_sent) DESC
+                ' . $orderBy . '
                 LIMIT ' . (int)$limit;
         return $this->selectOrEmpty($sql);
     }
@@ -282,18 +325,28 @@ final class EntryRepository
         if ($items === []) {
             return;
         }
+        $pairs = $this->collectEntryKeys($items);
+        if ($pairs === []) {
+            return;
+        }
+        // Row-value IN: pulls only the scores we actually need instead of
+        // scanning entry_scores end-to-end. entry_scores is PK'd on
+        // (entry_type, entry_id), so MariaDB uses the index directly.
+        [$placeholders, $flat] = $this->rowValueInClause($pairs);
+        $sql = 'SELECT entry_type, entry_id, relevance_score, predicted_label,
+                       explanation, score_source
+                FROM entry_scores
+                WHERE (entry_type, entry_id) IN (' . $placeholders . ')';
         try {
-            $stmt = $this->pdo->query(
-                'SELECT entry_type, entry_id, relevance_score, predicted_label,
-                        explanation, score_source
-                 FROM entry_scores'
-            );
-            $map = [];
-            foreach ($stmt->fetchAll() as $row) {
-                $map[$row['entry_type'] . ':' . $row['entry_id']] = $row;
-            }
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($flat);
+            $rows = $stmt->fetchAll();
         } catch (PDOException $e) {
             return;
+        }
+        $map = [];
+        foreach ($rows as $row) {
+            $map[$row['entry_type'] . ':' . $row['entry_id']] = $row;
         }
         foreach ($items as &$item) {
             $key = $item['entry_type'] . ':' . $item['entry_id'];
@@ -312,24 +365,78 @@ final class EntryRepository
         if ($items === []) {
             return;
         }
+        $pairs = $this->collectEntryKeys($items);
+        if ($pairs === []) {
+            return;
+        }
+        [$placeholders, $flat] = $this->rowValueInClause($pairs);
+        $sql = 'SELECT entry_type, entry_id
+                FROM entry_favourites
+                WHERE (entry_type, entry_id) IN (' . $placeholders . ')';
         try {
-            $stmt = $this->pdo->query(
-                'SELECT entry_type, entry_id FROM entry_favourites'
-            );
-            $map = [];
-            foreach ($stmt->fetchAll() as $row) {
-                $map[$row['entry_type'] . ':' . $row['entry_id']] = true;
-            }
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($flat);
+            $rows = $stmt->fetchAll();
         } catch (PDOException $e) {
             return;
         }
+        $set = [];
+        foreach ($rows as $row) {
+            $set[$row['entry_type'] . ':' . $row['entry_id']] = true;
+        }
         foreach ($items as &$item) {
             $key = $item['entry_type'] . ':' . $item['entry_id'];
-            if (isset($map[$key])) {
+            if (isset($set[$key])) {
                 $item['is_favourite'] = true;
             }
         }
         unset($item);
+    }
+
+    /**
+     * Pull (entry_type, entry_id) pairs out of the wrapped timeline, skipping
+     * rows with missing/invalid keys. Deduped so repeats (unlikely, but
+     * cheap to guard) don't bloat the IN clause.
+     *
+     * @param array<int, array<string, mixed>> $items
+     * @return array<int, array{0: string, 1: int}>
+     */
+    private function collectEntryKeys(array $items): array
+    {
+        $seen = [];
+        $pairs = [];
+        foreach ($items as $item) {
+            $type = (string)($item['entry_type'] ?? '');
+            $id   = (int)($item['entry_id'] ?? 0);
+            if ($type === '' || $id <= 0) {
+                continue;
+            }
+            $key = $type . ':' . $id;
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $pairs[] = [$type, $id];
+        }
+        return $pairs;
+    }
+
+    /**
+     * Build a "(?, ?), (?, ?), ..." placeholder string and the flat parameter
+     * array for a row-value IN clause.
+     *
+     * @param array<int, array{0: string, 1: int}> $pairs
+     * @return array{0: string, 1: array<int, mixed>}
+     */
+    private function rowValueInClause(array $pairs): array
+    {
+        $placeholders = implode(', ', array_fill(0, count($pairs), '(?, ?)'));
+        $flat = [];
+        foreach ($pairs as [$type, $id]) {
+            $flat[] = $type;
+            $flat[] = $id;
+        }
+        return [$placeholders, $flat];
     }
 
     // ------------------------------------------------------------------
@@ -344,6 +451,12 @@ final class EntryRepository
      * Slice 4 unifies this. Until then, we enumerate the DB once per request
      * and pick whichever table exists. In satellite mode we enumerate the
      * mothership schema.
+     *
+     * TODO (deferred optimisation): the resolved name is stable across
+     * deploys. Stash it in magnitu_config (key `resolved_email_table`) the
+     * first time it's computed so subsequent requests skip the SHOW TABLES
+     * round-trip. Tiny; not worth doing before Slice 4's email unification
+     * removes the need entirely.
      *
      * Returns null when no plausible email table is present so the email
      * family quietly drops out of the timeline.
@@ -378,6 +491,52 @@ final class EntryRepository
         }
         $this->cachedEmailTable = '';
         return null;
+    }
+
+    /**
+     * Subset of EMAIL_DATE_COLUMNS that physically exist on the resolved
+     * email table, in declaration order. Queried once per request from
+     * INFORMATION_SCHEMA so the `emails` vs `fetched_emails` column split
+     * doesn't 500 the dashboard.
+     *
+     * In satellite mode we look up the mothership schema via
+     * entryDbSchemaExpr() so we see the mothership's columns, not the
+     * local (scoring-only) schema.
+     *
+     * @return array<int, string>
+     */
+    private function resolveEmailDateColumns(string $table): array
+    {
+        if ($this->cachedEmailDateColumns !== null) {
+            return $this->cachedEmailDateColumns;
+        }
+        $placeholders = implode(', ', array_fill(0, count(self::EMAIL_DATE_COLUMNS), '?'));
+        $sql = 'SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = ' . entryDbSchemaExpr() . '
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME IN (' . $placeholders . ')';
+        $params = array_merge([$table], self::EMAIL_DATE_COLUMNS);
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            $present = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (PDOException $e) {
+            // INFORMATION_SCHEMA is always readable on MariaDB, so this
+            // shouldn't fire. Fall back to the full candidate list — if a
+            // column doesn't exist we'd previously 500; now we still might
+            // if the fallback is wrong. Better than silently dropping all
+            // email rows, and the whole path dies in Slice 4 anyway.
+            return $this->cachedEmailDateColumns = self::EMAIL_DATE_COLUMNS;
+        }
+        $presentSet = array_flip(array_map('strval', $present));
+        $ordered = [];
+        foreach (self::EMAIL_DATE_COLUMNS as $col) {
+            if (isset($presentSet[$col])) {
+                $ordered[] = $col;
+            }
+        }
+        return $this->cachedEmailDateColumns = $ordered;
     }
 
     private function clampLimit(int $limit): int

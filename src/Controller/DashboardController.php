@@ -22,6 +22,17 @@ final class DashboardController
     /** Default timeline size on first paint. Kept conservative for shared hosts. */
     private const DEFAULT_LIMIT = 30;
 
+    /**
+     * Deep-paging guard. EntryRepository's per-source over-fetch produces a
+     * valid merged window at the head but isn't deep-page-safe under heavy
+     * skew (see the paging caveat on EntryRepository::getLatestTimeline).
+     * Slice 1 ships no pagination UI, so we clamp `?offset=N` to 0 rather
+     * than letting scripts/crawlers probe a misleading deep-paging path.
+     * When pagination returns we'll switch to cursor-based paging (per-
+     * family `since_id`), which side-steps the skew problem.
+     */
+    private const MAX_OFFSET = 0;
+
     public function show(): void
     {
         $limit  = $this->clampLimit($_GET['limit']  ?? null);
@@ -71,6 +82,9 @@ final class DashboardController
     private function clampOffset(mixed $raw): int
     {
         $n = (int)$raw;
-        return $n < 0 ? 0 : $n;
+        if ($n <= 0) {
+            return 0;
+        }
+        return $n > self::MAX_OFFSET ? self::MAX_OFFSET : $n;
     }
 }

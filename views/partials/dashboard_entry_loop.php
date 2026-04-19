@@ -1,4 +1,16 @@
 <?php
+/**
+ * Dashboard card-loop partial — the polymorphic timeline renderer.
+ *
+ * DO NOT "TIDY" THIS FILE. It ports from 0.4 with one deliberate deviation:
+ * the three helper calls were renamed to the `seismo_*` prefix (see
+ * views/helpers.php). Everything else — including the use of htmlspecialchars()
+ * instead of the global e() helper — is retained verbatim. The consistent
+ * card layout across feed / email / Lex / Leg entry types is the product
+ * achievement this partial defends; every style, class name, and branch here
+ * was ground out against real content and should not be "modernised" casually.
+ * Changes here must be matched to a consolidation-plan.md slice.
+ */
 $searchQuery = $searchQuery ?? '';
 if (!isset($showFavourites)) {
     $showFavourites = true;
@@ -73,14 +85,14 @@ $feedLoopPrevDayKey = null;
                                 <?php if ($itemUrl !== ''): ?>
                                     <a href="<?= htmlspecialchars($itemUrl) ?>" target="_blank" rel="noopener">
                                         <?php if (!empty($searchQuery)): ?>
-                                            <?= highlightSearchTerm($item['title'], $searchQuery) ?>
+                                            <?= seismo_highlight_search_term($item['title'], $searchQuery) ?>
                                         <?php else: ?>
                                             <?= htmlspecialchars($item['title']) ?>
                                         <?php endif; ?>
                                     </a>
                                 <?php else: ?>
                                     <?php if (!empty($searchQuery)): ?>
-                                        <?= highlightSearchTerm($item['title'], $searchQuery) ?>
+                                        <?= seismo_highlight_search_term($item['title'], $searchQuery) ?>
                                     <?php else: ?>
                                         <?= htmlspecialchars($item['title']) ?>
                                     <?php endif; ?>
@@ -90,7 +102,7 @@ $feedLoopPrevDayKey = null;
                                 <div class="entry-content entry-preview">
                                     <?php 
                                         if (!empty($searchQuery)) {
-                                            echo highlightSearchTerm($contentPreview, $searchQuery);
+                                            echo seismo_highlight_search_term($contentPreview, $searchQuery);
                                         } else {
                                             echo htmlspecialchars($contentPreview);
                                         }
@@ -247,7 +259,7 @@ $feedLoopPrevDayKey = null;
                             <h3 class="entry-title">
                                 <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener">
                                     <?php if (!empty($searchQuery)): ?>
-                                        <?= highlightSearchTerm($lexItem['title'], $searchQuery) ?>
+                                        <?= seismo_highlight_search_term($lexItem['title'], $searchQuery) ?>
                                     <?php else: ?>
                                         <?= htmlspecialchars($lexItem['title']) ?>
                                     <?php endif; ?>
@@ -287,8 +299,8 @@ $feedLoopPrevDayKey = null;
                     <?php elseif ($itemWrapper['type'] === 'calendar'): ?>
                         <?php $calEvent = $itemWrapper['data']; ?>
                         <?php
-                            $calTypeLabel = getCalendarEventTypeLabel($calEvent['event_type'] ?? '');
-                            $calCouncil = getCouncilLabel($calEvent['council'] ?? '');
+                            $calTypeLabel = seismo_calendar_event_type_label($calEvent['event_type'] ?? '');
+                            $calCouncil = seismo_council_label($calEvent['council'] ?? '');
                             $calUrl = $calEvent['url'] ?? '#';
                             $calEventDate = $calEvent['event_date'] ?? null;
                             $calDaysUntil = $calEventDate ? (int)((strtotime($calEventDate) - strtotime('today')) / 86400) : null;
@@ -382,7 +394,7 @@ $feedLoopPrevDayKey = null;
                             </div>
                             <h3 class="entry-title">
                                 <?php if (!empty($searchQuery)): ?>
-                                    <?= highlightSearchTerm($subject, $searchQuery) ?>
+                                    <?= seismo_highlight_search_term($subject, $searchQuery) ?>
                                 <?php else: ?>
                                     <?= htmlspecialchars($subject) ?>
                                 <?php endif; ?>
@@ -390,7 +402,7 @@ $feedLoopPrevDayKey = null;
                             <div class="entry-content entry-preview">
                                 <?php 
                                     if (!empty($searchQuery)) {
-                                        echo highlightSearchTerm($bodyPreview, $searchQuery);
+                                        echo seismo_highlight_search_term($bodyPreview, $searchQuery);
                                     } else {
                                         echo htmlspecialchars($bodyPreview);
                                     }
