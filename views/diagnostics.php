@@ -12,6 +12,7 @@
  *     next_allowed: ?\DateTimeImmutable,
  *     is_throttled: bool,
  * }> $status
+ * @var array<string, array<string, mixed>> $coreStatus
  * @var ?string $loadError
  * @var ?array{id: string, count: int, error: ?string, items: list<array<string, mixed>>} $testResult
  * @var string $basePath
@@ -106,6 +107,59 @@ $statusBg = static function (?array $row): string {
                 <button type="submit" class="btn btn-primary"<?= $satellite ? ' disabled' : '' ?>>Refresh all now</button>
             </form>
         </div>
+
+        <?php if ($coreStatus !== []): ?>
+        <div class="latest-entries-section" style="margin-bottom: 24px;">
+            <h2 class="section-title">Core fetchers (<?= count($coreStatus) ?>)</h2>
+            <p style="margin: 0 0 12px; color: #555;">RSS, scraper, and mail runs share <code>plugin_run_log</code> under synthetic ids (<code>core:*</code>). They run automatically with “Refresh all now” and CLI cron.</p>
+            <?php foreach ($coreStatus as $id => $s): ?>
+                <?php
+                    $bg = $statusBg($s['last']);
+                    $lastStatus = $s['last']['status'] ?? 'never run';
+                    $lastWhen   = $s['last'] !== null ? seismo_format_utc($s['last']['run_at']) : null;
+                    $nextWhen   = $s['next_allowed'] !== null ? seismo_format_utc($s['next_allowed']) : null;
+                ?>
+                <div class="entry-card" style="background-color: <?= e($bg) ?>;">
+                    <div class="entry-header">
+                        <span class="entry-tag" style="background-color: #fff;">
+                            <strong><?= e($s['label']) ?></strong>
+                            <span style="color:#555;">(<?= e($s['id']) ?>)</span>
+                        </span>
+                        <span class="entry-tag" style="background-color: #f5f5f5;">family: <?= e((string)$s['entry_type']) ?></span>
+                        <span class="entry-tag" style="background-color: #f5f5f5;">
+                            throttle: <?= $s['min_interval'] > 0 ? e((string)round($s['min_interval'] / 60)) . ' min' : 'none' ?>
+                        </span>
+                        <span class="entry-tag" style="background-color: #fff; border-color: #000;">last: <?= e($lastStatus) ?></span>
+                        <?php if ($s['is_throttled']): ?>
+                            <span class="entry-tag" style="background-color: #fff3cd;">throttled</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="entry-content" style="margin-top: 8px; font-family: monospace; font-size: 0.9em;">
+                        <?php if ($s['last'] === null): ?>
+                            Never run.
+                        <?php else: ?>
+                            last_run: <?= e((string)$lastWhen) ?>
+                            · items: <?= (int)$s['last']['item_count'] ?>
+                            · duration: <?= (int)$s['last']['duration_ms'] ?> ms
+                            <?php if ($nextWhen !== null): ?>
+                                · next allowed: <?= e($nextWhen) ?>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                        <?php if (!empty($s['last']['error_message'])): ?>
+                            <div style="margin-top: 6px; color: #900;">error: <?= e((string)$s['last']['error_message']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="entry-actions" style="margin-top: 10px;">
+                        <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" style="display:inline;">
+                            <?= CsrfToken::field() ?>
+                            <input type="hidden" name="plugin_id" value="<?= e($s['id']) ?>">
+                            <button type="submit" class="btn btn-secondary"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
+                        </form>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
 
         <div class="latest-entries-section">
             <h2 class="section-title">Plugins (<?= count($status) ?>)</h2>

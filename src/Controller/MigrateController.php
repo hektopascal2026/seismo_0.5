@@ -51,6 +51,12 @@ final class MigrateController
                 return;
             }
 
+            if (isSatellite()) {
+                http_response_code(403);
+                echo "Migrations only run on the mothership. This instance is in satellite mode.\n";
+                return;
+            }
+
             $runner->run(static function (string $line): void {
                 echo $line;
             });

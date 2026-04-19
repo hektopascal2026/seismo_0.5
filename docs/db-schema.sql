@@ -15,23 +15,21 @@
 --
 -- Entry-type model
 -- ----------------
--- Five content tables act as "entries": feed_items, emails (or fetched_emails,
--- see below), lex_items, calendar_events, plus SRF srf_items (optional add-on).
+-- Five content tables act as "entries": feed_items, emails (unified IMAP + web),
+-- lex_items, calendar_events, plus SRF srf_items (optional add-on).
 -- Scoring/label/favourite tables reference them via (entry_type, entry_id)
 -- where entry_type ∈ { feed_item, email, lex_item, calendar_event }.
 -- NOTE: srf_items is not yet wired into the entry_type ENUMs.
 --
--- Email table naming
--- ------------------
--- Historically the web app uses `emails`, but the CLI mail fetcher
--- (fetcher/mail/fetch_mail.php) writes to `fetched_emails` with a different
--- schema. `getEmailTableName()` in config.php resolves which one to read at
--- runtime. Both are included below; a fresh install should pick one.
+-- Email table (unified)
+-- ---------------------
+-- Schema v19 (`Migration003EmailsUnified`) merges the former `fetched_emails`
+-- shape into `emails`. `getEmailTableName()` in bootstrap resolves to `emails`.
 --
 -- Satellite mode
 -- --------------
 -- When SEISMO_MOTHERSHIP_DB is set, entry-source tables (feeds, feed_items,
--- lex_items, calendar_events, sender_tags, the email table) live in the
+-- scraper_configs, lex_items, calendar_events, sender_tags, emails) live in the
 -- mothership DB and are read cross-DB. Scoring tables (entry_scores,
 -- magnitu_config, magnitu_labels, entry_favourites) are always local.
 -- =============================================================================
@@ -87,11 +85,20 @@ CREATE TABLE IF NOT EXISTS feed_items (
 
 
 -- -----------------------------------------------------------------------------
--- Emails — web-app variant (used by Seismo’s email import / display path).
--- entry_type='email' in scoring tables refers to rows in this (or fetched_emails).
+-- Emails — unified web + IMAP (schema v19; Migration003EmailsUnified).
+-- entry_type='email' in scoring tables refers to rows here.
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS emails (
-    id            INT AUTO_INCREMENT PRIMARY KEY,
+    id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    imap_uid      BIGINT UNSIGNED DEFAULT NULL,
+    message_id    VARCHAR(512) DEFAULT NULL,
+    from_addr     TEXT NULL,
+    to_addr       TEXT NULL,
+    cc_addr       TEXT NULL,
+    date_utc      DATETIME DEFAULT NULL,
+    body_text     LONGTEXT NULL,
+    body_html     LONGTEXT NULL,
+    raw_headers   LONGTEXT NULL,
     subject       VARCHAR(500) DEFAULT NULL,
     from_email    VARCHAR(255) DEFAULT NULL,
     from_name     VARCHAR(255) DEFAULT NULL,
@@ -100,35 +107,13 @@ CREATE TABLE IF NOT EXISTS emails (
     date_received DATETIME  DEFAULT NULL,
     date_sent     DATETIME  DEFAULT NULL,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_emails_imap_uid (imap_uid),
     INDEX idx_created_at    (created_at),
     INDEX idx_from_email    (from_email),
     INDEX idx_date_received (date_received)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-
--- -----------------------------------------------------------------------------
--- Emails — CLI fetcher variant (fetcher/mail/fetch_mail.php).
--- Different column set; table name is configurable via magnitu_config.mail_db_table
--- (default 'fetched_emails'). Resolved at runtime by getEmailTableName().
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS fetched_emails (
-    id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    imap_uid    BIGINT UNSIGNED NOT NULL,
-    message_id  VARCHAR(255) NULL,
-    from_addr   TEXT NULL,
-    to_addr     TEXT NULL,
-    cc_addr     TEXT NULL,
-    subject     TEXT NULL,
-    date_utc    DATETIME NULL,
-    body_text   LONGTEXT NULL,
-    body_html   LONGTEXT NULL,
-    raw_headers LONGTEXT NULL,
-    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uniq_imap_uid (imap_uid),
-    KEY idx_message_id (message_id(190))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
+-- fetched_emails: legacy table removed at schema v19 — merged into `emails` above.
 
 -- -----------------------------------------------------------------------------
 -- Per-sender tagging / quieting for email entries.
@@ -386,12 +371,15 @@ CREATE TABLE IF NOT EXISTS plugin_run_log (
 --  1. Schema is applied procedurally in initDatabase() with try/catch around
 --     every ALTER. There is no migration history table beyond
 --     magnitu_config.schema_version (integer).
---  2. Two email tables coexist (`emails`, `fetched_emails`). Callers resolve
---     the live one via getEmailTableName(). A consolidation pass is desirable.
+--  2. Email storage is unified in `emails` (Slice 4 migration 003). Legacy
+--     `fetched_emails` is removed after merge. `getEmailTableName()` in
+--     bootstrap.php returns `emails`.
 --  3. `entry_scores.entry_id` / `magnitu_labels.entry_id` / `entry_favourites.entry_id`
 --     are soft references — no FKs, because entry_id points into one of four
 --     different parent tables depending on entry_type. Orphan rows are possible
 --     (e.g. after feed_items deletion cascades from feeds). Consider a cleanup job.
+--     Migration 003 widens `emails.id` to BIGINT UNSIGNED; those scoring tables
+--     still use INT for entry_id — fine until an email id exceeds 2^31−1 (unlikely).
 --  4. `srf_items` uses INT UNSIGNED for id while all other tables use INT
 --     (signed) — minor inconsistency.
 --  5. `calendar_event` is already in the entry_type ENUMs but is deliberately

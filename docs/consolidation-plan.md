@@ -50,7 +50,7 @@ When Core fetchers feed `RefreshAllService`, normalise **before** the repository
 ### Guardrails to keep in Cursor rules
 
 1. **Move off global procedural handlers.** `handleLexPage()` → `LexController::show()`; DB reads → `LexRepository`; HTTP → `LexFetcherService`.
-2. **`entryTable()` is sacred.** Any query touching `feed_items`, `feeds`, `emails` (unified), `sender_tags`, `email_subscriptions`, `lex_items`, `calendar_events` (Leg) **must** go through it. `entry_scores`, `magnitu_config`, `magnitu_labels` are always local.
+2. **`entryTable()` is sacred.** Any query touching `feed_items`, `feeds`, `scraper_configs`, `emails` (unified), `sender_tags`, `email_subscriptions`, `lex_items`, `calendar_events` (Leg) **must** go through it. `entry_scores`, `magnitu_config`, `magnitu_labels` are always local.
 3. **Decouple fetch from persist.** Fetchers return data; Repositories do `INSERT ... ON DUPLICATE KEY UPDATE`.
 4. **Slim `config.php`.** Scoring belongs in a `ScoringService`. DDL belongs in a CLI migration, not on every request.
 5. **Unify email schema.** Retire the older `emails` shape in favour of the `fetched_emails` structure (proper IMAP UID handling). Ship a one-time migration with a dry-run and clear backup guidance.
@@ -200,3 +200,9 @@ Recorded here so they don't get re-litigated:
 - **Plugin dry-run:** no interface change needed. `fetch()` is already pure-function by contract (plugins can't touch the DB). The diagnostics "Test" button just calls `fetch()` and renders the first N items without invoking a repository.
 - **Machine-readable export:** three commitments for Slice 5 — repositories return raw data (rule enforced from Slice 1), export is stateless (client passes `?since`), and a dedicated read-only API key keeps briefing scripts blast-radius-small. Stateful "already briefed" tracking is out of scope; we'd add it if a second consumer ever needs to coordinate, not speculatively.
 - **Shared-host hardening (a round of four):** UTC everywhere (PHP + MariaDB session pinned); every list-returning repo method is bounded (`$limit`/`$offset`, hardcoded max 200); every `upsertBatch` wraps a transaction with rollback-on-any-row-failure; Composer `vendor/autoload.php` is included by `bootstrap.php` before our own autoloader so plugins bringing vendor deps (EasyRdf, etc.) don't crash at startup.
+
+## Tracked follow-ups (post–Slice 4 hardening)
+
+- **Dashboard filter pills:** `EntryRepository::getFilterPillOptions()` runs three `SELECT DISTINCT` queries per request — acceptable for now; consider a ~1-minute cache (session or APCu) in Slice 6.
+- **Scraper / feed_items sort churn:** `FeedItemRepository::upsertFeedItems()` keeps the existing `published_date` when `content_hash` is unchanged so scraper re-runs do not float stale pages to the top of the dashboard.
+- **Diagnostics parity:** Core fetchers have per-id “Refresh now” on `?action=diagnostics` (same POST as plugins). A “Test fetch (no save)” path for RSS/scraper/mail is still deferred — not part of the `SourceFetcherInterface` test shape.

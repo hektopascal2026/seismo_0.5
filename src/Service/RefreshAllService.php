@@ -9,7 +9,9 @@ use DateTimeZone;
 use Seismo\Config\CalendarConfigStore;
 use Seismo\Config\LexConfigStore;
 use Seismo\Repository\CalendarEventRepository;
+use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\LexItemRepository;
+use Seismo\Repository\MagnituConfigRepository;
 use Seismo\Repository\PluginRunLogRepository;
 
 /**
@@ -27,18 +29,16 @@ use Seismo\Repository\PluginRunLogRepository;
  * plugin's {@see SourceFetcherInterface::getMinIntervalSeconds()} and skips
  * plugins whose last `ok` run in `plugin_run_log` is fresher than that.
  *
- * Throttle skips are written to stdout (visible in cron mail) but **not**
- * persisted to `plugin_run_log` — a 5-minute cron would otherwise write
- * ~288 rows/day/plugin of pure noise. User-initiated refresh paths call
- * with `$force = true` to bypass the throttle (the human is more important
- * than the rate limit in that case; they know they're hitting the upstream).
+ * Throttle skips use {@see PluginRunResult::throttleSkipped()} — they are **not**
+ * persisted to `plugin_run_log` (cron stdout only). User-initiated refresh paths
+ * call with `$force = true` to bypass the throttle.
  *
  * Rows ARE persisted for every non-throttle outcome (ok, error, skipped-because-
  * satellite, skipped-because-disabled-in-config). Those are the rows diagnostics
  * displays.
  *
- * Scope (Slice 3): plugin refreshes only. Core RSS/Mail retention, scraper,
- * and magnitu rescoring stay out of here — they graduate in later slices.
+ * Slice 4: {@see CoreRunner} runs first (RSS/Substack, scraper, mail stub),
+ * then registered plugins. Same `runAll()` entry point for web + CLI cron.
  */
 final class RefreshAllService
 {
@@ -49,18 +49,19 @@ final class RefreshAllService
         private readonly CalendarEventRepository $calendarEvents,
         private readonly LexConfigStore $lexConfig,
         private readonly CalendarConfigStore $calendarConfig,
+        private readonly CoreRunner $coreRunner,
     ) {
     }
 
     /**
-     * Run every registered plugin.
+     * Run core fetchers, then every registered plugin.
      *
      * @param bool $force If true, ignore the per-plugin throttle (web "Refresh all").
      * @return array<string, PluginRunResult>
      */
     public function runAll(bool $force = false): array
     {
-        $results = [];
+        $results = $this->coreRunner->runAll($force);
         foreach ($this->registry->all() as $id => $plugin) {
             $results[$id] = $this->runOne($plugin, $force);
         }
@@ -132,11 +133,8 @@ final class RefreshAllService
 
         if (!$force && $this->isThrottled($plugin)) {
             $msg = 'Throttled — last successful run is fresher than ' . $plugin->getMinIntervalSeconds() . 's.';
-            // Throttle skips are not persisted to plugin_run_log. Stdout for CLI is
-            // refresh_cron.php's responsibility (one line per plugin) — do not
-            // duplicate here or cron mail shows two lines per throttled plugin.
 
-            return PluginRunResult::skipped($msg);
+            return PluginRunResult::throttleSkipped($msg);
         }
 
         $block = $this->resolveConfigBlock($plugin);
@@ -205,6 +203,9 @@ final class RefreshAllService
 
     private function record(string $id, PluginRunResult $result, int $durationMs): void
     {
+        if (!$result->persistToPluginRunLog) {
+            return;
+        }
         try {
             $this->runLog->record($id, $result, $durationMs);
         } catch (\Throwable $e) {
@@ -213,17 +214,32 @@ final class RefreshAllService
     }
 
     /**
+     * Run a single core fetcher (`core:rss`, `core:scraper`, `core:mail`).
+     */
+    public function runCoreFetcher(string $coreId, bool $force = true): PluginRunResult
+    {
+        return $this->coreRunner->runOne($coreId, $force);
+    }
+
+    /**
      * Convenience factory so controllers and cron don't repeat the wiring.
      */
     public static function boot(\PDO $pdo): self
     {
+        $runLog = new PluginRunLogRepository($pdo);
+
         return new self(
             new PluginRegistry(),
-            new PluginRunLogRepository($pdo),
+            $runLog,
             new LexItemRepository($pdo),
             new CalendarEventRepository($pdo),
             new LexConfigStore(),
             new CalendarConfigStore(),
+            new CoreRunner(
+                new FeedItemRepository($pdo),
+                $runLog,
+                new MagnituConfigRepository($pdo),
+            ),
         );
     }
 }

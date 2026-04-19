@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\PluginRunLogRepository;
+use Seismo\Service\CoreRunner;
 use Seismo\Service\PluginRegistry;
 use Seismo\Service\RefreshAllService;
 
@@ -37,20 +38,47 @@ final class DiagnosticsController
         $registry = new PluginRegistry();
         $plugins  = $registry->all();
 
-        $status   = [];
-        $loadError = null;
+        $coreMeta = [
+            CoreRunner::ID_RSS     => ['label' => 'RSS & Substack', 'min_interval' => 1800, 'entry_type' => 'feed_items'],
+            CoreRunner::ID_SCRAPER => ['label' => 'Scraper pages', 'min_interval' => 3600, 'entry_type' => 'feed_items'],
+            CoreRunner::ID_MAIL    => ['label' => 'Mail (IMAP)', 'min_interval' => 900, 'entry_type' => 'emails'],
+        ];
+
+        $status     = [];
+        $coreStatus = [];
+        $loadError  = null;
 
         try {
-            $pdo = getDbConnection();
-            $log = new PluginRunLogRepository($pdo);
-            $latest = $log->latestPerPlugin(array_keys($plugins));
+            $pdo    = getDbConnection();
+            $log    = new PluginRunLogRepository($pdo);
+            $latest = $log->latestPerPlugin(array_merge(array_keys($coreMeta), array_keys($plugins)));
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics: ' . $e->getMessage());
-            $loadError = 'Could not read plugin_run_log. Has migration v18 run yet? (?action=migrate&key=…)';
+            $loadError = 'Could not read plugin_run_log. Has the latest migration run yet? (?action=migrate&key=…)';
             $latest = [];
         }
 
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+        foreach ($coreMeta as $id => $meta) {
+            $row = $latest[$id] ?? null;
+            $minInterval = (int)$meta['min_interval'];
+            $nextAllowed = null;
+            if ($row !== null && $row['status'] === 'ok' && $minInterval > 0) {
+                $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
+            }
+            $coreStatus[$id] = [
+                'id'           => $id,
+                'label'        => $meta['label'],
+                'entry_type'   => $meta['entry_type'],
+                'config_key'   => '—',
+                'min_interval' => $minInterval,
+                'last'         => $row,
+                'next_allowed' => $nextAllowed,
+                'is_throttled' => $nextAllowed !== null && $nextAllowed > $now,
+                'is_core'      => true,
+            ];
+        }
 
         foreach ($plugins as $id => $plugin) {
             $row = $latest[$id] ?? null;
@@ -70,6 +98,7 @@ final class DiagnosticsController
                 'last'          => $row,
                 'next_allowed'  => $nextAllowed,
                 'is_throttled'  => $nextAllowed !== null && $nextAllowed > $now,
+                'is_core'       => false,
             ];
         }
 
@@ -131,8 +160,10 @@ final class DiagnosticsController
         }
 
         $id = trim((string)($_POST['plugin_id'] ?? ''));
-        if ($id === '' || !(new PluginRegistry())->has($id)) {
-            $_SESSION['error'] = 'Unknown plugin id.';
+        $coreIds = [CoreRunner::ID_RSS, CoreRunner::ID_SCRAPER, CoreRunner::ID_MAIL];
+        $registry = new PluginRegistry();
+        if ($id === '' || (!in_array($id, $coreIds, true) && !$registry->has($id))) {
+            $_SESSION['error'] = 'Unknown plugin or core fetcher id.';
             $this->redirectToDiagnostics();
 
             return;
@@ -140,7 +171,10 @@ final class DiagnosticsController
 
         try {
             $pdo = getDbConnection();
-            $result = RefreshAllService::boot($pdo)->runPlugin($id, true);
+            $refresh = RefreshAllService::boot($pdo);
+            $result = in_array($id, $coreIds, true)
+                ? $refresh->runCoreFetcher($id, true)
+                : $refresh->runPlugin($id, true);
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics refresh_plugin: ' . $e->getMessage());
             $_SESSION['error'] = 'Refresh ' . $id . ' failed: ' . $e->getMessage();

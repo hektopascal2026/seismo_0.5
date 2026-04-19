@@ -136,7 +136,9 @@ final class LexItemRepository
 
             return count($rows);
         } catch (\Throwable $e) {
-            $this->pdo->rollBack();
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
             throw $e;
         }
     }

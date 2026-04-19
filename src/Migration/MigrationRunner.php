@@ -9,12 +9,13 @@ declare(strict_types=1);
 namespace Seismo\Migration;
 
 use PDO;
+use RuntimeException;
 use Seismo\Repository\MagnituConfigRepository;
 
 final class MigrationRunner
 {
     /** Highest schema version shipped by built-in migrations. */
-    public const LATEST_VERSION = Migration002PluginRunLog::VERSION;
+    public const LATEST_VERSION = Migration003EmailsUnified::VERSION;
 
     private MagnituConfigRepository $magnituConfig;
 
@@ -42,11 +43,18 @@ final class MigrationRunner
      */
     public function run(callable $log): void
     {
+        if (isSatellite()) {
+            throw new RuntimeException(
+                'Migrations only run on the mothership. This instance has SEISMO_MOTHERSHIP_DB set (satellite mode); do not apply DDL to the local database.'
+            );
+        }
+
         $current = $this->getCurrentVersion();
 
         $migrations = [
-            Migration001BaseSchema::VERSION  => new Migration001BaseSchema(),
-            Migration002PluginRunLog::VERSION => new Migration002PluginRunLog(),
+            Migration001BaseSchema::VERSION   => new Migration001BaseSchema(),
+            Migration002PluginRunLog::VERSION  => new Migration002PluginRunLog(),
+            Migration003EmailsUnified::VERSION => new Migration003EmailsUnified(),
         ];
 
         ksort($migrations, SORT_NUMERIC);

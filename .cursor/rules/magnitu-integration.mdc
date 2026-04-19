@@ -1,0 +1,101 @@
+---
+description: Magnitu ML integration — API contract, satellite rules, 0.5 ports
+alwaysApply: true
+---
+
+# Magnitu Integration
+
+Seismo has a companion project called **Magnitu** (separate repo at `../../../magnitu/`). Magnitu is a local Python app that learns which entries are relevant via ML and pushes scores back to Seismo via API.
+
+The Magnitu HTTP surface **has not been ported to 0.5 yet** — it lives in 0.4 (`controllers/magnitu.php` on the reference instance at `/seismo-staging/`). The port lands in **Slice 5** (web surface) and **Slice 5a** (config unification: `magnitu_config` → `system_config`). Everything below is load-bearing: the contract must survive the port unchanged so Magnitu's `sync.py` keeps working against both 0.4 and 0.5 with zero changes.
+
+## API contract (Seismo is the server)
+
+Magnitu connects via these actions in `index.php`. All require `Authorization: Bearer <api_key>` header:
+
+- `GET ?action=magnitu_entries` — export entries (params: `since`, `type`, `limit`).
+- `POST ?action=magnitu_scores` — receive batch scores (body: `{scores: [...], model_version}`).
+- `GET/POST ?action=magnitu_recipe` — GET returns recipe; POST receives new recipe + triggers re-scoring.
+- `GET ?action=magnitu_status` — connectivity check + score coverage stats.
+
+The `magnitu_*` prefix is whitelisted by `AuthGate::check()` so the Bearer-token endpoints are not redirected through the session login flow. See `auth-dormant-by-default.mdc`.
+
+In 0.5 these will be registered through the `Router` like every other action, pointing at `Seismo\Controller\MagnituController`. Bearer-token auth stays separate from the dormant web-admin session auth.
+
+## Entry format returned by `magnitu_entries`
+
+```json
+{
+  "entry_type": "feed_item|email|lex_item",
+  "entry_id": 123,
+  "title": "...", "description": "...", "content": "...",
+  "link": "...", "author": "...", "published_date": "...",
+  "source_name": "...", "source_category": "...", "source_type": "rss|substack|email|lex_eu|lex_ch"
+}
+```
+
+`calendar_event` rows (Leg) are deliberately excluded — see `calendar-events.mdc`.
+
+## Score format expected by `magnitu_scores`
+
+```json
+{
+  "entry_type": "feed_item",
+  "entry_id": 123,
+  "relevance_score": 0.87,
+  "predicted_label": "investigation_lead",
+  "explanation": {"top_features": [...], "confidence": 0.87, "prediction": "investigation_lead"}
+}
+```
+
+## Labels
+
+`investigation_lead`, `important`, `background`, `noise`.
+
+## Key tables
+
+- `entry_scores` — local, per-instance. **Never** wrap with `entryTable()`.
+- `magnitu_labels` — local, per-instance. **Never** wrap with `entryTable()`.
+- `magnitu_config` — local key/value store. **To be renamed `system_config` in Slice 5a** (it has been misnamed since 0.3; it's always been a generic k/v store). Same-file rename: one migration, no data reshaping. The rules below still apply to the renamed table.
+
+## Shared styleguide
+
+Magnitu uses Seismo's styleguide (`views/styleguide.php` in 0.4; pending port to 0.5 as part of Slice 6). When building or updating Magnitu's UI, follow the same design system: colors, typography, button styles, card layout, expand / collapse patterns, etc.
+
+## Satellite mode (multi-profile groundwork)
+
+Seismo supports a **satellite mode** so a second, lightweight Seismo instance can serve a topic-specific Magnitu profile (e.g. "security", "digital policy") without independent scraping.
+
+### How it works
+
+- Set `SEISMO_MOTHERSHIP_DB` in the satellite's `config.local.php` to the mothership's MySQL database name (same server / user).
+- Entry-source tables (`feed_items`, `feeds`, `scraper_configs`, `lex_items`, `calendar_events`, `sender_tags`, and the resolved email table) are cross-DB read via `` `mothership_db`.tablename `` SQL references.
+- Scoring tables (`entry_scores`, `magnitu_config` / future `system_config`, `magnitu_labels`) are **always local** to each instance.
+- Plugin state tables (`plugin_run_log`, `entry_favourites`, any future plugin-owned sidecars) are **always local** — satellites don't run plugins, so these either stay empty or track the satellite's own local behaviour.
+- Each satellite has its own API key in its own `magnitu_config` table.
+- The mothership runs with `SEISMO_MOTHERSHIP_DB = ''` (default) — zero behaviour change.
+
+### Implementation touchpoints (0.5)
+
+- **`bootstrap.php`** (was 0.4's `config.php`): `entryTable(string $table)` wraps a table name with the DB qualifier when in satellite mode. `entryDbSchemaExpr()` returns the SQL schema expression for `INFORMATION_SCHEMA` queries. `getEmailTableName()` uses `SHOW TABLES FROM <mothership_db>` when in satellite mode.
+- **Repositories** are the only place `entryTable()` / `entryDbSchemaExpr()` appear. `EntryRepository`, `LexItemRepository`, `CalendarEventRepository`, and the future `FeedItemRepository` / `EmailRepository` all wrap every entry-source SELECT. Score / favourite / config / run-log writes remain on the local PDO and are never wrapped.
+- **`RefreshAllService`** short-circuits on satellite at both the master-cron boundary (`refresh_cron.php` exits 0) and per-plugin (`runOne()` returns a `skipped(satellite)` result). No plugin ever runs on a satellite.
+- **`LexItemRepository::upsertBatch/prune` and `CalendarEventRepository::upsertBatch/prune`** throw if `isSatellite()` is true — defence in depth, so any future caller that forgets the runner-level guard still can't corrupt the mothership's tables.
+- **Magnitu controller (Slice 5 port)**: all entry-table reads use `entryTable()` / `entryDbSchemaExpr()`. Score / config writes remain on the local PDO untouched.
+
+### Rules
+
+- **`entryTable()` and `entryDbSchemaExpr()` are only for entry-source tables.** Never use them for `entry_scores`, `magnitu_config` / `system_config`, `magnitu_labels`, `plugin_run_log`, `entry_favourites`, `feeds` config metadata (feed definitions live with the mothership; feed items do too — `entryTable('feeds')` is correct, but writes to the mothership's `feeds` from a satellite are forbidden).
+- **Clearest test:** if writing to this table from a satellite would corrupt the mothership, it's an entry-source table (use `entryTable()` for reads, forbid writes on satellite). If it's something each instance tracks independently (per-satellite API key, per-satellite labels, per-satellite cron log), it's local — never wrap.
+- The MySQL user for the satellite DB must have `SELECT` granted on the mothership database. The setup wizard is responsible for prompting this; see `docs/setup-wizard-notes.md`.
+- **Do NOT reuse the mothership API key** — generate a fresh one for each satellite.
+- The API contract (JSON formats, endpoint signatures) is identical between mothership and satellite. Magnitu does not need any changes to support satellites.
+
+## Rules when changing Seismo
+
+- Do NOT change the API response format without updating Magnitu's `sync.py`.
+- Do NOT rename `entry_type` values — Magnitu depends on: `feed_item`, `email`, `lex_item`. `calendar_event` exists in the ENUM but is excluded from the API; see `calendar-events.mdc`.
+- The recipe JSON format (`keywords`, `source_weights`, `classes`, `class_weights`) is a contract — changes require updating both the Seismo scoring code (currently 0.4 `scoreEntryWithRecipe()` in `config.php`; future `src/Core/Scoring/` in 0.5 per the Slice 5 plan) **and** `distiller.py` in Magnitu.
+- Config keys in `magnitu_config` (future `system_config`): `api_key`, `alert_threshold`, `sort_by_relevance`, `recipe_json`, `recipe_version`, `last_sync_at`.
+- When changing Seismo's styleguide or CSS, be aware that Magnitu's UI depends on the same design system.
+- When adding new entry-source table queries (e.g. a new content type), wrap them with `entryTable()` inside the owning repository so satellites stay in sync. Never do entry-source SQL outside a repository — see `core-plugin-architecture.mdc` ("Repositories return raw data").

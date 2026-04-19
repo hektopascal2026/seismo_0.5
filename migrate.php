@@ -53,6 +53,11 @@ if ($current >= MigrationRunner::LATEST_VERSION) {
     exit(0);
 }
 
+if (isSatellite()) {
+    fwrite(STDERR, "Migrations only run on the mothership. This instance is in satellite mode — skip migrate.php here.\n");
+    exit(4);
+}
+
 try {
     $runner->run(static function (string $line): void {
         echo $line;
