@@ -33,20 +33,53 @@ require_once __DIR__ . '/bootstrap.php';
 use Seismo\Service\RefreshAllService;
 use Seismo\Service\RetentionService;
 
+// Tee every cron line to both the original stream (so Plesk keeps
+// emailing the master cron output) AND a persistent log file on disk.
+// Plesk's notification emails truncate long output, so when the admin
+// wants the FULL tick (e.g. retention totals, post-run diagnostics),
+// they open `logs/refresh_cron.log` from Plesk File Manager and get
+// everything.
+//
+// Failure to open the file is non-fatal: cron continues printing to
+// stdout/stderr exactly like before. We never let logging get in the
+// way of the actual work.
+$seismoLogPath = SEISMO_ROOT . '/logs/refresh_cron.log';
+@mkdir(dirname($seismoLogPath), 0755, true);
+// Single-sidecar rotation: when the main log crosses 1 MB, move it to
+// `.1` (overwriting any previous rotation) and start fresh. Keeps disk
+// usage bounded without pulling in a logging library.
+if (is_file($seismoLogPath) && filesize($seismoLogPath) > 1048576) {
+    @rename($seismoLogPath, $seismoLogPath . '.1');
+}
+$seismoLogFh = @fopen($seismoLogPath, 'ab');
+
+/**
+ * Emit a line to the requested stream AND the persistent log file.
+ * Matches the pre-existing `fwrite(STDOUT|STDERR, …)` call sites one for
+ * one so the visible cron output and the exit semantics don't change.
+ */
+$log = static function (string $line, bool $err = false) use ($seismoLogFh): void {
+    fwrite($err ? STDERR : STDOUT, $line);
+    if (is_resource($seismoLogFh)) {
+        @fwrite($seismoLogFh, $line);
+    }
+};
+
 if (isSatellite()) {
-    fwrite(STDOUT, "[seismo] satellite mode — refresh_cron skipped.\n");
+    $log("[seismo] satellite mode — refresh_cron skipped.\n");
     exit(0);
 }
 
 try {
     $pdo = getDbConnection();
 } catch (\Throwable $e) {
-    fwrite(STDERR, '[seismo] DB connection failed: ' . $e->getMessage() . "\n");
+    $log('[seismo] DB connection failed: ' . $e->getMessage() . "\n", true);
     exit(1);
 }
 
 $start = microtime(true);
-fwrite(STDOUT, '[seismo] master cron tick @ ' . gmdate('Y-m-d\TH:i:s\Z') . "\n");
+$log('[seismo] master cron tick @ ' . gmdate('Y-m-d\TH:i:s\Z') . "\n");
+$log('[seismo] log file: ' . $seismoLogPath . "\n");
 
 $results = RefreshAllService::boot($pdo)->runAll(false);
 
@@ -65,7 +98,7 @@ foreach ($results as $id => $result) {
         $result->status === 'ok' ? ('count=' . $result->count) : '',
         $result->message !== null ? ' msg=' . $result->message : ''
     );
-    fwrite(STDOUT, $line . "\n");
+    $log($line . "\n");
 }
 
 // Retention: prune entry-source rows past their family's retention
@@ -76,25 +109,25 @@ foreach ($results as $id => $result) {
 try {
     $pruned = RetentionService::boot($pdo)->pruneAll();
     if ($pruned === []) {
-        fwrite(STDOUT, "[seismo] retention: no policies active (all families unlimited).\n");
+        $log("[seismo] retention: no policies active (all families unlimited).\n");
     } else {
         $total = array_sum($pruned);
         foreach ($pruned as $family => $n) {
-            fwrite(STDOUT, sprintf("[seismo] retention %-16s deleted=%d\n", $family, $n));
+            $log(sprintf("[seismo] retention %-16s deleted=%d\n", $family, $n));
         }
-        fwrite(STDOUT, "[seismo] retention: deleted {$total} row(s) total.\n");
+        $log("[seismo] retention: deleted {$total} row(s) total.\n");
     }
 } catch (\Throwable $e) {
-    fwrite(STDERR, '[seismo] retention failed: ' . $e->getMessage() . "\n");
+    $log('[seismo] retention failed: ' . $e->getMessage() . "\n", true);
     // Do not exit here — a retention failure should not mask an otherwise
     // successful plugin run. The error is logged via STDERR / error_log.
     error_log('Seismo retention cron: ' . $e->getMessage());
 }
 
 $duration = (int)((microtime(true) - $start) * 1000);
-fwrite(STDOUT, "[seismo] master cron done in {$duration}ms\n");
+$log("[seismo] master cron done in {$duration}ms\n");
 if ($errorCount > 0) {
-    fwrite(STDERR, "[seismo] master cron exiting with code 2 ({$errorCount} plugin error(s)).\n");
+    $log("[seismo] master cron exiting with code 2 ({$errorCount} plugin error(s)).\n", true);
     exit(2);
 }
 exit(0);
