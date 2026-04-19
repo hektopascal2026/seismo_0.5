@@ -121,6 +121,46 @@ $router->register(
     \Seismo\Controller\AuthController::class . '::logout',
     false
 );
+// Magnitu HTTP API — Bearer-authenticated against `magnitu_config.api_key`.
+// AuthGate whitelists these so dormant-by-default session auth doesn't
+// intercept them; BearerAuth inside the controller enforces the real gate.
+$router->register(
+    'magnitu_entries',
+    \Seismo\Controller\MagnituController::class . '::entries',
+    true
+);
+$router->register(
+    'magnitu_scores',
+    \Seismo\Controller\MagnituController::class . '::scores',
+    true
+);
+$router->register(
+    'magnitu_recipe',
+    \Seismo\Controller\MagnituController::class . '::recipe',
+    true
+);
+$router->register(
+    'magnitu_labels',
+    \Seismo\Controller\MagnituController::class . '::labels',
+    true
+);
+$router->register(
+    'magnitu_status',
+    \Seismo\Controller\MagnituController::class . '::status',
+    true
+);
+// Read-only export surface — Bearer-authenticated against `export:api_key`
+// only (briefing scripts and automation cannot push scores or labels).
+$router->register(
+    'export_entries',
+    \Seismo\Controller\ExportController::class . '::entries',
+    true
+);
+$router->register(
+    'export_briefing',
+    \Seismo\Controller\ExportController::class . '::briefing',
+    true
+);
 $router->setDefault('index');
 
 $action = $__action;

@@ -9,6 +9,58 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 5 — Magnitu boundary + read-only export surface
+
+**Why.** 0.4's Magnitu API lived in `controllers/magnitu.php` with inline SQL, scoring math, and shape-building all in one file. It also conflated two concerns: the *write* Magnitu sync contract (scores in, entries out) and a future *read-only* export surface for briefings and automation. Slice 5 ports the API to the new layering (controller → service → repository), introduces a second Bearer key so a compromised briefing script can't push scores, and restores recipe rescoring. Contract with Magnitu's `sync.py` is unchanged — every JSON shape matches 0.4 byte-for-byte.
+
+**What moved.**
+
+| Area | 0.5 |
+|---|---|
+| Two-key model | `magnitu_config.api_key` (Magnitu sync, read+write) and `magnitu_config.export:api_key` (read-only export). Separate validators in `Seismo\Http\BearerAuth`; Magnitu key is rejected on `export_*`, export key is rejected on `magnitu_*`. |
+| Migration | `Migration004ExportKey` (schema **v20**) seeds an empty `export:api_key` row so validators see "not configured" until the admin generates a secret. `MigrationRunner::LATEST_VERSION` bumped to 20. |
+| Magnitu API | `Seismo\Controller\MagnituController` — `magnitu_entries`, `magnitu_scores`, `magnitu_recipe` (GET/POST), `magnitu_labels` (GET/POST), `magnitu_status`. One file per action-method; Bearer guard at the top, shape-builder helpers at the bottom. |
+| Export API | `Seismo\Controller\ExportController` — `export_entries` (JSON), `export_briefing` (Markdown). Same per-family reads; uses `export:api_key` only. |
+| Repos | `Seismo\Repository\EntryScoreRepository` (local `entry_scores`; `upsertMagnituScore` / `upsertRecipeScore` preserving 0.4 precedence), `Seismo\Repository\MagnituLabelRepository` (local `magnitu_labels`), `Seismo\Repository\MagnituExportRepository` (per-family reads via `entryTable()` / `entryDbSchemaExpr()`; Leg excluded). |
+| Scoring | `Seismo\Core\Scoring\RecipeScorer` — pure-function port of 0.4's `scoreEntryWithRecipe()` (tokenisation + softmax unchanged; Magnitu's distiller depends on it). `Seismo\Core\Scoring\ScoringService::rescoreAll()` replaces `magnituRescore()` + `rescoreCalendarEvents()` + `rescoreEmailsWithRecipe()`, batches capped at 500 per family per call. Triggered from `magnitu_recipe` POST. |
+| Formatters | `Seismo\Formatter\JsonExportFormatter`, `Seismo\Formatter\MarkdownBriefingFormatter` — both consume raw rows, emit body bytes + content-type. |
+| Auth gate | `Seismo\Http\AuthGate::PUBLIC_ACTIONS` whitelists `export_entries` and `export_briefing` alongside the existing `magnitu_*` entries. Both surfaces are Bearer-authenticated inside the controller; AuthGate only bypasses the dormant session-auth redirect. |
+| Router | `index.php` registers all seven routes as read-only (session lock released early — none of them touch `$_SESSION`). |
+
+**New wiring.**
+
+```
+?action=magnitu_*  → MagnituController → BearerAuth::guardMagnitu (api_key)
+                                        → MagnituExportRepository (reads)
+                                        → EntryScoreRepository / MagnituLabelRepository (writes)
+                                        → ScoringService (on magnitu_recipe POST)
+
+?action=export_*   → ExportController  → BearerAuth::guardExport (export:api_key)
+                                        → MagnituExportRepository (same reads)
+                                        → JsonExportFormatter / MarkdownBriefingFormatter
+```
+
+**Leg exclusion.** Preserved byte-for-byte: `MagnituExportRepository` never queries `calendar_events`; `EntryScoreRepository::MAGNITU_ENTRY_TYPES` and `MagnituLabelRepository::LABELED_ENTRY_TYPES` are `['feed_item', 'email', 'lex_item']` only; `magnitu_status` counts filter on `entry_type != 'calendar_event'`. Leg rows *are* rescored internally by `ScoringService::rescoreCalendarEvents()` so dashboard badges stay populated — the exclusion is at the export boundary, not the scoring boundary. See `.cursor/rules/calendar-events.mdc`.
+
+**Gotchas.**
+
+- **Generate the export key before using the export routes.** Migration 004 seeds an empty row; validators treat empty as "not configured" and reject every request. Admin UI polish lands in Slice 6; for now, generate on the server with `php -r "echo bin2hex(random_bytes(24));"` and store via `magnitu_config`.
+- **0.4 email-hiding not ported.** `esShouldHideEmail` / `esGetBlockedSubscriptionLists` in 0.4 suppressed emails from unsubscribed senders in the Magnitu feed. In 0.5 the unified `emails` table flows through unchanged, with `sender_tag` joined from `sender_tags` (`removed_at IS NULL AND disabled = 0`). The subscription-based suppression graduates with the sender-management UI in a later slice; consumers that need the same filter today should filter client-side on `source_category`.
+- **`magnitu_status.version`** reports `SEISMO_VERSION` (currently `0.5.0-dev`). 0.4 returned the hardcoded string `'0.5.0'`. Python `sync.py` treats it as an opaque label; the change is intentional and visible.
+- **`ScoringService` does not cap per-run duration.** Each family is bounded at 500 rows, so worst case is 4×500 rows through `RecipeScorer::score()` — fast on typical shared hosts, but the `magnitu_recipe` POST is synchronous. If this becomes a timeout problem, split into background rescoring; not speculative.
+- **Slice 5a** (rename `magnitu_config` → `system_config`) still pending. The row for `export:api_key` survives the rename unchanged.
+
+**Test URLs.**
+
+- `?action=migrate&key=…` — expect schema **20** after deploy.
+- `curl -H 'Authorization: Bearer <api_key>' https://host/seismo/?action=magnitu_status` — JSON with entry/score counts, `calendar_event` excluded.
+- `curl -X POST -H 'Authorization: Bearer <api_key>' -d '{"keywords":{"foo":{"investigation_lead":1}}, "version":1}' https://host/seismo/?action=magnitu_recipe` — replaces the recipe, triggers rescore; response includes per-family `rescored` counts.
+- `curl -H 'Authorization: Bearer <export:api_key>' 'https://host/seismo/?action=export_briefing&since=2026-04-01'` — Markdown digest of high-relevance entries. Same request without a valid export key ⇒ `401 {"error":"Invalid API key"}`; the Magnitu `api_key` is rejected here by design.
+- `curl -H 'Authorization: Bearer <export:api_key>' 'https://host/seismo/?action=export_entries&since=2026-04-01&type=feed_item'` — JSON with entries + attached score rows.
+- Negative test: `curl -X POST -H 'Authorization: Bearer <export:api_key>' https://host/seismo/?action=magnitu_scores -d '{"scores":[]}'` — must return `401`.
+
+---
+
 ## Slice 4 — Unified emails, Core RSS/scraper/mail hook, tag-filter pills
 
 **Why.** 0.4 split mail between `emails` and `fetched_emails`, kept RSS/scraper/mail outside the plugin runner, and built dashboard tag filters against the full entry surface. Slice 4 merges the email schema, runs Core fetchers through the same `RefreshAllService::runAll()` entry point as plugins (with `core:*` ids in `plugin_run_log`), adds SimplePie-based RSS + a minimal HTML scraper path, and restores dashboard filter pills (0.4-shaped GET params).

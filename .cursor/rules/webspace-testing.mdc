@@ -36,6 +36,15 @@ User's host: `hektopascal.org`. 0.5 test URLs are relative to `https://www.hekto
 - **Slice 0 (skeleton):** `?action=health` — ✅ verified live (PHP 8.2.30, MariaDB 10.6.20, schema 17, mothership, base path `/seismo`). **Migrations without CLI:** set `SEISMO_MIGRATE_KEY` in `config.local.php`, then open `?action=migrate&key=…` once — plain-text response; no SSH required.
 - **Slice 1 (read-only dashboard):** `?action=index` — renders existing entries via the new `EntryRepository` using `dashboard_entry_loop.php`. Upload list: `src/Controller/DashboardController.php`, `src/Repository/EntryRepository.php`, `views/index.php`, `views/helpers.php`, `views/partials/dashboard_entry_loop.php`, `assets/css/style.css`, and the updated `index.php`. Expected: newest-first timeline of up to 30 entries, Magnitu score badges where scored, no filter UI, no refresh button, no star buttons (favourite POST route returns in a later slice). Rollback: re-upload only the Slice 0 `index.php` (which sets the default to `health`) — no DB changes in this slice.
 - **Slice 1.5 (search + favourites + star toggle):** Same base URL; add `?q=test`, `?view=favourites`, and POST `toggle_favourite` via the ☆/★ control. Upload: also `src/Repository/EntryFavouriteRepository.php`, `src/Controller/FavouriteController.php`, and the updated `EntryRepository.php`, `DashboardController.php`, `views/index.php`, `index.php` (router). Expected: search filters merged timeline; favourites view lists starred entries; star toggles `entry_favourites` locally and redirects back. No tag pills yet (Slice 4).
-- **Slice 2+ …** add here.
+- **Slice 5 (Magnitu API + read-only export):** Schema **20**.
+  - `?action=migrate&key=…` — expect "Applying migration to version 20" (one-time).
+  - `curl -H 'Authorization: Bearer <api_key>' https://www.hektopascal.org/seismo/?action=magnitu_status` — JSON with entry/score counts, Leg excluded.
+  - `curl -H 'Authorization: Bearer <api_key>' 'https://www.hektopascal.org/seismo/?action=magnitu_entries&type=feed_item&limit=5'` — same shape Magnitu's `sync.py` consumes in 0.4.
+  - `curl -H 'Authorization: Bearer <export:api_key>' 'https://www.hektopascal.org/seismo/?action=export_briefing&since=2026-04-01'` — Markdown digest; default labels are `investigation_lead,important`.
+  - `curl -H 'Authorization: Bearer <export:api_key>' 'https://www.hektopascal.org/seismo/?action=export_entries&limit=10'` — JSON with entries + `score` block.
+  - **Negative tests (two-key model):** Magnitu `api_key` on `export_*` must 401; export `export:api_key` on `magnitu_*` must 401.
+  - **Operator setup:** generate `export:api_key` once (`php -r "echo bin2hex(random_bytes(24));"`) and store via SQL or the future Settings UI (Slice 6). Migration 004 seeds an empty row so validators see "not configured" until you do.
+  - **Rollback:** revert the new files; no entry-source schema touched. `entry_scores` row precedence (Magnitu beats recipe) is identical to 0.4, so mixed-version staging is safe.
+- **Slice 6+ …** add here.
 
 Reference instance for behavioural comparison: `https://www.hektopascal.org/seismo-staging/` (running 0.4). Never deploy 0.5 artefacts into that folder.

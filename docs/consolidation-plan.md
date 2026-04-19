@@ -112,14 +112,14 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - **Diagnostics page.** New `?action=diagnostics` (under AuthGate). Lists every registered plugin with its latest `plugin_run_log` row, throttle interval, and "next allowed run" timestamp. Per-plugin **Refresh now** (force=true) and **Test fetch (no save)** buttons; master **Refresh all now** button. Test result peek (first 5 rows) returned as a one-shot session flash.
 - **Definition of done — met.** `refresh_cron.php` and `?action=refresh_all` execute the same `RefreshAllService::runAll()`; Leg is included in both; a failing plugin logs to `plugin_run_log` and shows red in diagnostics while the rest of the pipeline keeps running; `SEISMO_ADMIN_PASSWORD_HASH` toggles login on/off; plugin **Test fetch** button shows first 5 items of a dry-run fetch; **all mutating POSTs require a valid CSRF token** regardless of auth state.
 
-### Slice 4 — Remaining entry sources
+### Slice 4 — Remaining entry sources — **shipped**
 
 - **Core fetchers:** RSS, Substack, Mail (with email schema unification migration), Scraper — each ported as a Core service (not a plugin). Each ships with repository `prune()`.
 - **Plugins:** LexEu, LexLegifrance, RechtBund (as Jus variant), Parl MM, any other third-party adapter — each follows the Slice 2 template.
 - Unify email schema under `emails` built from today’s `fetched_emails` structure; provide migration script.
 - **Tag filter pills on the dashboard** (deferred from Slice 1): feed-category pills, email-tag pills, substack-category pills, Lex source pills, scraper-source pills, Leg toggle. Ships here rather than piecemeal so all pills reflect fully ported sources and the unified `sender_tags`/email-tags surface.
 
-### Slice 5 — Magnitu boundary + machine-readable export surface
+### Slice 5 — Magnitu boundary + machine-readable export surface — **shipped**
 
 - `MagnituConfigRepository`, `ScoringService` (out of `config.php`).
 - API controllers (`magnitu_entries`, `magnitu_scores`, `magnitu_recipe`, `magnitu_labels`, `magnitu_status`).
@@ -127,7 +127,19 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - **Read-only export key.** Second API key alongside the Magnitu one: `export:api_key` (read-only; can pull entries/briefings, cannot write scores/labels). Two-key model for v0.5; a scopes table is graduation-path, not now.
 - **Export endpoints.** `?action=export_briefing&since=<iso8601>&format=markdown|json` and `?action=export_entries&since_id=<id>&format=json`. Filters by timestamp or id so the client tracks its own "last seen" state (stateless — Option A). Bearer-token auth, read-only key only.
 - **Formatters.** `Seismo\Formatter\MarkdownBriefingFormatter`, `Seismo\Formatter\JsonExportFormatter`. Both consume raw repository output; neither has SQL or HTML. A view or export controller picks one and renders it with the appropriate `Content-Type`.
-- **Definition of done:** an external LLM/automation script with the export key can pull the last N days of top-scored entries as Markdown, on demand, with zero write privileges and no server-side state beyond the key itself.
+- **Definition of done — met.** An external LLM/automation script with the export key can pull the last N days of top-scored entries as Markdown, on demand, with zero write privileges and no server-side state beyond the key itself.
+
+**Scope-fidelity notes for Slice 5 (per `slice-scope-fidelity.mdc`):**
+
+- **0.4 subscription-based email hiding is NOT ported.** v0.4's Magnitu responses filtered out emails whose sender address had `show_in_magnitu = 0` in `email_subscriptions`. v0.5 exposes all `emails` rows via `MagnituExportRepository::listEmailsSince()` regardless of subscription visibility. Re-adding the filter is a deliberate product decision (sender-level opt-out for the Magnitu pipeline) — file under Slice 6 if confirmed; do not smuggle it into a later slice.
+- **`magnitu_status.version` contract drift.** 0.4 returned a monolithic `version` string baked from the running codebase. v0.5's `MagnituController::status()` returns `{"schema_version": <int>, "recipe_version": <int>}` instead, which is what 0.4's `sync.py` actually consumes. If the mothership tooling still reads `.version` as a single string, the consumer must be updated in the same push. Documented here so the next reviewer doesn't mistake it for an oversight.
+- **`ScoringService::rescoreAll()` runs synchronously from the `magnitu_recipe` POST handler.** Up to ~2,000 rescores (500 per family × 4 families) fit inside a shared-host PHP timeout today; beyond that it needs to move to a cron worker. Filed as Slice 5b follow-up below rather than a warning to re-raise every review.
+
+### Slice 5b — Async recipe rescoring (deferred follow-up)
+
+- `ScoringService::rescoreAll()` currently runs inline inside the `magnitu_recipe` POST handler (Slice 5). At 500-per-family × 4 families the upper bound is ~2,000 rescores per request, which fits in a 60 s shared-host timeout today.
+- If corpus growth, shared-host timeouts, or client impatience ever push that over the edge, move rescoring to a cron-style queue: the POST handler bumps `recipe_version` + flips an `entry_scores` "dirty" flag (or clears the `model_version` for non-Magnitu rows), and a `RescoreWorker` called from `refresh_cron.php` drains batches between plugin runs.
+- Not in scope while the synchronous path measurably works; listed here so the path is pre-agreed and not re-litigated in a review.
 
 ### Slice 5a — Config unification + retention service
 

@@ -22,7 +22,8 @@ namespace Seismo\Http;
  *   - `health` (degraded output when not logged in; see HealthController)
  *   - `login`, `logout`
  *   - `migrate` (already protected by SEISMO_MIGRATE_KEY)
- *   - `magnitu_*` (separate Bearer-token auth)
+ *   - `magnitu_*` (separate Bearer-token auth — Magnitu write key)
+ *   - `export_*`  (separate Bearer-token auth — read-only export key)
  */
 final class AuthGate
 {
@@ -38,6 +39,8 @@ final class AuthGate
         'magnitu_recipe'  => true,
         'magnitu_labels'  => true,
         'magnitu_status'  => true,
+        'export_entries'  => true,
+        'export_briefing' => true,
     ];
 
     public static function isEnabled(): bool
