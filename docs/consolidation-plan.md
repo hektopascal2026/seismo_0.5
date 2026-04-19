@@ -18,6 +18,12 @@ Lightweight OOP with **bounded classes**, not a full framework:
 - **Services / Fetchers** — external I/O (HTTP, SPARQL, IMAP). Return arrays / small value objects; do **not** write to the DB directly.
 - **Bootstrap** — small: autoload, config, PDO, satellite/brand helpers, session.
 
+### Repositories, views, formatters — the data/presentation split
+
+Repositories return **raw, unescaped, unformatted** data. Views escape for HTML via `e()`. Formatters (added in Slice 5 alongside the export surface) consume the same raw arrays to produce Markdown or JSON for machine readers. Never bake presentation concerns into the repository layer — an HTML-escaped field in a repository return value is a tax on every non-HTML consumer (LLM briefings, JSON exports, CLI tools).
+
+Rule: `core-plugin-architecture.mdc`, section "Repositories return raw data".
+
 ### Core vs Plugin split
 
 Code is split into **Core** (things we control; stable by nature — RSS parsing, IMAP, scraping, scoring, Magnitu API, dashboard) and **Plugin** (third-party adapters: Fedlex, RechtBund, EU Lex SPARQL, Légifrance, Parlament.ch, …). Plugins implement `Seismo\Service\SourceFetcherInterface` and live in `src/Plugin/<Name>/`. `RefreshAllService` wraps every plugin in `try/catch` so one broken upstream never takes down the app.
@@ -83,11 +89,15 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - **Plugins:** LexEu, LexLegifrance, RechtBund (as Jus variant), Parl MM, any other third-party adapter — each follows the Slice 2 template.
 - Unify email schema under `emails` built from today’s `fetched_emails` structure; provide migration script.
 
-### Slice 5 — Magnitu boundary
+### Slice 5 — Magnitu boundary + machine-readable export surface
 
 - `MagnituConfigRepository`, `ScoringService` (out of `config.php`).
 - API controllers (`magnitu_entries`, `magnitu_scores`, `magnitu_recipe`, `magnitu_labels`, `magnitu_status`).
 - Satellite keys, Leg API exclusion stays intentional until we decide otherwise.
+- **Read-only export key.** Second API key alongside the Magnitu one: `export:api_key` (read-only; can pull entries/briefings, cannot write scores/labels). Two-key model for v0.5; a scopes table is graduation-path, not now.
+- **Export endpoints.** `?action=export_briefing&since=<iso8601>&format=markdown|json` and `?action=export_entries&since_id=<id>&format=json`. Filters by timestamp or id so the client tracks its own "last seen" state (stateless — Option A). Bearer-token auth, read-only key only.
+- **Formatters.** `Seismo\Formatter\MarkdownBriefingFormatter`, `Seismo\Formatter\JsonExportFormatter`. Both consume raw repository output; neither has SQL or HTML. A view or export controller picks one and renders it with the appropriate `Content-Type`.
+- **Definition of done:** an external LLM/automation script with the export key can pull the last N days of top-scored entries as Markdown, on demand, with zero write privileges and no server-side state beyond the key itself.
 
 ### Slice 5a — Config unification + retention service
 
@@ -130,6 +140,16 @@ Revisit a templating engine only if real pain emerges (duplicated markup, escapi
 - **`ai_view`** — keep as admin-only, retire, or fold into Magnitu UI? Decide before Slice 6.
 - **Magnitu Leg API** — when (or whether) to lift the `calendar_event` exclusion. Product decision, not technical.
 
+## Machine-readable export — forward-compat shape
+
+Seismo's job isn't to generate briefings. It's to be a clean, machine-readable data provider that external tools (LLM scripts, n8n, cron + curl, ChatGPT, Raycast, …) can pull from. Three decisions that shape how we build toward that without bloating the app:
+
+1. **Repositories stay raw.** Repository returns are the common substrate for HTML views **and** future formatters. No HTML in the repository layer, ever. Enforced by the rule in `core-plugin-architecture.mdc`.
+2. **Stateless export.** The export endpoint does not track "already briefed" state. The client passes `?since=<timestamp>` or `?since_id=<id>` and Seismo filters. If multiple consumers ever need to coordinate, we add a tags/watermarks table then — Option B in the review was explicitly not scoped for v0.5.
+3. **Read-only API key.** Separate key from the Magnitu API key so a briefing script can't accidentally (or maliciously) write scores. Two-key model for v0.5.
+
+These all land in Slice 5. None of them require code today — just discipline.
+
 ## Decisions settled after external review (2026-04-19)
 
 Recorded here so they don't get re-litigated:
@@ -140,3 +160,4 @@ Recorded here so they don't get re-litigated:
 - **Run log table:** single `plugin_run_log` table for plugin invocations. Non-plugin errors stay in PHP's `error_log()` — no parallel `system_logs` soup.
 - **Config unification:** rename `magnitu_config` → `system_config` in Slice 5a; plugin configs move from JSON files into `system_config` rows keyed `plugin:<identifier>`. Breaking but one-shot migration.
 - **Plugin dry-run:** no interface change needed. `fetch()` is already pure-function by contract (plugins can't touch the DB). The diagnostics "Test" button just calls `fetch()` and renders the first N items without invoking a repository.
+- **Machine-readable export:** three commitments for Slice 5 — repositories return raw data (rule enforced from Slice 1), export is stateless (client passes `?since`), and a dedicated read-only API key keeps briefing scripts blast-radius-small. Stateful "already briefed" tracking is out of scope; we'd add it if a second consumer ever needs to coordinate, not speculatively.

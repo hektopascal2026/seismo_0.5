@@ -9,6 +9,35 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Decision 2026-04-19 (c) — LLM-friendly export surface (pre-Slice-1)
+
+A second review round asked how Seismo should look to an external LLM briefing workflow. Three commitments:
+
+**1. Repositories stay raw — now a rule, effective from Slice 1.** The repository layer is the boundary between MariaDB and every consumer (HTML views, future Markdown/JSON formatters, CLI tools, tests). Putting `htmlspecialchars()` or `<br>` in a repository taxes every non-HTML consumer. The rule is added to `core-plugin-architecture.mdc` ("Repositories return raw data") and is load-bearing for the LLM story: a `MarkdownBriefingFormatter` in Slice 5 will consume the exact same raw arrays that the dashboard view consumes.
+
+**2. Export is stateless — Option A.** The export endpoint filters by a client-supplied `?since=<iso8601>` or `?since_id=<id>`; Seismo does not remember what any consumer has already seen. The client tracks its own "last seen" marker (a local file, a cron env var, whatever). Zero schema changes, zero new write endpoints for this. Option B (Seismo remembers "already briefed") is explicitly **not** in v0.5 scope — it's real infrastructure (tags table, POST-back, multi-consumer coordination) that we only build when a second consumer actually needs to coordinate. We don't scaffold speculative coordination.
+
+**3. Read-only API key, separate from Magnitu's.** A briefing script doesn't need write access. Slice 5 adds `export:api_key` alongside the existing Magnitu `api_key` in `system_config`. Two-key model — not a scopes table. If there's ever a third consumer class, we graduate. Validation is two lines: "is this the export key? then only export routes."
+
+**What moves in Slice 5.**
+
+- `Seismo\Formatter\MarkdownBriefingFormatter`, `Seismo\Formatter\JsonExportFormatter` — consume raw repository output; zero SQL, zero HTML.
+- `?action=export_briefing&since=<iso8601>&format=markdown|json` and `?action=export_entries&since_id=<id>&format=json` — Bearer-token-authed with the read-only key.
+- `export:api_key` row in `system_config` (added by migration in Slice 5a).
+
+**Gotchas / deliberate non-goals.**
+
+- No server-side scheduling of exports. The client drives. Seismo is a data provider, not a scheduler.
+- No briefing generation inside Seismo. The LLM runs wherever the user's automation lives; Seismo ships raw Markdown for it to consume.
+- No "undo briefing" / "re-mark" semantics. Because state is on the client, those are client-side concerns.
+
+**What's locked in today.**
+
+- Rule: `core-plugin-architecture.mdc` gains the "Repositories return raw data" section (mirrored into 0.4). This is the one decision that needs enforcement from Slice 1 onward — the rest is just written-down Slice 5 scope.
+- Consolidation plan: "Repositories, views, formatters — the data/presentation split" section under Architectural Direction; Slice 5 expanded with the export surface; new "Machine-readable export" section with the three decisions.
+
+---
+
 ## Decision 2026-04-19 (b) — External review settled (pre-Slice-1)
 
 A software-architect review surfaced five blind spots common to prototypes-becoming-production. Outcomes, in the order raised:

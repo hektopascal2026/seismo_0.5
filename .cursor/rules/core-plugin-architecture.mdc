@@ -107,6 +107,18 @@ Hardcoded: `Seismo\Service\PluginRegistry` holds an explicit array of instantiat
 
 If end-user-installable plugins ever become a requirement, swap the registry implementation; the interface does not change.
 
+## Repositories return raw data (no escaping, no formatting)
+
+The repository layer is the boundary between "what MariaDB stores" and "what anyone who wants that data receives". It is **not** the place for presentation concerns.
+
+- Repository methods return plain arrays / DTOs of **unescaped, unformatted** values. UTF-8 text as-is. Integers as integers. Timestamps as `DateTimeImmutable` or ISO-8601 strings — never as "3 days ago" prose.
+- **Views** apply `e()` (`htmlspecialchars`) at render time. HTML-specific concerns live in `views/`.
+- **Formatters** (introduced when we need them — e.g. `MarkdownBriefingFormatter`, `JsonExportFormatter`) consume the same raw arrays and apply their own transforms. Never chain formatter → formatter.
+
+**Consequence.** If you catch yourself writing `htmlspecialchars(...)`, `<br>`, or `nl2br(...)` inside a repository, stop — return the raw field. The consumer decides how to present it.
+
+**Why this matters.** The app is one of several future readers of its own data. Every HTML-shaped byte in a repository return value is a tax on every non-HTML consumer (Markdown briefings for LLMs, JSON exports, test assertions, server-side-rendered RSS, CLI tools). Paying that tax once, at the view layer, keeps every other path honest.
+
 ## Data retention (every family repo ships with `prune()`)
 
 Shared-host DB quotas (1–2 GB) are a real constraint. Data retention is **not** an afterthought feature — it's a repository contract from day one.
