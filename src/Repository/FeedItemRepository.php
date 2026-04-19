@@ -217,7 +217,11 @@ final class FeedItemRepository
 
         try {
             $stmt = $this->pdo->prepare(
-                'DELETE FROM ' . entryTable('feed_items') . ' t WHERE ' . $where
+                // Multi-table DELETE form: see EmailRepository::prune for the
+                // rationale — alias is required by buildPruneWhere() / the
+                // RetentionPredicates fragments, and the single-table DELETE
+                // syntax rejects aliases (MariaDB 1064).
+                'DELETE t FROM ' . entryTable('feed_items') . ' t WHERE ' . $where
             );
             $stmt->execute([$cutoff]);
             return $stmt->rowCount();

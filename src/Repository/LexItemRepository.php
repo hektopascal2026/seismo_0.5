@@ -163,7 +163,8 @@ final class LexItemRepository
 
         try {
             $stmt = $this->pdo->prepare(
-                'DELETE FROM ' . entryTable('lex_items') . ' t WHERE ' . $where
+                // Multi-table DELETE form: see EmailRepository::prune.
+                'DELETE t FROM ' . entryTable('lex_items') . ' t WHERE ' . $where
             );
             $stmt->execute([$cutoff]);
             return $stmt->rowCount();

@@ -70,7 +70,11 @@ final class EmailRepository
 
         try {
             $stmt = $this->pdo->prepare(
-                'DELETE FROM ' . entryTable('emails') . ' t WHERE ' . $where
+                // Multi-table DELETE form: MariaDB/MySQL reject the single-
+                // table form `DELETE FROM <t> t WHERE ...` with a 1064 syntax
+                // error. We need the alias because `buildPruneWhere()` and the
+                // RetentionPredicates EXISTS fragments both reference `t.*`.
+                'DELETE t FROM ' . entryTable('emails') . ' t WHERE ' . $where
             );
             $stmt->execute([$cutoff]);
             return $stmt->rowCount();

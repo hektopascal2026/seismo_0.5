@@ -280,7 +280,8 @@ final class CalendarEventRepository
 
         try {
             $stmt = $this->pdo->prepare(
-                'DELETE FROM ' . entryTable('calendar_events') . ' t WHERE ' . $where
+                // Multi-table DELETE form: see EmailRepository::prune.
+                'DELETE t FROM ' . entryTable('calendar_events') . ' t WHERE ' . $where
             );
             $stmt->execute([$cutoff]);
             return $stmt->rowCount();
