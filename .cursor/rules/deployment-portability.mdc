@@ -1,0 +1,39 @@
+---
+description: Portable deployment, path safety, and cron/refresh clarity when consolidating Seismo
+alwaysApply: true
+---
+
+# Deployment portability (Seismo)
+
+When changing or copying code into **seismo_0.5** (or deploying to a new host/path), avoid anything that assumes a fixed domain, path, or machine layout.
+
+## Web URLs and subfolder installs
+
+- **Use `getBasePath()`** (from `config.php`) for links, form `action`s, `href` to `index.php`, and `Location` headers — it derives from `dirname($_SERVER['PHP_SELF'])` so the app can live at `/` or `/seismo/` (or similar).
+- **Do not** hardcode `http://`, hostnames, or absolute URL prefixes in views/controllers unless there is an explicit product reason (e.g. satellite **`SEISMO_MOTHERSHIP_URL`**, OAuth redirects, external APIs).
+- **Assets** (`/assets/css/...`): prefix with `getBasePath()` like existing views.
+- **CLI scripts** must not rely on `$_SERVER` web variables for business logic; `refresh_cron.php` resolves `config.php` via filesystem paths.
+
+## Filesystem paths
+
+- **`__DIR__`** in `config.php` for JSON configs (`lex_config.json`, `calendar_config.json`, etc.) is correct for *server* paths; they move with the install directory.
+- **Downloaded artefacts** (generated `config.php` for cron with `seismo_path`, fetcher `config.php` templates) bake in paths from the **current server** at download time. A setup wizard should **re-detect** or **prompt** for install path after upload — do not assume copied files stay valid across hosts.
+
+## Cronjobs and “what runs when” (user perspective)
+
+Keep behaviour **honest and documented**:
+
+| Mechanism | Typical role |
+|-----------|----------------|
+| **Web “Refresh all”** (`refreshAllSources()` in `controllers/dashboard.php`) | Feeds, mail fetch, Lex/Jus sources, **Leg (parliament_ch)**, Magnitu recipe rescore |
+| **`refresh_cron.php` (CLI)** | Intended to mirror the above for automation — **verify it stays in sync** with `refreshAllSources()` when adding pipeline steps |
+| **Mail CLI** (`fetcher/mail/fetch_mail.php`) | Separate cron; configured via downloaded `config.php` |
+| **Scraper CLI** (`fetcher/scraper/seismo_scraper.php`) | Separate cron; not part of the main PHP refresh loop by design |
+
+**Known pitfall to fix deliberately (do not hide):** If `refresh_cron.php` omits a step that `refreshAllSources()` performs (e.g. Leg fetch), cron and the web button are **not** equivalent until aligned.
+
+When consolidating, prefer **one shared implementation** for “full refresh” logic and call it from both the web handler and `refresh_cron.php` to avoid drift.
+
+## Setup wizard (future)
+
+While building 0.5, **append** discoveries to `docs/setup-wizard-notes.md` in **seismo_0.5** (or the active repo): required PHP extensions, writable paths, DB credentials, suggested cron lines, `SEISMO_*` satellite knobs, and anything that must be re-generated after migration.
