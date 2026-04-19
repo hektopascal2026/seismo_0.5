@@ -183,7 +183,7 @@ Web "Refresh all" / refresh_cron.php
 | 0.4 | 0.5 |
 |---|---|
 | `config.php` (mixed: constants, helpers, DDL, scoring) | `bootstrap.php` (constants, autoloader, DB + basePath + satellite helpers, `e()` for views). DDL and scoring explicitly **not** here — deferred to Slice 2+. |
-| `initDatabase()` run on every request via `config.php` | `migrate.php` (CLI-only, skeleton for now — no migrations defined yet) |
+| `initDatabase()` run on every request via `config.php` | `migrate.php` + `Seismo\Migration\MigrationRunner` + `Migration001BaseSchema` loads `docs/db-schema.sql` (schema version **17**, idempotent `CREATE IF NOT EXISTS`) |
 | Giant `switch ($_GET['action'])` in `index.php` | `Seismo\Http\Router` with action → `Class::method` registration, preserves 0.4's early session-lock release for read-only routes |
 | `getBasePath()` / `isSatellite()` / `entryTable()` / `entryDbSchemaExpr()` in `config.php` | Same functions in `bootstrap.php`, identical signatures — kept global on purpose (lightweight OOP, not full DI). |
 | `htmlspecialchars(...)` repeated in views | `e()` helper in `bootstrap.php` |
@@ -207,7 +207,8 @@ PSR-4 autoloader in `bootstrap.php` maps `Seismo\` → `src/`. `require_once` (n
 
 **Gotchas.**
 
-- `MagnituConfigRepository::get()` catches `PDOException` and returns `null` when the table doesn't exist. This is deliberate: a brand-new database should render "schema version: not initialised — run `php migrate.php`" rather than 500. The migrator itself must still be strict.
+- `MagnituConfigRepository::get()` catches `PDOException` and returns `null` when the table doesn't exist. This is deliberate: a brand-new database should render "schema version: not initialised — run `php migrate.php`" rather than 500. After `php migrate.php` on an empty DB, `magnitu_config` exists and `schema_version` is **17**.
+- **Live / shared DB:** Running `php migrate.php` against the same database 0.4 already migrated is safe — every statement is `CREATE TABLE IF NOT EXISTS`; the runner skips work when `schema_version >= 17`. Expect: `Nothing to do — schema is already at version 17.`
 - The autoloader does **not** throw when a class file is missing; the Router does, at dispatch time, with a clear 500 + `error_log`. This is the right place to fail loudly.
 - `config.local.php.example` ships in the repo, `config.local.php` is gitignored. Plesk's Git deploy will **not** create it on the server — it has to be created by hand (or eventually by the setup wizard, see `docs/setup-wizard-notes.md`).
 - Webspace layout verified: 0.5 lives at `/seismo/`, 0.4 reference at `/seismo-staging/`. Base path auto-derived via `getBasePath()`. Live health check passed against MariaDB 10.6.20, schema 17, PHP 8.2.30.

@@ -18,7 +18,7 @@ The 0.5 consolidation is **validated on the user's actual webspace**, not only l
 
 1. A **one-line test URL** the user can open (e.g. `https://<host>/seismo_0.5/?action=health`).
 2. A **checklist of expected output** for that URL (dbStatus ok, schema version, mode, etc.).
-3. An **upload list** showing exactly which files/folders to transfer, and which to skip (`.git`, `.cursor`, `docs/`, local-only configs).
+3. An **upload list** showing exactly which files/folders to transfer, and which to skip (`.git`, `.cursor`, most of `docs/` except **always** `docs/db-schema.sql` when `migrate.php` is part of the slice — the migrator reads it at runtime).
 4. A **rollback note**: what the user does if the slice misbehaves (usually "delete `/seismo_0.5/`; 0.4 is untouched").
 
 ## Portability bugs found on the webspace

@@ -54,9 +54,9 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 - `bootstrap.php`: UTC (`date_default_timezone_set('UTC')`), Composer vendor autoload if present, custom `Seismo\*` PSR-4 autoloader, `isSatellite()`, `entryTable()`, PDO singleton with `SET time_zone = '+00:00'`.
 - Minimal class-based router in `index.php` (preserve read-only session-lock release).
-- `migrate.php` CLI that runs the DDL (port today’s `initDatabase()` contents).
+- `migrate.php` CLI + `Seismo\Migration\MigrationRunner`: migration 17 applies `docs/db-schema.sql` (consolidated 0.4 schema, all `CREATE TABLE IF NOT EXISTS`). Idempotent on existing 0.4 databases; stamps `magnitu_config.schema_version`. Later migrations append new numbered classes in `src/Migration/`.
 - One trivial route (e.g. `?action=health`) returning DB + version status.
-- **Definition of done:** fresh checkout + `config.local.php` + `php migrate.php` + `php -S` loads a health page.
+- **Definition of done:** fresh empty DB + `config.local.php` + `php migrate.php` creates all tables and sets schema 17; `?action=health` shows schema 17; existing live DB prints “Nothing to do” when already at 17.
 
 ### Slice 1 — Read-only dashboard
 

@@ -27,6 +27,12 @@ Scratchpad for a future “first run” experience after a user uploads Seismo t
 - Wizard should offer a "Set an admin password" step. On submit: compute `password_hash($input, PASSWORD_DEFAULT)` server-side, write the result to `config.local.php` as `SEISMO_ADMIN_PASSWORD_HASH`, never log or echo the plaintext. User can skip this step and the app runs unauthenticated — that's a supported default, not a warning.
 - If the wizard can't write to `config.local.php` (read-only filesystem on some shared hosts), display the hash and the exact `define(...)` line for the user to paste manually.
 
+### First-run / post-upload (Slice 0 complete)
+
+- After upload, operator creates `config.local.php` on the server (never committed).
+- Run **`php migrate.php`** once via SSH or the host’s PHP CLI (Plesk → PHP → Run script). On an empty database it applies `docs/db-schema.sql` and sets `schema_version` to 17. On a database already populated by Seismo 0.4, it should print that schema is already at version 17 and exit — **no destructive operations**.
+- `php migrate.php --status` prints current version without applying anything.
+
 ### Retention onboarding (Slice 5a)
 
 - Wizard lands on retention defaults (`feed_items` 180d, `emails` 180d, `lex_items` unlimited, `calendar_events` unlimited). Shows current row counts and a dry-run preview of what would be deleted. No pruning runs until the user explicitly opts in.
