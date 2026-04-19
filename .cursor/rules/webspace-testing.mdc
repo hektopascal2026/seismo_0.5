@@ -34,7 +34,7 @@ When something breaks on the host but works locally (path, header, PHP extension
 User's host: `hektopascal.org`. 0.5 test URLs are relative to `https://www.hektopascal.org/seismo/`.
 
 - **Slice 0 (skeleton):** `?action=health` — ✅ verified live (PHP 8.2.30, MariaDB 10.6.20, schema 17, mothership, base path `/seismo`). **Migrations without CLI:** set `SEISMO_MIGRATE_KEY` in `config.local.php`, then open `?action=migrate&key=…` once — plain-text response; no SSH required.
-- **Slice 1 (read-only dashboard):** `?action=index` — renders existing entries via the new `EntryRepository` using `dashboard_entry_loop.php`.
+- **Slice 1 (read-only dashboard):** `?action=index` — renders existing entries via the new `EntryRepository` using `dashboard_entry_loop.php`. Upload list: `src/Controller/DashboardController.php`, `src/Repository/EntryRepository.php`, `views/index.php`, `views/helpers.php`, `views/partials/dashboard_entry_loop.php`, `assets/css/style.css`, and the updated `index.php`. Expected: newest-first timeline of up to 30 entries, Magnitu score badges where scored, no filter UI, no refresh button, no star buttons (favourite POST route returns in a later slice). Rollback: re-upload only the Slice 0 `index.php` (which sets the default to `health`) — no DB changes in this slice.
 - **Slice 2+ …** add here.
 
 Reference instance for behavioural comparison: `https://www.hektopascal.org/seismo-staging/` (running 0.4). Never deploy 0.5 artefacts into that folder.

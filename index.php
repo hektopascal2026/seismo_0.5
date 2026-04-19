@@ -8,7 +8,6 @@
  *   - dispatch the request.
  *
  * Each feature that gets ported in later slices registers its routes here.
- * The default action stays on `health` until the dashboard lands in Slice 1.
  */
 
 declare(strict_types=1);
@@ -26,6 +25,11 @@ use Seismo\Http\Router;
 $router = new Router();
 
 $router->register(
+    'index',
+    \Seismo\Controller\DashboardController::class . '::show',
+    true
+);
+$router->register(
     'health',
     \Seismo\Controller\HealthController::class . '::show',
     true
@@ -35,7 +39,7 @@ $router->register(
     \Seismo\Controller\MigrateController::class . '::runWeb',
     true
 );
-$router->setDefault('health');
+$router->setDefault('index');
 
 $action = $_GET['action'] ?? '';
 if (!is_string($action)) {

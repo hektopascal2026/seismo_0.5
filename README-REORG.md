@@ -9,6 +9,47 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 1 — Read-only dashboard (`?action=index`)
+
+**Why.** The 0.4 dashboard (`controllers/dashboard.php::buildDashboardIndexData`) is a 500-line function that inlines five entry-family queries, Magnitu score merging, favourites lookup, filter-pill plumbing, tag derivation, scraper-config joins, and search all into one procedural block. Every time we added a new entry type (Lex, Leg, scraper), that function grew a new branch. Slice 1 extracts the core read path — "give me the newest N entries across every family, with scores and favourites attached" — into a bounded, satellite-safe, raw-data-returning repository, and proves the new plumbing end-to-end against the live database. Search, tag pills, favourites view, and the refresh button return in later slices.
+
+**What moved.**
+
+- `buildDashboardIndexData()` (0.4 `controllers/dashboard.php`) → `Seismo\Repository\EntryRepository::getLatestTimeline()` (0.5 `src/Repository/EntryRepository.php`). The new repo is ~400 lines (with comments) vs. 0.4's 500 procedural lines, and only covers the read path — fetchers moved out.
+- `handleDashboard()` (0.4) → `Seismo\Controller\DashboardController::show()` (0.5 `src/Controller/DashboardController.php`). Orchestration only; no SQL, no data shaping.
+- `seismo_magnitu_day_heading()` (0.4 `controllers/dashboard.php`), `seismo_feed_item_resolved_link()` (0.4 `controllers/rss.php`), `highlightSearchTerm()` (0.4 `controllers/rss.php`), `getCalendarEventTypeLabel()` + `getCouncilLabel()` (0.4 `controllers/calendar.php`) → **all collapsed into `views/helpers.php`** (0.5). Presentation-only, called by the partial; not allowed to touch the database.
+- `views/index.php` (0.4, 298 lines of mixed layout + filter form + refresh button + nav + script) → `views/index.php` (0.5, ~110 lines: branding, count, partial include, and the two `<script>` blocks for per-card expand/collapse). The stripped features come back as their own slices.
+- `views/partials/dashboard_entry_loop.php` — **copied verbatim** from 0.4 so the card layout (the feature we explicitly do not want to re-engineer) renders byte-identical to 0.4. Its contract with callers (`$allItems`, `$showDaySeparators`, `$showFavourites`, `$searchQuery`, `$returnQuery`) is now a fixed interface between controller and partial.
+- `assets/css/style.css` — copied verbatim from 0.4.
+
+**New wiring.** Request flow:
+
+1. `index.php` registers `index` as the default action → `DashboardController::show`.
+2. `Router::dispatch` releases the session write lock early (read-only action) and instantiates the controller.
+3. `DashboardController::show` clamps `?limit` / `?offset` from the URL, calls `EntryRepository::getLatestTimeline($limit, $offset)`, requires `views/helpers.php` and `views/index.php`.
+4. `EntryRepository` issues four bounded `SELECT`s (feed+feeds, email-table, lex_items, calendar_events), each capped at `$limit + $offset` and all wrapped in `entryTable()` so a satellite reads cross-DB from the mothership. Score and favourite attaches are two more queries against the **local** `entry_scores` / `entry_favourites` tables (never wrapped). Merge, date-sort, slice to `$offset`, `$limit`.
+5. `views/index.php` includes `views/partials/dashboard_entry_loop.php`, which renders the cards.
+
+**Explicit invariants this slice locks in (first real use, not speculative).**
+
+- **Repositories return raw data.** Every row in `EntryRepository`'s output is exactly what MariaDB returned — unescaped, un-formatted. The partial applies `htmlspecialchars()` / `highlightSearchTerm` at render time.
+- **Bounded queries.** `EntryRepository::MAX_LIMIT = 200`, `DashboardController::DEFAULT_LIMIT = 30`. `?limit=1000000` is silently capped.
+- **Satellite safety.** Every entry-source SELECT goes through `entryTable()`. The email-table resolver uses `SHOW TABLES FROM \`mothership_db\`` in satellite mode.
+- **Missing-table resilience.** `PDOException` with MySQL error 1146 on an entry-source table degrades to "no rows" for that family, so a fresh install where `calendar_events` is empty still shows feeds and emails. Non-1146 PDO errors re-raise — silent data loss is worse than a 500.
+- **Time is UTC in the data layer.** `seismo_magnitu_day_heading()` is the only place the Slice-1 code converts timestamps to a calendar day, and it does so at view-render time (`strtotime('today')` with PHP already pinned to UTC). TODO for Slice 5: once there's a dedicated `SEISMO_VIEW_TIMEZONE`, wire it here so "Heute" matches Zurich rather than UTC midnight.
+
+**Gotchas.**
+
+- The 0.4 dashboard distinguishes scraper items from normal RSS via an `EXISTS (SELECT 1 FROM scraper_configs WHERE sc.url = f.url)` join. Slice 1 uses the simpler `feeds.source_type = 'scraper'` (or `feeds.category = 'scraper'`) classifier. For a fresh 0.5 database populated by 0.5's own fetchers this is exact; for 0.5 pointed at a 0.4 DB where source_type isn't always set on scraper feeds, some scraper rows may render with the generic "feed" wrapper (still correct, just the wrong pill colour). The `scraper_configs` join returns when the scraper fetcher ports in a later slice.
+- The partial's favourite-toggle forms POST to `?action=toggle_favourite`, which doesn't exist in 0.5 yet. Slice 1 sets `$showFavourites = false` so the star buttons don't render at all — no broken POST surface.
+- The Leg (calendar_events) fetch window (`>= CURDATE() - 14 days OR NULL`) is intentional: Leg items are forward-biased, so anchoring the sort to past+near-future mirrors how the 0.4 dashboard behaves, without pulling in 200 weeks of archived Bundesratsgeschäfte.
+- `buildDashboardIndexData()` caps the merged timeline at 30 by default and 200 on search — same numbers as 0.5 (`DEFAULT_LIMIT = 30`, `MAX_LIMIT = 200`). No behaviour change for the primary view.
+- `views/helpers.php` functions are declared at global scope (no namespace). This is deliberate: the partial is sacred and calls them as bare names. Each function is guarded with `function_exists()` so re-including the file is harmless.
+
+**Test URL.** `https://www.hektopascal.org/seismo/?action=index` — expected to render a newest-first timeline of up to 30 entries drawn from the 0.4 MariaDB that 0.5 points at, with Magnitu score badges on scored entries and no filter UI yet.
+
+---
+
 ## Decision 2026-04-19 (d) — Shared-host hardening (Slice 0 code + Slice 1/2 rules)
 
 A final review raised four shared-hosting / stateless-LLM-integration concerns. All four accepted; three became rules effective from Slice 1, one required a code change in Slice 0 applied retroactively.

@@ -1,0 +1,875 @@
+/* ═══ Base ═══ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    background-color: #ffffff;
+    color: #000000;
+    line-height: 1.6;
+    font-size: 14px;                 /* medium — default */
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 20px;
+}
+
+/* ═══ Font-size tokens ═══ */
+/* big   = 18px  — titles, nav, h2, buttons                    */
+/* medium = 14px — body text, card content, inputs, descriptions */
+/* small = 12px  — tags, pills, dates, status lines              */
+
+/* ═══ Logo ═══ */
+.logo-icon {
+    display: inline-block;
+    vertical-align: middle;
+    height: 1em;
+    width: auto;
+    margin-right: 0.3em;
+}
+
+.logo-icon-large {
+    height: 24px;
+}
+
+/* ═══ Top Bar ═══ */
+.top-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 2px solid #000000;
+    margin-bottom: 16px;
+}
+
+.top-bar-left {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+}
+
+.top-bar-title {
+    font-size: 18px;                /* big */
+    font-weight: 700;
+    color: #000000;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    white-space: nowrap;
+}
+
+.top-bar-title a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.top-bar-subtitle {
+    font-size: 12px;                /* small */
+    font-weight: 400;
+    color: #000000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* Icon buttons in top bar */
+.top-bar-btn {
+    width: 38px;
+    height: 38px;
+    border: 2px solid #000000;
+    background: #ffffff;
+    color: #000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;                /* big */
+    font-family: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    padding: 0;
+    line-height: 1;
+}
+
+.top-bar-btn:hover {
+    box-shadow: 2px 2px 0px #000000;
+}
+
+.top-bar-btn.active {
+    background: #000000;
+    color: #ffffff;
+}
+
+/* ═══ Navigation Drawer ═══ */
+.nav-drawer {
+    display: none;
+    border: 2px solid #000000;
+    border-top: none;
+    margin-top: -16px;
+    margin-bottom: 16px;
+}
+
+.nav-drawer.open {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.nav-link {
+    padding: 8px 14px;
+    background-color: #ffffff;
+    color: #000000;
+    font-size: 14px;                /* medium */
+    font-weight: 600;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.15s;
+    font-family: inherit;
+    border-right: 2px solid #000000;
+}
+
+.nav-link:last-child {
+    border-right: none;
+}
+
+.nav-link:hover {
+    box-shadow: 2px 2px 0px #000000;
+}
+
+.nav-link.active {
+    background-color: var(--seismo-accent, #000000);
+    color: #ffffff;
+}
+
+/* ═══ Search Drawer ═══ */
+.search-drawer {
+    display: none;
+    margin-top: -16px;
+    margin-bottom: 16px;
+    border: 2px solid #000000;
+    border-top: none;
+    padding: 12px;
+}
+
+.search-drawer.open {
+    display: block;
+}
+
+/* Header (hidden in new layout) */
+header {
+    display: none;
+}
+
+.subtitle {
+    font-size: 12px;                /* small */
+    font-weight: 400;
+    color: #000000;
+}
+
+/* ═══ Typography ═══ */
+h2 {
+    font-size: 18px;                /* big */
+    font-weight: 700;
+    color: #000000;
+    margin-bottom: 12px;
+}
+
+h3 {
+    font-size: 18px;                /* big */
+    font-weight: 700;
+    color: #000000;
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+/* ═══ Forms ═══ */
+.search-input,
+.feed-input {
+    padding: 10px 14px;
+    border: 2px solid #000000;
+    background-color: #ffffff;
+    color: #000000;
+    font-size: 14px;                /* medium */
+    font-family: inherit;
+}
+
+.search-input:hover,
+.feed-input:hover {
+    box-shadow: 2px 2px 0px #000000;
+}
+
+.search-input:focus,
+.feed-input:focus {
+    outline: none;
+    background-color: #fafafa;
+    box-shadow: 2px 2px 0px #000000;
+}
+
+.search-input::placeholder,
+.feed-input::placeholder {
+    color: #000000;
+    opacity: 0.4;
+}
+
+.search-form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.search-input {
+    flex: 1;
+    min-width: 300px;
+}
+
+.add-feed-form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.feed-input {
+    flex: 1;
+    min-width: 300px;
+}
+
+/* ═══ Buttons ═══ */
+.btn {
+    padding: 8px 16px;
+    border: 2px solid #000000;
+    background-color: #ffffff;
+    color: #000000;
+    font-size: 14px;                /* medium */
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+}
+
+.btn:hover {
+    box-shadow: 2px 2px 0px #000000;
+}
+
+.btn-primary {
+    background-color: #ffffff;
+    color: #000000;
+}
+
+.btn-secondary {
+    background-color: #ffffff;
+    color: #000000;
+}
+
+.btn-danger {
+    background-color: #ffffff;
+    color: #000000;
+    border-color: #FF2C2C;
+}
+
+.btn-danger:hover {
+    box-shadow: 2px 2px 0px #FF2C2C;
+}
+
+.btn-warning {
+    background-color: #ffffff;
+    color: #000000;
+    border-color: #ff9900;
+}
+
+.btn-warning:hover {
+    box-shadow: 2px 2px 0px #ff9900;
+}
+
+.btn-success {
+    background-color: #ffffff;
+    color: #000000;
+    border-color: #00aa00;
+}
+
+.btn-success:hover {
+    box-shadow: 2px 2px 0px #00aa00;
+}
+
+/* Expand buttons — compact, same size as sort button */
+.btn.entry-expand-btn,
+.btn.entry-expand-all-btn {
+    font-size: 12px;
+    padding: 4px 10px;
+}
+
+/* ═══ Cards ═══ */
+.entry-card,
+.item-card {
+    border: 2px solid #000000;
+    padding: 14px 16px;
+    background-color: #ffffff;
+    transition: all 0.2s;
+}
+
+.entry-card:hover,
+.item-card:hover {
+    box-shadow: 2px 2px 0px #000000;
+}
+
+/* Magnitu timeline: day group headings between cards */
+.magnitu-day-separator {
+    margin: 18px 0 10px 0;
+}
+.magnitu-day-separator-text {
+    display: inline-block;
+    padding: 5px 12px;
+    border: 2px solid #000000;
+    background: #f0f0f0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #000000;
+}
+
+/* Card header row (tags left, magnitu badge pushed right via margin-left:auto) */
+.entry-header,
+.item-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 12px;                /* small */
+    color: #000000;
+}
+
+.entry-feed,
+.item-date {
+    font-weight: 600;
+    color: #000000;
+}
+
+.entry-tag {
+    display: inline-block;
+    padding: 4px 10px;
+    border: 2px solid #000000;
+    font-size: 12px;                /* small */
+    font-weight: 500;
+    color: #000000;
+}
+
+.entry-date,
+.item-author {
+    font-size: 12px;                /* small */
+    font-style: italic;
+    color: #000000;
+}
+
+.entry-title,
+.item-title {
+    font-size: 14px;                /* medium */
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: #000000;
+}
+
+.entry-title a,
+.item-title a {
+    color: #000000;
+    text-decoration: none;
+}
+
+.entry-title a:hover,
+.item-title a:hover {
+    text-decoration: underline;
+}
+
+.entry-content,
+.item-content {
+    color: #000000;
+    line-height: 1.5;
+    margin-bottom: 8px;
+    font-size: 12px;                /* small */
+}
+
+.feed-description {
+    color: #000000;
+    margin-bottom: 8px;
+    font-size: 12px;                /* small */
+    line-height: 1.5;
+}
+
+.entry-link,
+.item-link {
+    display: inline;
+    color: #000000;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 12px;                /* small */
+}
+
+.entry-link:hover,
+.item-link:hover {
+    text-decoration: underline;
+}
+
+.item-content p {
+    margin-bottom: 8px;
+}
+
+.item-content img {
+    max-width: 100%;
+    height: auto;
+    margin: 8px 0;
+}
+
+.item-content a {
+    color: #000000;
+    text-decoration: underline;
+}
+
+/* ═══ Messages ═══ */
+.message {
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border: 2px solid #000000;
+    background-color: #ffffff;
+    font-size: 12px;                /* small */
+    color: #000000;
+}
+
+.message-success {
+    background-color: #f5f5f5;
+}
+
+.message-error {
+    background-color: #ffffff;
+}
+
+.message-info {
+    background-color: #f5f5f5;
+}
+
+/* ═══ Tag Filters ═══ */
+.tag-filter-section {
+    width: 100%;
+    margin-top: 8px;
+}
+
+.tag-filter-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tag-filter-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border: 2px solid #000000;
+    background-color: #ffffff;
+    color: #000000;
+    font-size: 12px;                /* small */
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tag-filter-pill input[type="checkbox"] {
+    display: none;
+}
+
+.tag-filter-pill span {
+    pointer-events: none;
+}
+
+.tag-filter-pill:hover {
+    box-shadow: 2px 2px 0px #000000;
+}
+
+/* ═══ Category Filters ═══ */
+.category-filter {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.category-btn {
+    padding: 6px 12px;
+    border: 2px solid #000000;
+    background-color: #ffffff;
+    color: #000000;
+    font-size: 12px;                /* small */
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.category-btn:hover {
+    box-shadow: 2px 2px 0px #000000;
+}
+
+/* ═══ Layout ═══ */
+.latest-entries-section,
+.items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.items-list {
+    gap: 12px;
+}
+
+/* Actions row */
+.feed-actions,
+.feed-actions-top {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+/* ═══ Empty State ═══ */
+.empty-state {
+    text-align: center;
+    padding: 30px 20px;
+    color: #000000;
+    font-size: 12px;                /* small */
+}
+
+/* ═══ Section Title Row ═══ */
+.section-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 0;
+}
+
+.section-title-row .section-title {
+    margin-bottom: 0;
+    font-size: 12px;                /* small */
+    font-weight: 400;
+    color: #000000;
+}
+
+.section-title-row .btn.active {
+    background-color: #FFFFC5;
+}
+
+/* ═══ Entry Expand/Collapse ═══ */
+.entry-full-content {
+    display: none;
+    color: #000000;
+    line-height: 1.5;
+    font-size: 12px;                /* small */
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.entry-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    margin-top: 4px;
+}
+
+.entry-meta-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.favourite-form {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+}
+
+.favourite-btn {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    color: #000000;
+    opacity: 0.5;
+    cursor: pointer;
+}
+
+.favourite-btn:hover {
+    opacity: 1;
+}
+
+.favourite-btn.is-favourite {
+    opacity: 1;
+}
+
+.entry-actions .entry-date {
+    white-space: nowrap;
+}
+
+/* ═══ Search Highlight ═══ */
+.search-highlight {
+    background-color: #FFFFC5;
+    padding: 0;
+    font-weight: inherit;
+}
+
+/* ═══ Legacy (hidden) ═══ */
+.floating-refresh-btn {
+    display: none;
+}
+
+/* ═══ Tag Inputs (Settings) ═══ */
+.feed-tag-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.feed-tag-input {
+    flex: 1;
+    padding: 6px 12px;
+    border: 2px solid #000000;
+    background-color: #ffffff;
+    color: #000000;
+    font-size: 14px;                /* medium */
+    font-family: inherit;
+    font-weight: 500;
+    transition: all 0.15s;
+}
+
+.feed-tag-input:hover {
+    box-shadow: 2px 2px 0px #000000;
+}
+
+.feed-tag-input:focus {
+    outline: none;
+    background-color: #fafafa;
+    box-shadow: 2px 2px 0px #000000;
+}
+
+.feed-tag-input.feed-tag-saving {
+    border-color: #666666;
+    background-color: #f5f5f5;
+}
+
+.feed-tag-input.feed-tag-saved {
+    border-color: #00aa00;
+    background-color: #f0fff0;
+}
+
+.feed-tag-indicator {
+    position: absolute;
+    right: 12px;
+    font-size: 12px;                /* small */
+    font-weight: 600;
+    pointer-events: none;
+    color: #000000;
+}
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+    .container {
+        padding: 12px 12px;
+    }
+
+    .top-bar-subtitle {
+        display: none;
+    }
+
+    .top-bar-title {
+        font-size: 18px;            /* big stays big */
+    }
+
+    .nav-drawer.open {
+        flex-direction: column;
+    }
+
+    .nav-link {
+        border-right: none;
+        border-bottom: 1px solid #e0e0e0;
+        width: 100%;
+    }
+
+    .nav-link:last-child {
+        border-bottom: none;
+    }
+
+    .add-feed-form,
+    .search-form {
+        flex-direction: column;
+    }
+
+    .feed-input,
+    .search-input {
+        min-width: 100%;
+    }
+
+    .tag-filter-section {
+        margin-top: 8px;
+    }
+
+    .tag-filter-list {
+        gap: 4px;
+    }
+
+    .tag-filter-pill {
+        padding: 3px 8px;
+    }
+
+    .feed-actions,
+    .feed-actions-top {
+        flex-direction: column;
+    }
+}
+
+/* ═══ Magnitu: Relevance Scoring ═══ */
+
+/* Score badge (small number in entry header) */
+.magnitu-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 22px;
+    padding: 0 6px;
+    font-size: 12px;                /* small */
+    font-weight: 700;
+    font-family: inherit;
+    border: 2px solid #000000;
+    margin-left: auto;
+}
+
+.magnitu-badge-investigation {
+    background-color: #FF6B6B;
+    color: #000000;
+}
+
+.magnitu-badge-important {
+    background-color: #FFA94D;
+    color: #000000;
+}
+
+.magnitu-badge-background {
+    background-color: #74C0FC;
+    color: #000000;
+}
+
+.magnitu-badge-noise {
+    background-color: #e0e0e0;
+    color: #000000;
+}
+
+/* Alert highlighting for high-score entries */
+.entry-card.magnitu-alert {
+    border-color: #FF6B6B;
+    border-width: 2px;
+    box-shadow: 3px 3px 0px #FF6B6B;
+}
+
+.entry-card.magnitu-alert:hover {
+    box-shadow: 4px 4px 0px #FF6B6B;
+}
+
+/* Score coverage indicator in section title */
+.magnitu-coverage {
+    font-weight: 400;
+    font-size: 12px;                /* small */
+    color: #000000;
+}
+
+/* "Why?" button — compact, same size as expand buttons */
+.btn.magnitu-why-btn {
+    font-size: 12px;                /* small */
+    padding: 4px 10px;
+}
+
+/* Explanation panel (shown on "Why?" click) */
+.magnitu-explanation {
+    padding: 10px 14px;
+    margin: 6px 0;
+    border: 2px solid #000000;
+    background-color: #f5f5f5;
+    font-size: 12px;                /* small */
+}
+
+.magnitu-explanation-label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 12px;                /* small */
+    color: #000000;
+}
+
+.magnitu-explanation-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.magnitu-feature {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 12px;                /* small */
+    font-family: monospace;
+    border: 2px solid #000000;
+    background-color: #ffffff;
+    color: #000000;
+}
+
+.magnitu-feature-positive {
+    background-color: #e6ffe6;
+}
+
+.magnitu-feature-negative {
+    background-color: #ffe6e6;
+}
+
+/* Magnitu page explainer */
+.magnitu-explainer {
+    padding: 10px 0;
+    margin-bottom: 8px;
+    border-bottom: 2px solid #000000;
+}
+
+.magnitu-explainer p {
+    font-size: 12px;                /* small */
+    line-height: 1.6;
+    margin: 0 0 4px 0;
+    color: #000000;
+}
+
+.magnitu-explainer p:last-child {
+    margin-bottom: 0;
+}
+
