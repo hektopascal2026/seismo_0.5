@@ -33,6 +33,8 @@ final class LegController
         $showPast = false;
         $lastBySource = [];
         $pageError = null;
+        $totalRows = 0;
+        $hiddenPastRows = 0;
 
         try {
             $pdo = getDbConnection();
@@ -57,14 +59,24 @@ final class LegController
 
             $repo = new CalendarEventRepository($pdo);
             if ($activeSources !== []) {
+                $typeFilter = $eventType !== '' ? $eventType : null;
                 $events = $repo->listBySources(
                     $activeSources,
                     self::LIST_LIMIT,
                     0,
                     $showPast,
-                    $eventType !== '' ? $eventType : null
+                    $typeFilter
                 );
                 $eventTypes = $repo->distinctEventTypes($activeSources);
+
+                // When the upcoming-only view returns nothing, we still want
+                // to tell the user whether rows actually exist (so they can
+                // flip "Show all") or the DB really is empty. Skip the extra
+                // COUNT when rows were returned — nothing to disambiguate.
+                if ($events === [] && !$showPast) {
+                    $totalRows = $repo->countBySources($activeSources, true, $typeFilter);
+                    $hiddenPastRows = $totalRows;
+                }
             }
 
             $lastBySource = $repo->getLastFetchedBySources(CalendarEventRepository::LEG_PAGE_SOURCES);

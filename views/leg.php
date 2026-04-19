@@ -14,6 +14,8 @@
  * @var string $basePath
  * @var bool $satellite
  * @var array<string, mixed> $parlChCfg
+ * @var int $totalRows        Total rows for current sources/type (past + upcoming)
+ * @var int $hiddenPastRows   Rows the current filter is hiding (i.e. past-dated)
  * @var string $csrfField Hidden CSRF inputs (LegController)
  */
 
@@ -187,7 +189,33 @@ $todayLocal = (new DateTimeImmutable('now', new DateTimeZone('Europe/Zurich')))-
 
             <?php if ($events === []): ?>
                 <div class="empty-state">
-                    <p>No Leg entries yet. Refresh Parlament CH above to pull upcoming parliamentary business.</p>
+                    <?php if (($hiddenPastRows ?? 0) > 0): ?>
+                        <?php
+                            $showAllUrl = $basePath . '/index.php?action=leg&sources_submitted=1&show_past=1';
+                            foreach ($activeSources as $s) {
+                                $showAllUrl .= '&sources%5B%5D=' . rawurlencode($s);
+                            }
+                            if ($eventType !== '') {
+                                $showAllUrl .= '&event_type=' . rawurlencode($eventType);
+                            }
+                        ?>
+                        <p>
+                            No upcoming parliamentary business for the selected filter, but
+                            <strong><?= (int)$hiddenPastRows ?></strong>
+                            past-dated
+                            entr<?= $hiddenPastRows === 1 ? 'y is' : 'ies are' ?>
+                            hidden.
+                            <a href="<?= e($showAllUrl) ?>">Show all</a>
+                            to see them.
+                        </p>
+                        <p style="font-size: 0.9em; color: #555;">
+                            Tip: most <em>Geschaefte</em> are tagged with their original
+                            submission date, which is usually in the past. Upcoming
+                            sessions and dated hearings appear here without toggling.
+                        </p>
+                    <?php else: ?>
+                        <p>No Leg entries yet. Refresh Parlament CH above to pull upcoming parliamentary business.</p>
+                    <?php endif; ?>
                 </div>
             <?php else: ?>
                 <?php $currentGroup = null; ?>

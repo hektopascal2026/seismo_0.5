@@ -46,10 +46,14 @@ final class CalendarEventRepository
         $where = 'source IN (' . $placeholders . ')';
         $bind = $sources;
         if (!$includePast) {
-            // DB session is UTC; Leg labels "today" in Europe/Zurich in the view.
-            // Compare against Zurich calendar date so rows for "today" in CH are
-            // not dropped between UTC midnight and Zurich midnight.
-            $where .= ' AND (event_date IS NULL OR event_date >= DATE(CONVERT_TZ(UTC_TIMESTAMP(), \'+00:00\', \'Europe/Zurich\')) )';
+            // DB session is UTC but the Leg view labels "today" in Europe/Zurich.
+            // Compute the cutoff in PHP and bind it: CONVERT_TZ() silently
+            // returns NULL on hosts whose `mysql.time_zone_name` table isn't
+            // populated (common on shared hosting), which would turn the
+            // `event_date >= NULL` comparison into NULL and hide every
+            // non-null-dated row. Portable to any MariaDB/MySQL install.
+            $where .= ' AND (event_date IS NULL OR event_date >= ?)';
+            $bind[] = self::zurichToday();
         }
         if ($eventType !== null && $eventType !== '') {
             $where .= ' AND event_type = ?';
@@ -69,6 +73,50 @@ final class CalendarEventRepository
         } catch (PDOException $e) {
             if (PdoMysqlDiagnostics::isMissingTable($e)) {
                 return [];
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Row count for the same filter shape as {@see listBySources()}, used by
+     * the Leg view to tell "DB is empty" from "everything is hidden by the
+     * upcoming-only filter". Capped at no LIMIT because counts are cheap and
+     * the caller only reads an integer.
+     *
+     * @param list<string> $sources
+     */
+    public function countBySources(array $sources, bool $includePast = false, ?string $eventType = null): int
+    {
+        $sources = $this->filterSources($sources);
+        if ($sources === []) {
+            return 0;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($sources), '?'));
+        $table = entryTable('calendar_events');
+
+        $where = 'source IN (' . $placeholders . ')';
+        $bind = $sources;
+        if (!$includePast) {
+            $where .= ' AND (event_date IS NULL OR event_date >= ?)';
+            $bind[] = self::zurichToday();
+        }
+        if ($eventType !== null && $eventType !== '') {
+            $where .= ' AND event_type = ?';
+            $bind[] = $eventType;
+        }
+
+        $sql = "SELECT COUNT(*) FROM {$table} WHERE {$where}";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($bind);
+
+            return (int)$stmt->fetchColumn();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return 0;
             }
             throw $e;
         }
@@ -300,6 +348,16 @@ final class CalendarEventRepository
         }
 
         return array_values(array_unique($out));
+    }
+
+    /**
+     * Today's date in Europe/Zurich, computed in PHP so the cutoff is portable
+     * to MySQL/MariaDB installs without `mysql.time_zone_name` data. PHP's
+     * timezone DB ships with the interpreter on every host we care about.
+     */
+    private static function zurichToday(): string
+    {
+        return (new DateTimeImmutable('now', new DateTimeZone('Europe/Zurich')))->format('Y-m-d');
     }
 
     private function normalizeDate(mixed $v): ?string
