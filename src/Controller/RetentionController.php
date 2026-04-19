@@ -18,9 +18,8 @@
  * optional auth login (per `auth-dormant-by-default.mdc` — retention
  * is a protected action, never whitelisted).
  *
- * Standalone page today; when Slice 6 lands the settings tab surface
- * it graduates into a tab here. No settings scaffolding is built
- * speculatively.
+ * GET `?action=retention` redirects to Settings → Retention (`?action=settings&tab=retention`).
+ * POST handlers (`retention_*`) still flash and redirect back to that tab.
  */
 
 declare(strict_types=1);
@@ -36,26 +35,8 @@ final class RetentionController
 
     public function show(): void
     {
-        $csrfField = CsrfToken::field();
-        $basePath  = getBasePath();
-        $satellite = isSatellite();
-        $pageError = null;
-        $rows      = [];
-        $defaults  = RetentionService::DEFAULT_POLICIES;
-
-        try {
-            $pdo     = getDbConnection();
-            $service = RetentionService::boot($pdo);
-            $rows    = $service->previewAll();
-        } catch (\Throwable $e) {
-            error_log('Seismo retention show: ' . $e->getMessage());
-            $pageError = 'Could not load retention state. Check error_log for details.';
-        }
-
-        $families = self::FAMILIES;
-
-        require_once SEISMO_ROOT . '/views/helpers.php';
-        require SEISMO_ROOT . '/views/retention.php';
+        header('Location: ' . getBasePath() . '/index.php?action=settings&tab=retention', true, 303);
+        exit;
     }
 
     /**
@@ -191,6 +172,7 @@ final class RetentionController
 
     private function redirect(): void
     {
-        header('Location: ' . getBasePath() . '/?action=retention');
+        header('Location: ' . getBasePath() . '/index.php?action=settings&tab=retention', true, 303);
+        exit;
     }
 }

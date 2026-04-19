@@ -21,14 +21,12 @@
 
 declare(strict_types=1);
 
-use Seismo\Http\AuthGate;
-
 if (!function_exists('seismo_format_utc')) {
     require_once __DIR__ . '/helpers.php';
 }
 
 $accent = seismoBrandAccent();
-$todayLocal = (new DateTimeImmutable('now', new DateTimeZone('Europe/Zurich')))->format('Y-m-d');
+$todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-m-d');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -43,31 +41,12 @@ $todayLocal = (new DateTimeImmutable('now', new DateTimeZone('Europe/Zurich')))-
 </head>
 <body>
     <div class="container">
-        <div class="top-bar">
-            <div class="top-bar-left">
-                <span class="top-bar-title">
-                    <a href="<?= e($basePath) ?>/index.php?action=index">
-                        <svg class="logo-icon logo-icon-large" viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg">
-                            <rect width="24" height="16" fill="#FFFFC5"/>
-                            <path d="M0,8 L4,12 L6,4 L10,10 L14,2 L18,8 L20,6 L24,8" stroke="#000000" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </a>
-                    Leg
-                </span>
-                <span class="top-bar-subtitle">Parliamentary business</span>
-            </div>
-            <div class="top-bar-actions">
-                <a href="<?= e($basePath) ?>/index.php?action=lex" class="top-bar-btn" title="Lex">Lex</a>
-                <a href="<?= e($basePath) ?>/index.php?action=diagnostics" class="top-bar-btn" title="Diagnostics">Diag</a>
-                <a href="<?= e($basePath) ?>/index.php?action=index" class="top-bar-btn" title="Back to timeline">←</a>
-                <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" style="display:inline; margin:0;">
-                        <?= $csrfField ?>
-                        <button type="submit" class="top-bar-btn" title="Sign out">Logout</button>
-                    </form>
-                <?php endif; ?>
-            </div>
-        </div>
+        <?php
+        $headerTitle = 'Leg';
+        $headerSubtitle = 'Parliamentary business';
+        $activeNav = 'leg';
+        require __DIR__ . '/partials/site_header.php';
+        ?>
 
         <?php if (isset($_SESSION['success'])): ?>
             <div class="message message-success"><?= e((string)$_SESSION['success']) ?></div>

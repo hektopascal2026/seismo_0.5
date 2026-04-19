@@ -169,4 +169,65 @@ final class PluginRunLogRepository
 
         return $rows;
     }
+
+    /**
+     * Recent runs for each of the supplied plugin ids. Result shape mirrors
+     * the input order, each inner list is newest-first and capped at $limit.
+     * Single round-trip via per-id `UNION ALL` subqueries — each leg is
+     * `WHERE plugin_id = ? ORDER BY run_at DESC LIMIT $limit`, so the
+     * `(plugin_id, run_at)` index carries every leg and we avoid the N+1
+     * pattern of calling {@see recentForPlugin} in a loop.
+     *
+     * Portable to MariaDB 10.x without window functions. Missing plugin ids
+     * (never run) appear in the result with an empty list, so the caller can
+     * iterate the input array without key checks.
+     *
+     * @param list<string> $pluginIds
+     * @return array<string, list<array{run_at: DateTimeImmutable, status: string, item_count: int, error_message: ?string, duration_ms: int}>>
+     */
+    public function recentForPlugins(array $pluginIds, int $limit = 20): array
+    {
+        $out = [];
+        foreach ($pluginIds as $id) {
+            $out[$id] = [];
+        }
+        if ($pluginIds === []) {
+            return $out;
+        }
+
+        $limit = max(1, min($limit, self::MAX_LIMIT));
+        $legs  = [];
+        $binds = [];
+        foreach ($pluginIds as $id) {
+            $legs[]  = '(SELECT plugin_id, run_at, status, item_count, error_message, duration_ms
+                FROM plugin_run_log
+                WHERE plugin_id = ?
+                ORDER BY run_at DESC
+                LIMIT ' . (int)$limit . ')';
+            $binds[] = $id;
+        }
+        $sql = implode("\nUNION ALL\n", $legs);
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($binds);
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $pid = (string)$row['plugin_id'];
+                $out[$pid][] = [
+                    'run_at'        => new DateTimeImmutable((string)$row['run_at'], new DateTimeZone('UTC')),
+                    'status'        => (string)$row['status'],
+                    'item_count'    => (int)$row['item_count'],
+                    'error_message' => $row['error_message'] !== null ? (string)$row['error_message'] : null,
+                    'duration_ms'   => (int)$row['duration_ms'],
+                ];
+            }
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return $out;
+            }
+            throw $e;
+        }
+
+        return $out;
+    }
 }

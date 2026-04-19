@@ -71,18 +71,6 @@ final class SystemConfigRepository
     }
 
     /**
-     * Transition-period fallback: between "new code uploaded" and
-     * "migration 005 applied", the underlying table is still named
-     * `magnitu_config`. `get()` / `set()` silently retry against the
-     * old name when the new one is missing, so e.g. `?action=health`
-     * keeps working in the gap, and the migration runner can read the
-     * current schema version to decide whether to apply 005. Remove
-     * this fallback once no v20-or-earlier instance is expected in the
-     * wild (target: Slice 6).
-     */
-    private const LEGACY_TABLE = 'magnitu_config';
-
-    /**
      * Raw string fetch for any `system_config` key. Returns null when
      * the table is absent (first install) or the key isn't present.
      *
@@ -95,30 +83,18 @@ final class SystemConfigRepository
         }
 
         $value = $this->selectOne('system_config', $key);
-        if ($value === null) {
-            $value = $this->selectOne(self::LEGACY_TABLE, $key);
-        }
 
         return $this->cache[$key] = $value;
     }
 
     /**
      * Upsert a key. Used by migrations for `schema_version` and by
-     * settings / plugin code. Throws PDOException if neither
-     * `system_config` nor the legacy `magnitu_config` table exists —
-     * only call after the base schema migration has created one or
-     * the other.
+     * settings / plugin code. Throws PDOException if `system_config`
+     * is missing — run base migrations first.
      */
     public function set(string $key, string $value): void
     {
-        try {
-            $this->upsertInto('system_config', $key, $value);
-        } catch (PDOException $e) {
-            if (!self::isMissingTable($e)) {
-                throw $e;
-            }
-            $this->upsertInto(self::LEGACY_TABLE, $key, $value);
-        }
+        $this->upsertInto('system_config', $key, $value);
 
         $this->cache[$key] = $value;
     }

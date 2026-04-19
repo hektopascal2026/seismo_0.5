@@ -62,6 +62,8 @@ $__seismoDefaults = [
     'FEED_DIAGNOSTIC_KEY'      => '',
     'SEISMO_MIGRATE_KEY'       => '',
     'SEISMO_ADMIN_PASSWORD_HASH' => '',
+    /** Display timezone for day labels and clocks in the UI (data layer stays UTC). */
+    'SEISMO_VIEW_TIMEZONE'     => 'Europe/Zurich',
 ];
 foreach ($__seismoDefaults as $__c => $__v) {
     if (!defined($__c)) {
@@ -222,6 +224,31 @@ function seismoBrandTitle(): string
 function seismoBrandAccent(): ?string
 {
     return SEISMO_BRAND_ACCENT !== '' ? (string)SEISMO_BRAND_ACCENT : null;
+}
+
+/**
+ * Timezone for view-layer date labels and formatted clocks (dashboard day
+ * separators, Lex/Leg/Diagnostics timestamps). Repository timestamps remain UTC.
+ */
+if (!function_exists('seismo_view_timezone')) {
+    function seismo_view_timezone(): \DateTimeZone
+    {
+        static $cached = null;
+        if ($cached instanceof \DateTimeZone) {
+            return $cached;
+        }
+        $name = defined('SEISMO_VIEW_TIMEZONE') ? (string)SEISMO_VIEW_TIMEZONE : 'Europe/Zurich';
+        if ($name === '') {
+            $name = 'Europe/Zurich';
+        }
+        try {
+            $cached = new \DateTimeZone($name);
+        } catch (\Exception $e) {
+            $cached = new \DateTimeZone('Europe/Zurich');
+        }
+
+        return $cached;
+    }
 }
 
 /**

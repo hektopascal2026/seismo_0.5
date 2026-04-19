@@ -47,15 +47,19 @@ final class DiagnosticsController
         $status     = [];
         $coreStatus = [];
         $loadError  = null;
+        $runHistory = [];
 
         try {
-            $pdo    = getDbConnection();
-            $log    = new PluginRunLogRepository($pdo);
-            $latest = $log->latestPerPlugin(array_merge(array_keys($coreMeta), array_keys($plugins)));
+            $pdo        = getDbConnection();
+            $log        = new PluginRunLogRepository($pdo);
+            $ids        = array_merge(array_keys($coreMeta), array_keys($plugins));
+            $latest     = $log->latestPerPlugin($ids);
+            $runHistory = $log->recentForPlugins($ids, 8);
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics: ' . $e->getMessage());
             $loadError = 'Could not read plugin_run_log. Has the latest migration run yet? (?action=migrate&key=…)';
             $latest = [];
+            $runHistory = [];
         }
 
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
@@ -109,6 +113,7 @@ final class DiagnosticsController
 
         $basePath  = getBasePath();
         $satellite = isSatellite();
+        $csrfField = CsrfToken::field();
 
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/diagnostics.php';

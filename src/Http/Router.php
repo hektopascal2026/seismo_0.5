@@ -9,7 +9,7 @@
  * Two concerns that existed in the 0.4 front controller and are preserved here:
  *   1. Most read-only actions release the session lock early so PHP's file-based
  *      session handler doesn't serialise concurrent requests. Routes that render
- *      CSRF forms (`index`, `lex`, `leg`, `calendar`, `retention`) skip early
+ *      CSRF forms (`index`, `lex`, `leg`, `calendar`, `settings`, `styleguide`) skip early
  *      release — see {@see READONLY_KEEP_SESSION_FOR_CSRF}. Any future
  *      read-only route whose controller calls `CsrfToken::field()` MUST be
  *      added to that list; otherwise `session_write_close()` fires before
@@ -38,11 +38,15 @@ final class Router
      * @var array<string, true>
      */
     private const READONLY_KEEP_SESSION_FOR_CSRF = [
-        'index'     => true,
-        'lex'       => true,
-        'leg'       => true,
-        'calendar'  => true,
-        'retention' => true,
+        'index'      => true,
+        'lex'        => true,
+        'leg'        => true,
+        'calendar'   => true,
+        // `retention` is intentionally NOT listed: since Slice 6 it is a
+        // pure 303 redirect to `settings&tab=retention` and never renders
+        // a CSRF form.
+        'settings'   => true,
+        'styleguide' => true,
     ];
 
     /** @var array<string, string> action => "Class::method" */

@@ -9,6 +9,55 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 6 — Admin / settings polish
+
+**Why.** Slice 5a left retention on a standalone page and deferred a unified settings shell, navigation across feature pages, and small UX polish called out in `docs/consolidation-plan.md`. Slice 6 folds retention into a settings tab, adds a shared top bar with a navigation drawer, persists the dashboard’s default page size in `system_config`, centralises view-layer timezone handling for day labels and clocks, surfaces recent plugin/core run history on diagnostics, removes the transitional `magnitu_config` fallback from `SystemConfigRepository`, and adds a short session cache for dashboard filter-pill option queries.
+
+**What moved.**
+
+| Area | 0.5 |
+|---|---|
+| Settings shell | `Seismo\Controller\SettingsController` — `?action=settings` with `tab=general\|retention`. General tab saves `ui:dashboard_limit` (1–200) via POST `?action=settings_save` (CSRF). Retention tab embeds `views/partials/retention_panel.php` (same policy grid + prune button as before). |
+| Retention URL | GET `?action=retention` **303-redirects** to `?action=settings&tab=retention`. POST handlers (`retention_preview`, `retention_save`, `retention_prune`) unchanged; they redirect back to the settings tab. Standalone `views/retention.php` **removed** — content lives in partials only. |
+| Navigation | `views/partials/site_header.php` — menu button toggles `.nav-drawer` (CSS already in `assets/css/style.css`). Links use `getBasePath()`: Timeline, Lex, Leg, Diagnostics, Settings, Styleguide. Included from `views/index.php`, `lex.php`, `leg.php`, `diagnostics.php`, `settings.php`, `styleguide.php`. |
+| Dashboard default limit | `DashboardController` resolves default `?limit=` when absent from `system_config` key `ui:dashboard_limit` via `SettingsController::KEY_DASHBOARD_LIMIT`; fallback **30** (`DEFAULT_LIMIT_FALLBACK`). |
+| View timezone | `SEISMO_VIEW_TIMEZONE` default in `bootstrap.php` (`Europe/Zurich`); optional override in `config.local.php`. `seismo_view_timezone()` in `bootstrap.php`. `views/helpers.php`: `seismo_magnitu_day_heading()` and `seismo_format_utc()` use it; `views/leg.php` “today” line uses it. |
+| SystemConfigRepository | Legacy **`magnitu_config` fallback removed** — only `system_config` is queried. Deployments must have Migration 005 applied (schema ≥ 21). `MigrationRunner.php` docblock updated accordingly. |
+| Filter pill cache | `DashboardController::getFilterPillOptionsCached()` memoises the output of `EntryRepository::getFilterPillOptions()` in `$_SESSION` for **60 seconds** when a session is active. The repository method itself stays SQL-only; review moved the session cache up one layer so the `EntryRepository` contract didn't grow a hidden `$_SESSION` dependency. |
+| Diagnostics | `DiagnosticsController` issues one batch query via `PluginRunLogRepository::recentForPlugins($ids, 8)` — a single round-trip with per-id `UNION ALL` legs that ride the `(plugin_id, run_at)` index, replacing the initial N+1 loop. `views/diagnostics.php` renders a **Recent runs** `<details>` block per row, delegating the inner markup to `views/partials/plugin_recent_runs.php` so the core and plugin loops no longer duplicate the same 30-line table. |
+| Migration safety | `MigrationRunner::getCurrentVersion()` keeps a one-off probe against `magnitu_config` purely as a **safety net**: on a hit it refuses to run and instructs the admin to deploy Slice 5a first and apply Migration 005. Prevents an admin who skips Slice 5a from silently re-running Migrations 001..004 against a populated database once the `SystemConfigRepository` fallback is gone. |
+| Styleguide | `Seismo\Controller\StyleguideController` + `views/styleguide.php` — `?action=styleguide`, minimal tokens/buttons/card sample for Magnitu alignment. |
+| Router | `index.php` registers `settings`, `settings_save`, `styleguide`. `Seismo\Http\Router::READONLY_KEEP_SESSION_FOR_CSRF` includes `settings` and `styleguide`. |
+
+**New wiring.**
+
+```
+?action=settings[&tab=…]  → SettingsController::show()
+                                 → General: SystemConfigRepository (ui:dashboard_limit)
+                                 → Retention: RetentionService::previewAll() + retention_panel partial
+
+GET ?action=retention       → 303 → ?action=settings&tab=retention
+
+Dashboard GET ?action=index (no limit) → DashboardController::resolveDefaultLimitFromConfig()
+```
+
+**Gotchas.**
+
+- **`magnitu_config` fallback is gone.** If code is deployed against a DB that still has only the old table name and no `system_config`, `MigrationRunner::getCurrentVersion()` now throws a clear RuntimeException telling the admin to deploy Slice 5a first and apply Migration 005 — no silent re-run of earlier migrations against a populated database.
+- **Slice 5a README text** still describes the standalone retention page and legacy fallback where it documented the state at 5a ship time; Slice 6 is the current behaviour for those two points.
+- **Drawer links** intentionally omit separate “Feeds” / “Mail” / “About” routes — 0.5 has no dedicated pages for those yet; Timeline + Diagnostics cover refresh surfaces.
+- **Optional items** from the plan not implemented in this slice: FULLTEXT dashboard search, per-family retention toggles / “last pruned on DATE” readout, `ai_view` (no 0.5 implementation existed to retire).
+
+**Test URLs.**
+
+- `?action=settings` — General tab; change “Entries per page”, Save; reload `?action=index` without `limit` — count should match.
+- `?action=settings&tab=retention` — same retention grid as before; prune / save still work; `?action=retention` redirects here.
+- `?action=styleguide` — sample components.
+- `?action=diagnostics` — expand **Recent runs** under a plugin/core row.
+- `?action=health` — unchanged; requires `system_config` after fallback removal.
+
+---
+
 ## Slice 5a — Config unification + retention service
 
 **Why.** 0.5 inherited three config stores from 0.4 that all behaved the same but lived in different places: `magnitu_config` (SQL k/v), `lex_config.json` (on disk), `calendar_config.json` (on disk). The table was also misnamed — it has always been a generic instance-level key/value store, never Magnitu-specific. Slice 5a folds all three into one `system_config` table and introduces the long-deferred retention service so the shared-host DB quota finally has automatic pressure relief (per `core-plugin-architecture.mdc`, every family repo was already required to ship a `prune()` — this slice wires them into a policy layer).
@@ -19,13 +68,13 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 |---|---|
 | Table rename | `Migration005SystemConfig` (schema **v21**) runs `ALTER TABLE magnitu_config RENAME TO system_config`. Existing rows (Magnitu `api_key`, `export:api_key`, recipe JSON, etc.) survive untouched. |
 | JSON fold-in | Same migration reads `lex_config.json` and `calendar_config.json` from the install root, upserts one `system_config` row per top-level block (`plugin:ch`, `plugin:eu`, `plugin:parliament_ch`, …), and renames the JSON files to `.migrated-v21` as a manual-rollback sample. The `jus_banned_words` list routes to `lex:jus_banned_words` (not a plugin). Satellite mode runs step 1 only (local `magnitu_config` rename for auth keys); it has no plugin configs to fold. |
-| Repository | `Seismo\Repository\SystemConfigRepository` replaces `MagnituConfigRepository`. Public surface grows: `getJson()` / `setJson()` (for plugin-config blocks), `getAllPluginBlocks()`, a request-local memoisation cache, and transparent legacy-table fallback in `get()` / `set()` so the brief window between "new code uploaded" and "Migration 005 applied" doesn't break `?action=health`. Old class name is deleted outright; every callsite is renamed. |
+| Repository | `Seismo\Repository\SystemConfigRepository` replaces `MagnituConfigRepository`. Public surface grows: `getJson()` / `setJson()` (for plugin-config blocks), `getAllPluginBlocks()`, a request-local memoisation cache. At 5a ship, `get()` / `set()` also retried the legacy `magnitu_config` table name during the deploy→migrate gap — **Slice 6 removed that fallback**; only `system_config` remains. Old class name is deleted outright; every callsite is renamed. |
 | Config stores | `Seismo\Config\LexConfigStore` and `Seismo\Config\CalendarConfigStore` keep their 0.4-shape public API (`load()`, `save()`, `saveChBlock()` / `saveParlChBlock()`, `defaultConfig()`) so no caller changed. Internally, `load()` assembles the blob from per-block `plugin:<key>` rows; `save()` decomposes it back. Constructors took no args before and still take no args — they instantiate their own `SystemConfigRepository` with `getDbConnection()` by default. |
 | Retention service | `Seismo\Service\RetentionService` (`pruneAll()` / `previewAll()` / `loadPolicy()` / `savePolicy()`). Policy rows live at `retention:<family>` in `system_config`, JSON-shaped `{"days": 180, "keep": ["favourited","high_score","labelled"]}`. `days = null` or `0` disables pruning for the family. Defaults match the table in `core-plugin-architecture.mdc`: 180d for `feed_items` and `emails`, unlimited for `lex_items` and `calendar_events`. |
 | Predicate builder | `Seismo\Service\RetentionPredicates::forEntryType()` is the only place that maps keep-tokens (`favourited`, `high_score`, `labelled`) to `EXISTS (…)` SQL. Family repos call it from `buildPruneWhere()` so preview and real run share the exact same WHERE clause by construction. |
 | Family repos | `FeedItemRepository`, `LexItemRepository`, `CalendarEventRepository` now have real `prune()` + matching `dryRunPrune()` instead of stubs. New `Seismo\Repository\EmailRepository` exists solely to own `prune()` / `dryRunPrune()` for `emails` (reads still go through `EntryRepository` / `MagnituExportRepository`). All four share the same `buildPruneWhere()` pattern. |
 | Cron wiring | `refresh_cron.php` calls `RetentionService::boot($pdo)->pruneAll()` at the tail, after plugins. Satellite mode short-circuits at the service level. Retention failures log via STDERR + `error_log()` but **do not** flip the cron exit code — a broken retention query must not mask a successful plugin run (or vice versa). |
-| UI | `Seismo\Controller\RetentionController` + `views/retention.php` — standalone `?action=retention` page with a per-family editable row (days + keep-checkboxes + "would delete today" count) plus a "Run retention now" button. CSRF-guarded POSTs at `retention_save`, `retention_preview`, `retention_prune`. Discoverable from the Diagnostics top-bar. Settings-tab integration lands with Slice 6. |
+| UI (state at 5a ship) | Standalone `?action=retention` + `views/retention.php` — per-family row + prune. CSRF POSTs at `retention_save`, `retention_preview`, `retention_prune`. **Slice 6** removes the standalone view file, redirects GET `retention` → `?action=settings&tab=retention`, and embeds the grid in Settings. |
 
 **New wiring.**
 
@@ -52,7 +101,7 @@ Retention run : refresh_cron.php
 **Gotchas.**
 
 - **`MagnituConfigRepository` is gone.** Every import has been renamed to `SystemConfigRepository`. If a mid-rewrite branch resurfaces and imports the old class, add a matching `use` alias rather than reintroducing the file — the old name was misleading from day one.
-- **Legacy-table fallback is intentional but transition-only.** `SystemConfigRepository::get()` / `set()` silently retry against `magnitu_config` when `system_config` is missing. This keeps `?action=health` alive between deploying Slice 5a and running migrate; it is NOT meant to outlive Slice 5a. Remove the fallback in Slice 6 polish.
+- **Legacy-table fallback (removed in Slice 6).** Slice 5a shipped with a brief `magnitu_config` retry in `SystemConfigRepository::get()` / `set()` for the deploy→migrate window. Slice 6 deletes that path — `system_config` only.
 - **Lex plugin keys aren't plugin identifiers yet.** `LexFedlexPlugin::getConfigKey()` returns `'ch'` (0.4 legacy). The stored row is `plugin:ch`. Future slices may normalise those to the Fedlex identifier (`plugin:fedlex`) — when they do, add a data-renaming migration, don't edit the plugin's `getConfigKey()` in place.
 - **`jus_banned_words` isn't a plugin.** It's a shared filter list that lived inside `lex_config.json` because that's where `getLexConfig()` put it. Slice 5a routes it to `lex:jus_banned_words` instead of `plugin:jus_banned_words` so `SystemConfigRepository::getAllPluginBlocks()` doesn't surface it as a phantom plugin.
 - **`EmailRepository` exists only for retention.** Reads for dashboard + Magnitu API still go through `EntryRepository` / `MagnituExportRepository`. Resist the temptation to move all email SQL here until a consumer actually asks for it — the split is currently justified by "each concern has one SQL owner", and a premature mega-repo would undo that.
@@ -62,11 +111,12 @@ Retention run : refresh_cron.php
 
 - `?action=migrate&key=…` — expect schema **21** after deploy. Two messages: "Applying migration to version 21" (rename + fold) and then the final "Schema is up to date".
 - `?action=health` — still renders; schemaVersion reports 21.
-- `?action=retention` — renders the grid with 180-day policies active on `feed_items` / `emails` and "unlimited" on `lex_items` / `calendar_events`. "Would delete today" column should match your live data. On satellite: the Refresh preview works, "Run retention now" button refuses.
-- `?action=retention` → edit "feed_items" to e.g. 365 days → "Save policies" → reload. Row reflects the new cutoff; `system_config` gets a new `retention:feed_items` row.
-- `?action=retention_prune` (POST via the button) → runs `pruneAll()`; flash message reports the per-family deletion totals.
-- `?action=lex` / `?action=leg` — config still loads (from `system_config` now). Saving the Parlament CH block writes to `plugin:parliament_ch` row.
-- Negative: on a fresh database where `system_config` doesn't exist, `?action=health` still responds (falls back to `magnitu_config`). On a post-Slice-5 database with the old table name but new code, `?action=health` reports schema 20 correctly via the fallback until migrate is run.
+- `?action=retention` — **Slice 6:** redirects to `?action=settings&tab=retention` (same grid and POST handlers). Historically at 5a ship this URL rendered the page directly.
+- `?action=settings&tab=retention` — grid with 180-day policies on `feed_items` / `emails`, unlimited on `lex_items` / `calendar_events`; "Would delete today" matches live data. On satellite: preview works, "Run retention now" refuses.
+- Edit e.g. `feed_items` days → **Save policies** → row updates; `system_config` gets `retention:feed_items`.
+- `?action=retention_prune` (POST via the button) → `pruneAll()`; flash reports per-family totals.
+- `?action=lex` / `?action=leg` — config loads from `system_config`. Saving Parlament CH writes `plugin:parliament_ch`.
+- Negative (post–Slice 6): `SystemConfigRepository` no longer falls back to `magnitu_config` — run migrations so `system_config` exists before relying on health/settings.
 
 ---
 

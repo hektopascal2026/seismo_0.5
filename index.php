@@ -124,6 +124,21 @@ $router->register(
 // Retention settings surface. Read view is plain GET; preview and
 // actual prune are POSTed with a session-bound CSRF token.
 $router->register(
+    'settings',
+    \Seismo\Controller\SettingsController::class . '::show',
+    true
+);
+$router->register(
+    'settings_save',
+    \Seismo\Controller\SettingsController::class . '::saveGeneral',
+    false
+);
+$router->register(
+    'styleguide',
+    \Seismo\Controller\StyleguideController::class . '::show',
+    true
+);
+$router->register(
     'retention',
     \Seismo\Controller\RetentionController::class . '::show',
     true

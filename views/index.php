@@ -20,10 +20,12 @@ declare(strict_types=1);
 /** @var array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $filterPillOptions */
 /** @var \Seismo\Repository\TimelineFilter $timelineFilter */
 
-use Seismo\Http\AuthGate;
-
 $basePath = getBasePath();
 $accent   = seismoBrandAccent();
+
+$headerTitle    = seismoBrandTitle();
+$headerSubtitle = !isSatellite() ? 'ein Prototyp von hektopascal.org | v' . SEISMO_VERSION : null;
+$activeNav      = 'index';
 
 /** @param array<string, scalar|null> $overrides */
 $dashboardQs = static function (array $overrides) use ($searchQuery, $currentView): string {
@@ -82,33 +84,7 @@ $clearSearchQs = http_build_query($clearSearchParams);
 </head>
 <body>
     <div class="container">
-        <div class="top-bar">
-            <div class="top-bar-left">
-                <span class="top-bar-title">
-                    <a href="?action=index">
-                        <svg class="logo-icon logo-icon-large" viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg">
-                            <rect width="24" height="16" fill="#FFFFC5"/>
-                            <path d="M0,8 L4,12 L6,4 L10,10 L14,2 L18,8 L20,6 L24,8" stroke="#000000" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </a>
-                    <?= e(seismoBrandTitle()) ?>
-                </span>
-                <?php if (!isSatellite()): ?>
-                <span class="top-bar-subtitle">ein Prototyp von hektopascal.org | v<?= e(SEISMO_VERSION) ?></span>
-                <?php endif; ?>
-            </div>
-            <div class="top-bar-actions">
-                <a href="<?= e($basePath) ?>/index.php?action=lex" class="top-bar-btn" title="Lex">Lex</a>
-                <a href="<?= e($basePath) ?>/index.php?action=leg" class="top-bar-btn" title="Leg">Leg</a>
-                <a href="<?= e($basePath) ?>/index.php?action=diagnostics" class="top-bar-btn" title="Diagnostics">Diag</a>
-                <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" style="display:inline; margin:0;">
-                        <?= $csrfField ?>
-                        <button type="submit" class="top-bar-btn" title="Sign out">Logout</button>
-                    </form>
-                <?php endif; ?>
-            </div>
-        </div>
+        <?php require __DIR__ . '/partials/site_header.php'; ?>
 
         <?php if (isset($_SESSION['success'])): ?>
             <div class="message message-success"><?= e((string)$_SESSION['success']) ?></div>

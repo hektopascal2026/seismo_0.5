@@ -131,7 +131,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 **Scope-fidelity notes for Slice 5 (per `slice-scope-fidelity.mdc`):**
 
-- **0.4 subscription-based email hiding is NOT ported.** v0.4's Magnitu responses filtered out emails whose sender address had `show_in_magnitu = 0` in `email_subscriptions`. v0.5 exposes all `emails` rows via `MagnituExportRepository::listEmailsSince()` regardless of subscription visibility. Re-adding the filter is a deliberate product decision (sender-level opt-out for the Magnitu pipeline) — file under Slice 6 if confirmed; do not smuggle it into a later slice.
+- **0.4 subscription-based email hiding is NOT ported.** v0.4's Magnitu responses filtered out emails whose sender address had `show_in_magnitu = 0` in `email_subscriptions`. v0.5 exposes all `emails` rows via `MagnituExportRepository::listEmailsSince()` regardless of subscription visibility. Re-adding the filter is a deliberate product decision (sender-level opt-out for the Magnitu pipeline) — track explicitly in a future slice if confirmed; do not smuggle it in without a plan entry.
 - **`magnitu_status.version` contract drift.** 0.4 returned a monolithic `version` string baked from the running codebase. v0.5's `MagnituController::status()` returns `{"schema_version": <int>, "recipe_version": <int>}` instead, which is what 0.4's `sync.py` actually consumes. If the mothership tooling still reads `.version` as a single string, the consumer must be updated in the same push. Documented here so the next reviewer doesn't mistake it for an oversight.
 - **`ScoringService::rescoreAll()` runs synchronously from the `magnitu_recipe` POST handler.** Up to ~2,000 rescores (500 per family × 4 families) fit inside a shared-host PHP timeout today; beyond that it needs to move to a cron worker. Filed as Slice 5b follow-up below rather than a warning to re-raise every review.
 - **Fetch/persist boundary fixed post-review.** The initial Slice 5 submission had `ScoringService` issuing its own `SELECT` queries against entry-source tables (first Gemini review flagged this as a **FAIL**). Fixed in-session by moving every unscored-row lookup into `EntryScoreRepository` as `getUnscoredFeedItems() / getUnscoredLexItems() / getUnscoredEmails() / getUnscoredCalendarEvents()`, each honouring `entryTable()` + a repo-local `MAX_UNSCORED_LIMIT = 500`. `ScoringService` no longer takes a `PDO` — it depends only on `EntryScoreRepository` and orchestrates `RecipeScorer::score()` → `upsertRecipeScore()`. Second Gemini review: PASS.
@@ -153,22 +153,29 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 **Scope-fidelity notes for Slice 5a (per `slice-scope-fidelity.mdc`):**
 
 - **JSON sidecars are renamed, not deleted.** Migration 005 renames `lex_config.json` → `lex_config.json.migrated-v21` (same for calendar) so the admin keeps an on-disk sample to diff against the folded rows. Deletion is left to the admin; not speculative.
-- **Retention settings ship as a standalone `?action=retention` page**, not a tab inside a combined Settings surface — the settings-tab architecture is Slice 6's concern. The page is linked from the Diagnostics top-bar and will graduate into a tab later.
+- **Retention UI (state at 5a ship):** standalone `?action=retention` page, linked from Diagnostics. **Slice 6** folds this into `?action=settings&tab=retention`; GET `?action=retention` redirects there.
 - **Preview / actual consistency is enforced by construction.** Every family repo routes both `prune()` and `dryRunPrune()` through a private `buildPruneWhere()` that pulls the keep-fragment from `RetentionPredicates::forEntryType()`. The two queries cannot diverge modulo rows inserted between the two calls.
-- **`MagnituConfigRepository` is deleted outright, not kept as a deprecated shim.** Every callsite in 0.5 has been renamed to `SystemConfigRepository`; no external consumer was relying on the old class name. `SystemConfigRepository::get()/set()` still falls back to the legacy `magnitu_config` table name during the transition window (deploy-code → run-migrate), documented to be removed in Slice 6.
+- **`MagnituConfigRepository` is deleted outright, not kept as a deprecated shim.** Every callsite in 0.5 has been renamed to `SystemConfigRepository`. The brief deploy-gap fallback from `system_config` to `magnitu_config` in `SystemConfigRepository::get()/set()` existed until **Slice 6**, which removed it — only `system_config` is used now (schema ≥ 21).
 - **`jus_banned_words` is stored under `lex:jus_banned_words`, not `plugin:jus_banned_words`.** It is a shared filter list, not a plugin block — routing it differently keeps `SystemConfigRepository::getAllPluginBlocks()` honest.
 - **`EmailRepository` is a new retention-only repo.** Reads still go through `EntryRepository` / `MagnituExportRepository`; `EmailRepository` owns `prune()` and `dryRunPrune()` only. Resist folding all email SQL here without a consumer asking — "one SQL owner per concern" is load-bearing.
 
-### Slice 6 — Admin / settings polish
+### Slice 6 — Admin / settings polish — **shipped**
 
-- **Dashboard search performance (optional).** `EntryRepository::searchTimeline` uses `LIKE %term%` on `feed_items` (incl. `MEDIUMTEXT content`) — fine at current volume; if the host slows down, add a MySQL **FULLTEXT** index on `(title, description, content)` (and/or switch the feed leg of search to `MATCH … AGAINST`) — evaluate with real corpus sizes first.
-- **Main feed page size (user setting).** Persist a default number of entries for `?action=index` (today `DashboardController` uses hardcoded `DEFAULT_LIMIT = 30`; `EntryRepository::MAX_LIMIT` stays the hard cap at 200). Store in `system_config` after Slice 5a, or interim key in `magnitu_config` if settings land before rename. Settings UI: numeric field + validation; dashboard reads saved default when `?limit=` is absent.
-- Settings tabs split into clean partials (one concern each).
-- Retention UI polish (family toggles, per-family overrides, "last pruned N rows on DATE" readout).
-- Plugin diagnostics polish (test history, per-plugin last-N-runs view).
-- Retire `ai_view` experiments or fold into one admin path.
-- Styleguide kept as design source of truth.
-- **Navigation drawer on the dashboard and per-source pages** (deferred from Slice 1): top-bar menu button reopened, drawer links to Feeds / Mail / Lex / Leg / Magnitu / Settings / About. Can land earlier if navigability pain surfaces before Slice 6 — in that case, split into a small "Slice 2.5 — navigation" and update this section to point at the slice it moved to. Do not re-add it mid-slice without naming the slice (`slice-scope-fidelity.mdc`).
+- **Unified settings.** `?action=settings` with tabs **General** (default dashboard page size → `system_config` key `ui:dashboard_limit`) and **Retention** (embedded `views/partials/retention_panel.php`). POST `?action=settings_save` (CSRF).
+- **Retention URL.** GET `?action=retention` redirects to `?action=settings&tab=retention`; POST handlers unchanged. Standalone `views/retention.php` removed.
+- **Navigation drawer** (`views/partials/site_header.php`) on dashboard, Lex, Leg, Diagnostics, Settings, Styleguide — links use `getBasePath()`. No separate Feeds/Mail/About routes in 0.5 yet.
+- **View timezone** — `SEISMO_VIEW_TIMEZONE` (default `Europe/Zurich`); `seismo_view_timezone()`; day headings + `seismo_format_utc()` use it.
+- **`SystemConfigRepository`** — legacy `magnitu_config` fallback **removed** (requires `system_config` / schema ≥ 21). `MigrationRunner::getCurrentVersion()` probes `magnitu_config` one last time and throws a clear RuntimeException if a pre-v21 schema is detected, so a deploy that skips Slice 5a fails loudly instead of re-running migrations against a populated database.
+- **Diagnostics** — last **8** runs per core/plugin from `plugin_run_log` in a single batch query (`PluginRunLogRepository::recentForPlugins()` — one round-trip via per-id `UNION ALL` legs); renders through `views/partials/plugin_recent_runs.php`.
+- **Filter pills** — ~60s session cache for the three `SELECT DISTINCT` queries lives in `DashboardController` (not the repository, to keep `EntryRepository` SQL-only). Falls through to the raw repo call when the session isn't active.
+- **`?action=styleguide`** — minimal design reference page.
+- **Definition of done — met.** Gemini spot-check PASS (2026) plus follow-up remediation: filter-pill cache moved out of the repository, diagnostics batch query, `MigrationRunner` legacy-schema guard, `?action=retention` dropped from the readonly-session list (pure redirect since this slice), diagnostics `<details>` block extracted to a partial, `RetentionService::DEFAULT_POLICIES` adopted as SSoT for `$families` in `SettingsController`.
+
+**Deferred / optional (not Slice 6):**
+
+- **Dashboard search:** optional FULLTEXT / `MATCH … AGAINST` when corpus grows — still in play.
+- **Retention UI:** family toggles, per-family overrides, “last pruned on DATE” readout — not built.
+- **`ai_view`** — no 0.5 code to retire; revisit if a route appears.
 
 ## Portability checklist (applies to every slice)
 
@@ -197,7 +204,7 @@ Revisit a templating engine only if real pain emerges (duplicated markup, escapi
 
 - **Per-feed full-text backfill** — when to add "readability" / scraper fetch for thin RSS items (see Fetcher output contract). Product/settings decision once Slice 3 feed settings exist.
 - **Email schema unification** — exact column mapping from `emails` → unified structure. Needs a migration draft before Slice 4.
-- **`ai_view`** — keep as admin-only, retire, or fold into Magnitu UI? Decide before Slice 6.
+- **`ai_view`** — no 0.5 route exists yet; decide if/when a unified admin path needs it.
 - **Magnitu Leg API** — when (or whether) to lift the `calendar_event` exclusion. Product decision, not technical.
 
 ## Machine-readable export — forward-compat shape
@@ -225,6 +232,6 @@ Recorded here so they don't get re-litigated:
 
 ## Tracked follow-ups (post–Slice 4 hardening)
 
-- **Dashboard filter pills:** `EntryRepository::getFilterPillOptions()` runs three `SELECT DISTINCT` queries per request — acceptable for now; consider a ~1-minute cache (session or APCu) in Slice 6.
+- **Dashboard filter pills:** ~~`EntryRepository::getFilterPillOptions()` runs three `SELECT DISTINCT` queries per request~~ — **Slice 6** adds a ~60s session cache for the merged options array. Cache lives in `DashboardController::getFilterPillOptionsCached()`; the repository method is still pure-SQL.
 - **Scraper / feed_items sort churn:** `FeedItemRepository::upsertFeedItems()` keeps the existing `published_date` when `content_hash` is unchanged so scraper re-runs do not float stale pages to the top of the dashboard.
 - **Diagnostics parity:** Core fetchers have per-id “Refresh now” on `?action=diagnostics` (same POST as plugins). A “Test fetch (no save)” path for RSS/scraper/mail is still deferred — not part of the `SourceFetcherInterface` test shape.

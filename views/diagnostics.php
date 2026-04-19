@@ -17,11 +17,11 @@
  * @var ?array{id: string, count: int, error: ?string, items: list<array<string, mixed>>} $testResult
  * @var string $basePath
  * @var bool $satellite
+ * @var array<string, list<array{run_at: \DateTimeImmutable, status: string, item_count: int, error_message: ?string, duration_ms: int}>> $runHistory
  */
 
 declare(strict_types=1);
 
-use Seismo\Http\AuthGate;
 use Seismo\Http\CsrfToken;
 
 if (!function_exists('seismo_format_utc')) {
@@ -55,32 +55,12 @@ $statusBg = static function (?array $row): string {
 </head>
 <body>
     <div class="container">
-        <div class="top-bar">
-            <div class="top-bar-left">
-                <span class="top-bar-title">
-                    <a href="<?= e($basePath) ?>/index.php?action=index">
-                        <svg class="logo-icon logo-icon-large" viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg">
-                            <rect width="24" height="16" fill="#FFFFC5"/>
-                            <path d="M0,8 L4,12 L6,4 L10,10 L14,2 L18,8 L20,6 L24,8" stroke="#000000" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </a>
-                    Diagnostics
-                </span>
-                <span class="top-bar-subtitle">Plugin runs &amp; refresh</span>
-            </div>
-            <div class="top-bar-actions">
-                <a href="<?= e($basePath) ?>/index.php?action=lex" class="top-bar-btn" title="Lex">Lex</a>
-                <a href="<?= e($basePath) ?>/index.php?action=leg" class="top-bar-btn" title="Leg">Leg</a>
-                <a href="<?= e($basePath) ?>/index.php?action=retention" class="top-bar-btn" title="Retention">Retention</a>
-                <a href="<?= e($basePath) ?>/index.php?action=index" class="top-bar-btn" title="Back to timeline">←</a>
-                <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" style="display:inline; margin:0;">
-                        <?= CsrfToken::field() ?>
-                        <button type="submit" class="top-bar-btn" title="Sign out">Logout</button>
-                    </form>
-                <?php endif; ?>
-            </div>
-        </div>
+        <?php
+        $headerTitle = 'Diagnostics';
+        $headerSubtitle = 'Plugin runs & refresh';
+        $activeNav = 'diagnostics';
+        require __DIR__ . '/partials/site_header.php';
+        ?>
 
         <?php if (isset($_SESSION['success'])): ?>
             <div class="message message-success"><?= e((string)$_SESSION['success']) ?></div>
@@ -157,6 +137,10 @@ $statusBg = static function (?array $row): string {
                             <button type="submit" class="btn btn-secondary"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
                         </form>
                     </div>
+                    <?php
+                    $hist = $runHistory[$id] ?? [];
+                    require __DIR__ . '/partials/plugin_recent_runs.php';
+                    ?>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -227,6 +211,10 @@ $statusBg = static function (?array $row): string {
                                 </form>
                             </div>
                         </div>
+                        <?php
+                        $hist = $runHistory[$id] ?? [];
+                        require __DIR__ . '/partials/plugin_recent_runs.php';
+                        ?>
                     </div>
                 <?php endforeach; ?>
             <?php endif; ?>

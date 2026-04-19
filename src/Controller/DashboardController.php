@@ -16,13 +16,27 @@ use Seismo\Repository\TimelineFilter;
 
 final class DashboardController
 {
-    /** Default timeline size on first paint. Kept conservative for shared hosts. */
-    private const DEFAULT_LIMIT = 30;
+    /** Fallback when `ui:dashboard_limit` is not set in system_config. */
+    public const DEFAULT_LIMIT_FALLBACK = 30;
 
     /**
      * Deep-paging guard — see EntryRepository::getLatestTimeline().
      */
     private const MAX_OFFSET = 0;
+
+    /**
+     * Session cache for the three `SELECT DISTINCT` queries that feed the
+     * filter pills on the dashboard. Per `consolidation-plan.md` the option
+     * list changes at most once per refresh cycle, so a one-minute cache is
+     * ample and removes three queries from the hot path.
+     *
+     * Kept in the controller (not the repository) so {@see EntryRepository}
+     * stays SQL-only; the cache degrades gracefully when the session isn't
+     * active (e.g. CLI or an error in early session bootstrap).
+     */
+    private const FILTER_PILL_CACHE_KEY = '_seismo_filter_pill_opts';
+    private const FILTER_PILL_CACHE_AT  = '_seismo_filter_pill_at';
+    private const FILTER_PILL_CACHE_TTL = 60;
 
     public function show(): void
     {
@@ -44,7 +58,7 @@ final class DashboardController
         try {
             $pdo  = getDbConnection();
             $repo = new EntryRepository($pdo);
-            $filterPillOptions = $repo->getFilterPillOptions();
+            $filterPillOptions = $this->getFilterPillOptionsCached($repo);
             if ($currentView === 'favourites') {
                 $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter);
             } elseif ($searchQuery !== '') {
@@ -92,14 +106,61 @@ final class DashboardController
 
     private function clampLimit(mixed $raw): int
     {
+        if ($raw === null || $raw === '') {
+            return $this->resolveDefaultLimitFromConfig();
+        }
         $n = (int)$raw;
         if ($n <= 0) {
-            return self::DEFAULT_LIMIT;
+            return $this->resolveDefaultLimitFromConfig();
         }
         if ($n > EntryRepository::MAX_LIMIT) {
             return EntryRepository::MAX_LIMIT;
         }
+
         return $n;
+    }
+
+    private function resolveDefaultLimitFromConfig(): int
+    {
+        try {
+            $config = new \Seismo\Repository\SystemConfigRepository(getDbConnection());
+            $raw    = $config->get(SettingsController::KEY_DASHBOARD_LIMIT);
+            if ($raw !== null && $raw !== '' && ctype_digit($raw)) {
+                return max(1, min(EntryRepository::MAX_LIMIT, (int)$raw));
+            }
+        } catch (\Throwable $e) {
+            // Fresh install / transient DB — fall back.
+        }
+
+        return self::DEFAULT_LIMIT_FALLBACK;
+    }
+
+    /**
+     * One-minute memo of `$repo->getFilterPillOptions()` in `$_SESSION`.
+     * Falls through to the raw repo call when the session isn't writable.
+     *
+     * @return array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>}
+     */
+    private function getFilterPillOptionsCached(EntryRepository $repo): array
+    {
+        if (session_status() === PHP_SESSION_ACTIVE
+            && isset($_SESSION[self::FILTER_PILL_CACHE_KEY], $_SESSION[self::FILTER_PILL_CACHE_AT])
+            && (time() - (int)$_SESSION[self::FILTER_PILL_CACHE_AT]) < self::FILTER_PILL_CACHE_TTL
+        ) {
+            /** @var array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $cached */
+            $cached = $_SESSION[self::FILTER_PILL_CACHE_KEY];
+
+            return $cached;
+        }
+
+        $options = $repo->getFilterPillOptions();
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION[self::FILTER_PILL_CACHE_KEY] = $options;
+            $_SESSION[self::FILTER_PILL_CACHE_AT]  = time();
+        }
+
+        return $options;
     }
 
     private function clampOffset(mixed $raw): int

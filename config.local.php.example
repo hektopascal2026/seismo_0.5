@@ -67,6 +67,12 @@ define('DB_PASS', 'CHANGE_ME');
 // define('SEISMO_BRAND_ACCENT', '#4a90e2');
 
 /**
+ * Optional — IANA timezone for dashboard day labels and formatted clocks in the UI
+ * (data stays UTC in the database). Default: Europe/Zurich.
+ */
+// define('SEISMO_VIEW_TIMEZONE', 'Europe/Zurich');
+
+/**
  * Optional — require login for the web UI.
  *
  * When this constant is unset OR an empty string, Seismo runs without any

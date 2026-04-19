@@ -32,20 +32,28 @@ if (!function_exists('seismo_magnitu_day_heading')) {
         if ($unixTs <= 0) {
             return '';
         }
-        // Compute "today" in PHP's current timezone. We enforce UTC in
-        // bootstrap.php; views that want Zurich-local headings should adjust
-        // here when we add a dedicated view-timezone constant (TODO, Slice 5).
-        $todayStart    = strtotime('today');
-        $itemDayStart  = strtotime(date('Y-m-d', $unixTs) . ' 00:00:00');
-        $diffDays      = (int)(($todayStart - $itemDayStart) / 86400);
+        $tz       = seismo_view_timezone();
+        $itemDay  = (new \DateTimeImmutable('@' . $unixTs))->setTimezone($tz)->setTime(0, 0, 0);
+        $todayDay = new \DateTimeImmutable('today', $tz);
+        $diffDays = (int) round(($todayDay->getTimestamp() - $itemDay->getTimestamp()) / 86400);
 
-        if ($diffDays === 0) return 'Heute';
-        if ($diffDays === 1) return 'Gestern';
-        if ($diffDays === 2) return 'Vorgestern';
+        if ($diffDays === 0) {
+            return 'Heute';
+        }
+        if ($diffDays === 1) {
+            return 'Gestern';
+        }
+        if ($diffDays === 2) {
+            return 'Vorgestern';
+        }
         if ($diffDays >= 3 && $diffDays <= 6) {
             return 'Heute -' . $diffDays;
         }
-        return date('d.m.Y', $unixTs);
+        if ($diffDays < 0) {
+            return $itemDay->format('d.m.Y');
+        }
+
+        return $itemDay->format('d.m.Y');
     }
 }
 
@@ -160,14 +168,14 @@ if (!function_exists('seismo_format_utc')) {
      *
      * Single entry point used by the Lex, Leg, and Diagnostics pages — keeps
      * the "views are the only layer that converts to local time" rule in one
-     * place. When SEISMO_VIEW_TIMEZONE lands (Slice 5/6), wire it here.
+     * place. Uses {@see seismo_view_timezone()} (SEISMO_VIEW_TIMEZONE).
      */
     function seismo_format_utc(?\DateTimeImmutable $dtUtc, string $format = 'd.m.Y H:i'): ?string
     {
         if ($dtUtc === null) {
             return null;
         }
-        $local = $dtUtc->setTimezone(new \DateTimeZone('Europe/Zurich'));
+        $local = $dtUtc->setTimezone(seismo_view_timezone());
 
         return $local->format($format);
     }
