@@ -9,6 +9,67 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Decision 2026-04-19 — Core / Plugin split (pre-Slice-1)
+
+Not a code slice; an architectural decision that shapes every slice from 2 onward. Recorded here because it changes where future ports land and what the runner looks like.
+
+**Why.** Seismo's fetchers mix two very different risk profiles. RSS, IMAP, scraping are ours end-to-end and stable. Fedlex, RechtBund, EU Lex (SPARQL), Légifrance, Parlament.ch (OData) are brittle: upstream schemas and auth flows change without notice. In 0.4 a single plugin blowing up could cascade through `refreshAllSources()`. 0.5 must isolate the brittle edge.
+
+**What this means architecturally.**
+
+- `src/Core/` — things we control; crashes are bugs.
+- `src/Plugin/<Name>/` — one folder per third-party adapter; crashes are expected and contained.
+- A single interface, `Seismo\Service\SourceFetcherInterface`, with five small methods (`getIdentifier`, `getLabel`, `getEntryType`, `getConfigKey`, `fetch`). Plugins **MUST NOT** touch the DB.
+- `Seismo\Service\PluginRegistry` — hardcoded array, no filesystem scanning.
+- `Seismo\Service\RefreshAllService` — iterates Core fetchers and plugins, wraps every plugin call in `try/catch (\Throwable)`, records per-run status.
+
+**Persistence (Option B — shared family tables).** Plugins do not own tables. They return DTOs; the runner writes them via the family repository:
+
+| Family | Table | Writers |
+|---|---|---|
+| Legal text | `lex_items` | LexFedlex, LexEu, LexLegifrance, RechtBund (all plugins) |
+| Parliamentary business (Leg) | `calendar_events` | ParlCh (plugin) |
+| RSS / Substack | `feed_items` | Core |
+| Email | `emails` (unified in Slice 4) | Core |
+
+Plugin-specific fields live in `metadata JSON`. Rationale: preserves the polymorphic dashboard timeline (the consistent-card-layout achievement stays intact), keeps Magnitu's `entry_type` enum and API contract stable, keeps `entryTable()` satellite wrapping in one place (the repository).
+
+**Config.** Plugins share the existing family JSONs (`lex_config.json`, `calendar_config.json`). Each plugin points at its block via `getConfigKey()`. No new per-plugin config files for v0.5.
+
+**Failure surface.** Plugin errors show up in Settings / diagnostics (extending today's "feed diagnostics" area and the 0.5 `?action=health` surface). Per-plugin last-run status with `ok` / `skipped` / `error(message)` + timestamp. No dashboard banner, no email alerts. `error_log` remains the server-side source of truth.
+
+**What moved.** Nothing yet — this is a pre-slice decision. Adding here because it's the load-bearing shape for Slice 2 onward.
+
+**New wiring (to be implemented).**
+
+```
+Web "Refresh all" / refresh_cron.php
+  → Seismo\Service\RefreshAllService::run()
+    → Core fetchers (RSS, Mail, Scraper) — called directly, crashes are bugs
+    → PluginRegistry::all()
+      → for each SourceFetcherInterface:
+          try {
+            $items = $plugin->fetch($configBlock);
+            $familyRepository->upsertBatch($plugin->getEntryType(), $items);
+            $status[$plugin->getIdentifier()] = 'ok';
+          } catch (\Throwable $e) {
+            error_log(...); $status[...] = 'error: '.$e->getMessage();
+          }
+    → Scoring pass (Core)
+    → Persist run summary for diagnostics surface
+```
+
+**Gotchas / what we deliberately did not decide.**
+
+- No filesystem-scan plugin discovery — explicitly hardcoded in `PluginRegistry`. Easy to swap later.
+- No per-plugin sidecar tables yet. Granted case by case if a plugin truly needs state (OAuth tokens, cursors). Not speculative.
+- RSS is **Core**, not a plugin, even though upstream feeds occasionally break — because we own the parser. "Plugin" = we call someone else's API, not "upstream is unreliable."
+- No change to the schema for this decision. All four family tables already exist and already have `metadata JSON`.
+
+**Rule:** `.cursor/rules/core-plugin-architecture.mdc` (mirrored into 0.4 for workspace consistency).
+
+---
+
 ## Slice 0 — Skeleton: bootstrap, router, health, migrate CLI
 
 **Why.** 0.4 wired almost everything through `index.php` directly: a giant switch, `require`s of `config.php` (which itself ran DDL on every HTTP request), and a mix of procedural helpers scattered across `controllers/*.php`. Before porting features, the new codebase needs:

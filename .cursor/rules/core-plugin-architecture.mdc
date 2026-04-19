@@ -1,0 +1,114 @@
+---
+description: Core vs Plugin split for 0.5 — isolates brittle third-party adapters so core stays up when they fail
+alwaysApply: true
+---
+
+# Core / Plugin architecture (Seismo 0.5)
+
+Seismo has two kinds of code:
+
+- **Core** — things we control end-to-end. Stable by nature (RSS parsing, IMAP, HTML scraping, scoring, Magnitu API, dashboard, settings). Crashes here are bugs.
+- **Plugins** — adapters to third-party APIs that routinely change shape (Fedlex, RechtBund, EU Lex SPARQL, Légifrance, Parlament.ch OData, and future sources). Crashes here are **expected**; they must not take down core.
+
+Isolation is achieved by a runtime boundary (`try/catch` in `RefreshAllService`) **and** by directory / interface discipline. Schemas are deliberately **shared** — see "Persistence" below.
+
+## Directory layout
+
+```
+src/
+├── Core/
+│   ├── Fetcher/        RSS, Mail, Scraper — our input pipelines
+│   ├── Scoring/        Recipe engine (ex-config.php)
+│   └── ...
+├── Plugin/             All third-party adapters live here, one folder per adapter
+│   ├── LexFedlex/
+│   ├── LexEu/
+│   ├── LexLegifrance/
+│   └── ParlCh/
+├── Http/               Router, Controllers (orchestration)
+├── Repository/         Data access — the only place SQL lives
+└── Service/            RefreshAllService, PluginRegistry, etc.
+```
+
+PSR-4 via the bootstrap autoloader: `Seismo\Plugin\LexFedlex\LexFedlexPlugin` → `src/Plugin/LexFedlex/LexFedlexPlugin.php`.
+
+## The plugin contract
+
+Every plugin implements `Seismo\Service\SourceFetcherInterface`. Small on purpose — it must stay small.
+
+```php
+interface SourceFetcherInterface {
+    /** Stable machine id: 'fedlex', 'parl_ch'. Used in logs and config keys. */
+    public function getIdentifier(): string;
+
+    /** Human-readable label for UI and logs. */
+    public function getLabel(): string;
+
+    /** Which family table the items belong to: 'lex_item' | 'calendar_event' | ... */
+    public function getEntryType(): string;
+
+    /** Key inside the family JSON config where this plugin's settings live. */
+    public function getConfigKey(): string;
+
+    /**
+     * Fetch items from the external source and return normalised DTOs.
+     * MUST NOT write to the DB. MAY throw — the runner catches and logs.
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetch(array $config): array;
+}
+```
+
+Hard rules for plugins:
+
+- **No SQL.** Plugins call HTTP / SPARQL / OAuth; they do not touch the database. Persistence is the runner's job via the family repository.
+- **No global state.** A plugin is a plain class with its own fetcher dependencies. It does not write to `$_SESSION` or mutate globals.
+- **Throwing is fine.** `RefreshAllService` wraps every plugin call in `try/catch (\Throwable $e)`, logs the identifier + exception, and moves on to the next plugin.
+- **One plugin, one folder.** Fetcher + helpers + any plugin-specific DTOs live in `src/Plugin/<Name>/`. Nothing outside that folder is plugin-specific.
+
+## Persistence: shared family tables (Option B)
+
+Plugins do **not** own their own tables. They write (via the runner) to the existing generic "family" tables:
+
+| Family | Table | Plugins today |
+|---|---|---|
+| Legal text | `lex_items` | LexFedlex, LexEu, LexLegifrance, (future: RechtBund, Jus, etc.) |
+| Parliamentary business (Leg) | `calendar_events` | ParlCh, (future: EU council, cantonal, …) |
+| RSS / Substack | `feed_items` | Core (not a plugin) |
+| Email | `emails` (unified in Slice 4) | Core |
+
+Keys: `(source, external_id)`. Plugin-specific fields → `metadata JSON`. A plugin that truly doesn't fit any family proposes a **new family**, not a per-plugin table.
+
+Why: keeps the dashboard timeline polymorphic (card layout stays consistent — non-negotiable), keeps Magnitu's `entry_type` enum stable (no API break), keeps `entryTable()` satellite-mode wrapping in one place (the repository) instead of per-plugin. Isolation is delivered by the runtime boundary, not by schema fragmentation.
+
+If a future plugin genuinely needs sidecar state (OAuth tokens, rate-limit cursors, raw response archives), we add a plugin-owned sidecar table **then** — not speculatively.
+
+## Configuration
+
+Plugins share the existing family JSON configs:
+
+- `lex_config.json` — one block per Lex* plugin, keyed by `getConfigKey()`.
+- `calendar_config.json` — one block per ParlCh-family plugin, same pattern.
+
+The runner passes the plugin's own block to `fetch()`. If a plugin outgrows this (long-lived OAuth tokens, multi-account, etc.), it may graduate to its own file — but v0.5 does not build that escape hatch preemptively.
+
+## Failure surface
+
+Plugin failures are **user-visible in Settings / diagnostics**, not via alerts or emails:
+
+- `RefreshAllService` records per-run status per plugin: `ok` / `skipped` / `error(message)` + timestamp.
+- The existing settings "feed diagnostics" area (0.5 version lives under the health/diagnostics surface) gets a **plugin status panel** listing every registered plugin with its last run status.
+- A red plugin is a red panel row — not a banner on the dashboard, not email. The admin looks at diagnostics when they suspect something is off.
+- Exceptions are also `error_log`'d with the plugin identifier in the message so server logs remain the source of truth.
+
+## Plugin registry
+
+Hardcoded: `Seismo\Service\PluginRegistry` holds an explicit array of instantiated plugins. Adding a plugin = one new `src/Plugin/X/` folder + one line in the registry + one `README-REORG.md` entry. No filesystem scanning, no config-file plugin lists.
+
+If end-user-installable plugins ever become a requirement, swap the registry implementation; the interface does not change.
+
+## When is something Core vs Plugin?
+
+Rule of thumb: **if the upstream is owned by a third party and has broken on us even once, it's a Plugin.** RSS is borderline (upstream feeds break) but we're the parser — it's Core. SPARQL endpoints for EU Lex change quarterly — that's a Plugin.
+
+When in doubt: err toward Plugin. Moving code from Plugin to Core later is trivial; going the other way is painful.

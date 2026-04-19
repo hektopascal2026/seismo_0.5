@@ -18,6 +18,18 @@ Lightweight OOP with **bounded classes**, not a full framework:
 - **Services / Fetchers** — external I/O (HTTP, SPARQL, IMAP). Return arrays / small value objects; do **not** write to the DB directly.
 - **Bootstrap** — small: autoload, config, PDO, satellite/brand helpers, session.
 
+### Core vs Plugin split
+
+Code is split into **Core** (things we control; stable by nature — RSS parsing, IMAP, scraping, scoring, Magnitu API, dashboard) and **Plugin** (third-party adapters: Fedlex, RechtBund, EU Lex SPARQL, Légifrance, Parlament.ch, …). Plugins implement `Seismo\Service\SourceFetcherInterface` and live in `src/Plugin/<Name>/`. `RefreshAllService` wraps every plugin in `try/catch` so one broken upstream never takes down the app.
+
+**Persistence decision: Option B — plugins share existing family tables.** Plugins return DTOs; the runner writes them via the family repository (`LexItemRepository`, `CalendarEventRepository`, …). Plugin-specific fields live in the existing `metadata JSON` column. This preserves the polymorphic dashboard timeline (card layout), the stable Magnitu `entry_type` enum, and single-place `entryTable()` satellite wrapping.
+
+**Configuration decision:** plugins share the existing family JSONs (`lex_config.json`, `calendar_config.json`); each plugin exposes a `getConfigKey()` pointing at its block.
+
+**Failure surface decision:** plugin errors surface in Settings / diagnostics (extending the existing feed-diagnostics area and the 0.5 `?action=health` surface). No banner on the dashboard, no email alerts. `error_log` stays the ground truth for server logs.
+
+Full rule: `.cursor/rules/core-plugin-architecture.mdc`.
+
 ### Guardrails to keep in Cursor rules
 
 1. **Move off global procedural handlers.** `handleLexPage()` → `LexController::show()`; DB reads → `LexRepository`; HTTP → `LexFetcherService`.
@@ -47,22 +59,26 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - No writes yet. Satellite mode should work against a mothership DB without scraping.
 - **Definition of done:** feed renders on both mothership and satellite; all card types look identical to 0.4.
 
-### Slice 2 — Lex as the reference port
+### Slice 2 — Lex as the reference plugin port
 
-- `LexRepository`, `LexFetcherService` (HTTP base client included), `LexController`.
-- Lex page + settings tab for Lex only.
-- **Definition of done:** Lex list view and “Refresh Lex” work end-to-end through the new layering — template for all other sources.
+- Introduce `Seismo\Service\SourceFetcherInterface` and a shared HTTP base client.
+- Implement `LexFedlexPlugin` (first plugin) + `LexItemRepository` (first family repo) + `LexController` + Lex page + settings tab for Lex only.
+- Plugin writes nothing directly; controller/refresh handler calls plugin → repository.
+- **Definition of done:** Lex list view and “Refresh Lex” work end-to-end through the new plugin layering — template for every subsequent plugin and family repo.
 
-### Slice 3 — Unified refresh pipeline
+### Slice 3 — Unified refresh pipeline + plugin runtime boundary
 
-- `RefreshAllService` (or equivalent) shared by web + CLI.
-- Rebuild `refresh_cron.php` as a thin shell that calls it.
-- Add **Leg** to the shared pipeline so cron and web match.
-- **Definition of done:** running cron and clicking “Refresh all” execute the same steps; Leg is included in both.
+- `Seismo\Service\PluginRegistry` (hardcoded array of instantiated plugins).
+- `Seismo\Service\RefreshAllService` shared by web + CLI: iterates Core fetchers first, then plugins with `try/catch` per plugin. Records per-run status.
+- Rebuild `refresh_cron.php` as a thin shell that calls `RefreshAllService`.
+- Add **Leg** (ParlCh plugin) to the shared pipeline so cron and web match.
+- Plugin status rendered in the diagnostics / health surface.
+- **Definition of done:** cron and “Refresh all” execute the same steps; Leg is included in both; a failing plugin logs + shows red in diagnostics and the rest of the pipeline keeps running.
 
 ### Slice 4 — Remaining entry sources
 
-- RSS, Substack, Mail (with email schema unification migration), Scraper, Jus, Parl MM, Leg — each follows the Lex template (Repository + FetcherService + Controller).
+- **Core fetchers:** RSS, Substack, Mail (with email schema unification migration), Scraper — each ported as a Core service (not a plugin).
+- **Plugins:** LexEu, LexLegifrance, RechtBund (as Jus variant), Parl MM, any other third-party adapter — each follows the Slice 2 template.
 - Unify email schema under `emails` built from today’s `fetched_emails` structure; provide migration script.
 
 ### Slice 5 — Magnitu boundary
