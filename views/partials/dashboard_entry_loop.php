@@ -16,6 +16,7 @@
  * rows stay readable until fetchers enforce a normalisation contract (Slice 3+).
  *
  * @var string $csrfField From DashboardController (CSRF hidden input HTML)
+ * @var bool $embedTimelineExpandAllInDayRow When true (index only), first day heading shares a row with "expand all".
  */
 $searchQuery = $searchQuery ?? '';
 if (!isset($showFavourites)) {
@@ -24,6 +25,9 @@ if (!isset($showFavourites)) {
 $returnQuery = $returnQuery ?? ($_SERVER['QUERY_STRING'] ?? 'action=index');
 $showDaySeparators = !empty($showDaySeparators);
 $feedLoopPrevDayKey = null;
+$embedTimelineExpandAllInDayRow = !empty($embedTimelineExpandAllInDayRow);
+$timelineExpandAllInDayRowDone  = false;
+$entryLoopIndex                 = 0;
 ?>
                 <?php foreach ($allItems as $itemWrapper): ?>
                     <?php
@@ -57,7 +61,12 @@ $feedLoopPrevDayKey = null;
                             if ($__dk !== '' && ($feedLoopPrevDayKey === null || $feedLoopPrevDayKey !== $__dk)) {
                                 $__h = seismo_magnitu_day_heading($__ts);
                                 if ($__h !== '') {
-                                    echo '<div class="magnitu-day-separator"><span class="magnitu-day-separator-text">' . htmlspecialchars($__h) . '</span></div>';
+                                    if ($embedTimelineExpandAllInDayRow && !$timelineExpandAllInDayRowDone) {
+                                        $timelineExpandAllInDayRowDone = true;
+                                        echo '<div class="timeline-day-row"><div class="magnitu-day-separator"><span class="magnitu-day-separator-text">' . htmlspecialchars($__h) . '</span></div><button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button></div>';
+                                    } else {
+                                        echo '<div class="magnitu-day-separator"><span class="magnitu-day-separator-text">' . htmlspecialchars($__h) . '</span></div>';
+                                    }
                                 }
                             }
                             if ($__dk !== '') {
@@ -65,6 +74,12 @@ $feedLoopPrevDayKey = null;
                             }
                         ?>
                     <?php endif; ?>
+                    <?php
+                    if ($embedTimelineExpandAllInDayRow && !$timelineExpandAllInDayRowDone && $entryLoopIndex === 0) {
+                        echo '<div class="timeline-day-row timeline-day-row--expand-only"><button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button></div>';
+                        $timelineExpandAllInDayRowDone = true;
+                    }
+                    ?>
                     <?php if ($itemWrapper['type'] === 'feed' || $itemWrapper['type'] === 'substack'): ?>
                         <?php $item = $itemWrapper['data']; ?>
                         <?php
@@ -511,4 +526,5 @@ $feedLoopPrevDayKey = null;
                             </div>
                         </div>
                     <?php endif; ?>
+                <?php $entryLoopIndex++; ?>
                 <?php endforeach; ?>

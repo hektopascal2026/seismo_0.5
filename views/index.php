@@ -141,26 +141,13 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
                     <a href="?<?= e($clearSearchQs) ?>" class="btn btn-secondary">Clear search</a>
                 <?php endif; ?>
             </form>
-            <div class="view-toggle view-toggle-bar view-toggle-below-search">
-                <div class="view-toggle-group">
-                    <span class="view-toggle-label">View:</span>
-                    <a href="?<?= e($indexNewestQs) ?>" class="btn <?= $currentView === 'newest' ? 'btn-primary' : 'btn-secondary' ?>">Newest</a>
-                    <a href="?<?= e($indexFavouritesQs) ?>" class="btn <?= $currentView === 'favourites' ? 'btn-primary' : 'btn-secondary' ?>">Favourites</a>
-                </div>
-            </div>
         </div>
 
         <div class="latest-entries-section">
-            <div class="section-title-row">
-                <h2 class="section-title">
-                    <?= count($allItems) ?> <?= count($allItems) === 1 ? 'entry' : 'entries' ?>
-                </h2>
-                <button class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button>
-            </div>
-
             <?php if ($dashboardError !== null): ?>
                 <?php // Error banner above — no empty-state. ?>
             <?php elseif ($allItems !== []): ?>
+                <?php $embedTimelineExpandAllInDayRow = true; ?>
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
                 <div class="empty-state">

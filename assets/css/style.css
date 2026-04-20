@@ -1290,6 +1290,24 @@ textarea.search-input.setup-code-preview {
 }
 
 /* Magnitu timeline: day group headings between cards */
+.timeline-day-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 18px 0 10px 0;
+}
+
+.timeline-day-row .magnitu-day-separator {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+}
+
+.timeline-day-row--expand-only {
+    justify-content: flex-end;
+}
+
 .magnitu-day-separator {
     margin: 18px 0 10px 0;
 }
