@@ -133,7 +133,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 **Scope-fidelity notes for Slice 5 (per `slice-scope-fidelity.mdc`):**
 
 - **0.4 subscription-based email hiding is NOT ported.** v0.4's Magnitu responses filtered out emails whose sender address had `show_in_magnitu = 0` in `email_subscriptions`. v0.5 exposes all `emails` rows via `MagnituExportRepository::listEmailsSince()` regardless of subscription visibility. Re-adding the filter is a deliberate product decision (sender-level opt-out for the Magnitu pipeline) — track explicitly in a future slice if confirmed; do not smuggle it in without a plan entry.
-- `**magnitu_status.version` contract drift.** 0.4 returned a monolithic `version` string baked from the running codebase. v0.5's `MagnituController::status()` returns `{"schema_version": <int>, "recipe_version": <int>}` instead, which is what 0.4's `sync.py` actually consumes. If the mothership tooling still reads `.version` as a single string, the consumer must be updated in the same push. Documented here so the next reviewer doesn't mistake it for an oversight.
+- **`magnitu_status` and the `version` key.** `MagnituController::status()` returns a top-level `version` string (`SEISMO_VERSION`), matching 0.4's monolithic app version for Magnitu clients, alongside nested `entries`, `scores`, `recipe_version`, `alert_threshold`, and `last_sync_at` as consumed by Magnitu v3 (`sync.py` / `main.py`).
 - `**ScoringService::rescoreAll()` runs synchronously from the `magnitu_recipe` POST handler.** Up to ~2,000 rescores (500 per family × 4 families) fit inside a shared-host PHP timeout today; beyond that it needs to move to a cron worker. Filed as Slice 5b follow-up below rather than a warning to re-raise every review.
 - **Fetch/persist boundary fixed post-review.** The initial Slice 5 submission had `ScoringService` issuing its own `SELECT` queries against entry-source tables (first Gemini review flagged this as a **FAIL**). Fixed in-session by moving every unscored-row lookup into `EntryScoreRepository` as `getUnscoredFeedItems() / getUnscoredLexItems() / getUnscoredEmails() / getUnscoredCalendarEvents()`, each honouring `entryTable()` + a repo-local `MAX_UNSCORED_LIMIT = 500`. `ScoringService` no longer takes a `PDO` — it depends only on `EntryScoreRepository` and orchestrates `RecipeScorer::score()` → `upsertRecipeScore()`. Second Gemini review: PASS.
 
@@ -164,7 +164,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 - **Unified settings.** `?action=settings` with tabs **General** (default dashboard page size → `system_config` key `ui:dashboard_limit`) and **Retention** (embedded `views/partials/retention_panel.php`). POST `?action=settings_save` (CSRF).
 - **Retention URL.** GET `?action=retention` redirects to `?action=settings&tab=retention`; POST handlers unchanged. Standalone `views/retention.php` removed.
-- **Navigation drawer** (`views/partials/site_header.php`) on dashboard, Lex, Leg, Diagnostics, Settings, Styleguide — links use `getBasePath()`. No separate Feeds/Mail/About routes in 0.5 yet.
+- **Navigation drawer** (`views/partials/site_header.php`) on dashboard, Lex, Leg, Feeds, Scraper, Mail, About, Diagnostics, Setup, Settings, Styleguide — links use `getBasePath()`.
 - **View timezone** — `SEISMO_VIEW_TIMEZONE` (default `Europe/Zurich`); `seismo_view_timezone()`; day headings + `seismo_format_utc()` use it.
 - `**SystemConfigRepository`** — legacy `magnitu_config` fallback **removed** (requires `system_config` / schema ≥ 21). `MigrationRunner::getCurrentVersion()` probes `magnitu_config` one last time and throws a clear RuntimeException if a pre-v21 schema is detected, so a deploy that skips Slice 5a fails loudly instead of re-running migrations against a populated database.
 - **Diagnostics** — last **8** runs per core/plugin from `plugin_run_log` in a single batch query (`PluginRunLogRepository::recentForPlugins()` — one round-trip via per-id `UNION ALL` legs); renders through `views/partials/plugin_recent_runs.php`.
@@ -176,7 +176,6 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 - **Dashboard search:** optional FULLTEXT / `MATCH … AGAINST` when corpus grows — still in play.
 - **Retention UI:** family toggles, per-family overrides, “last pruned on DATE” readout — not built.
-- `**ai_view`** — no 0.5 code to retire; revisit if a route appears.
 
 ### Slice 7 — Magnitu settings tab (admin UI for the Magnitu contract) — **shipped**
 
@@ -193,20 +192,14 @@ Port of 0.4's `Settings → Magnitu` tab. Slice 5 shipped the HTTP contract but 
 
 **Explicitly out of Slice 7**:
 
-- Wiring `alert_threshold` into the dashboard / calendar and `sort_by_relevance` into timeline sort. The inputs persist, the consumers don't exist yet — tracked as a follow-up below.
 - Hashing the API key at rest. `BearerAuth::verifyMagnituKey` expects the raw value via `hash_equals`, matching 0.4; changing that model is its own slice.
 - Per-profile / per-satellite key management UI. Each satellite already keeps its own `system_config`; this tab manages the local instance's key, which is all the rule requires.
-- Porting `views/magnitu.php` (the "Magnitu highlights" standalone feed page). It's a feature view, not a settings page, and needs the dashboard to read `alert_threshold` first to be meaningful.
 
-**Tracked follow-ups** (promoted to **Slice 7a** — scope below):
+**Superseded by Slice 7a (shipped):** wiring `alert_threshold` / `sort_by_relevance` into the dashboard timeline and Leg UI, plus the standalone `?action=magnitu` highlights page — originally deferred from Slice 7.
 
-- Wire `alert_threshold` into the dashboard's "alert" highlight + the Leg badge.
-- Wire `sort_by_relevance` into `DashboardController` / `EntryRepository` ordering.
-- Port `views/magnitu.php` once the above wiring lands.
+### Slice 7a — Wire Magnitu knobs into the dashboard — **shipped**
 
-### Slice 7a — Wire Magnitu knobs into the dashboard
-
-Closes the Slice 7 follow-ups. Slice 7 persists `alert_threshold` and `sort_by_relevance` but no consumer reads them yet, so the admin is tuning dials nothing is attached to. Slice 7a attaches the wires.
+Closes the Slice 7 follow-ups. Slice 7 already persisted `alert_threshold` and `sort_by_relevance` in `system_config`; this slice attaches the dashboard, Leg, and highlights consumers.
 
 - `**alert_threshold` consumer.** `DashboardController` reads `alert_threshold` from `SystemConfigRepository` (single call, cached for the request). `EntryRepository` joins `entry_scores.relevance_score` into the timeline rows it already returns (still raw, still bounded). `views/partials/dashboard_entry_loop.php` renders an "alert" badge on cards where `relevance_score >= alert_threshold`. Same badge rendered on Leg cards in `views/leg.php`. No new SQL outside the repository.
 - `**sort_by_relevance` consumer.** New default sort mode for the main timeline: when `sort_by_relevance = 1`, `EntryRepository::getTimeline()` orders by `relevance_score DESC, COALESCE(published_date, created_at) DESC`; otherwise unchanged. **Default is date-first** — relevance-first is opt-in via the Magnitu settings tab. No per-request `?sort=` parameter (keeps cacheability simple, avoids a URL surface we'd have to support forever).
@@ -214,7 +207,7 @@ Closes the Slice 7 follow-ups. Slice 7 persists `alert_threshold` and `sort_by_r
 - **Out of scope:** a settings toggle for "hide recipe-only scores on the highlights page" (product decision, not an architectural one); any change to the Magnitu API response shape (Slice 5 contract stays frozen).
 - **Definition of done:** setting `alert_threshold = 0.7` + saving immediately surfaces an "alert" badge on qualifying cards on the next dashboard load; flipping `sort_by_relevance` reorders the timeline without a per-request URL param; `?action=magnitu` renders the highlights feed; no query exceeds the `MAX_LIMIT` cap; no HTML-escaping in the repository layer.
 
-### Slice 8 — Module-owned source admin (Feeds / Scraper / Mail)
+### Slice 8 — Module-owned source admin (Feeds / Scraper / Mail) — **shipped**
 
 Port 0.4.4's **Module-owned management UI** pattern. Each content module keeps its own admin surface on its own page via an `Items | <thing>` toggle — **not** buried under Settings. Settings stays reserved for genuinely global state (Magnitu, Retention, UI defaults).
 
@@ -241,9 +234,9 @@ Port 0.4.4's **Module-owned management UI** pattern. Each content module keeps i
 - A Settings tab for "default feed refresh interval" or similar — throttles stay hardcoded per `core-plugin-architecture.mdc` until we observe real pain.
 - OPML import / export, bulk CSV feed upload. Single-row CRUD only.
 
-**Definition of done:** from a fresh browser session, an admin can land on `?action=feeds`, `?action=scraper`, or `?action=mail`, switch to the management view via the inline toggle, and add / edit / delete a row without leaving that page. Settings page carries **no** source-management links. Repository tests for `EmailSubscriptionRepository` prove domain-first matching (`@example.com` matches `alice@example.com`) and satellite-write refusal.
+**Definition of done:** from a fresh browser session, an admin can land on `?action=feeds`, `?action=scraper`, or `?action=mail`, switch to the management view via the inline toggle, and add / edit / delete a row without leaving that page. Settings page carries **no** source-management links. PHPUnit (`tests/EmailSubscriptionRepositoryTest.php`) covers `EmailSubscriptionRepository` domain- and email-matching rules (e.g. `@example.com` matches `alice@example.com`). Satellite write refusal is enforced in repositories and controllers; no dedicated automated test is required for that guard.
 
-### Slice 9 — Refresh button, About page, setup-wizard prep, `ai_view` retirement **(shipped)**
+### Slice 9 — Refresh button, About page, setup-wizard prep, `ai_view` retirement — **shipped**
 
 The "last-mile polish" slice. Closes three small ergonomics gaps (dashboard refresh, in-app About, AI-view forwarding note) and puts the **defensive** setup wizard on paper so the first-run experience on shared hosts is honest.
 
@@ -264,7 +257,7 @@ The "last-mile polish" slice. Closes three small ergonomics gaps (dashboard refr
   - Plain-language instruction: *"Paste into `config.local.php` at the root of your Seismo install via your hosting File Manager / SFTP."*
   - Next-step URL: `?action=health` to verify the paste took.
 - **Never** `chmod 0777`, never suggest it, never write to `/tmp` as a workaround. Failure is loud and guided, not silent.
-- **Per-step verification.** After DB credentials are supplied, the wizard calls `getDbConnection()` once and shows a green/red status before letting the admin continue. Same posture as `?action=health`.
+- **Per-step verification.** After DB credentials are supplied, `SetupController::testDatabase()` opens a **standalone `PDO`** to the submitted host/database (same posture as `?action=health`: prove the credentials before writing `config.local.php`). It does **not** call `getDbConnection()` — that helper is unsafe until a real config file exists.
 - Findings that surface during this slice (new required extensions, writable-path edge cases, server-config quirks) land in `docs/setup-wizard-notes.md` so they don't have to be rediscovered.
 
 **Explicitly out of Slice 9:**
@@ -275,7 +268,7 @@ The "last-mile polish" slice. Closes three small ergonomics gaps (dashboard refr
 
 **Definition of done:** dashboard has a working Refresh button (CSRF-guarded, redirects back); `?action=about` renders a human-readable product description that names the export API as the AI-view successor; a dry run of the wizard-stub on a host with `is_writable(__DIR__) === false` produces the copy-paste screen and never silently fails; `docs/setup-wizard-notes.md` gains at least one entry from live testing.
 
-**Consolidation arc.** Slices **7a → 8 → 9** are the remaining numbered work for 0.5. No further numbered slices are planned for recipe-scoring polish in this document; sophisticated scoring belongs in **Magnitu** (the ML companion). The PHP `RecipeScorer` stays the cheap deterministic fallback — good enough to sort the dashboard until Magnitu overwrites scores.
+**Consolidation arc.** Slices **7a → 8 → 9** shipped as the final numbered tranche for 0.5. No further numbered slices are planned for recipe-scoring polish in this document; sophisticated scoring belongs in **Magnitu** (the ML companion). The PHP `RecipeScorer` stays the cheap deterministic fallback — good enough to sort the dashboard until Magnitu overwrites scores.
 
 ## Portability checklist (applies to every slice)
 
