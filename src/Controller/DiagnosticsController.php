@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\PluginRunLogRepository;
+use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\CoreRunner;
 use Seismo\Service\PluginRegistry;
 use Seismo\Service\RefreshAllService;
@@ -33,6 +34,9 @@ use Seismo\Service\RefreshAllService;
  */
 final class DiagnosticsController
 {
+    /** Shared with {@see self::refreshAllRemote()} — 60s cooldown between full refreshes (0.4 parity). */
+    private const KEY_LAST_REFRESH_AT = 'last_refresh_at';
+
     public function show(): void
     {
         $registry = new PluginRegistry();
@@ -126,8 +130,19 @@ final class DiagnosticsController
             return;
         }
 
+        $pdo = getDbConnection();
+        $config = new SystemConfigRepository($pdo);
+        $last = $config->get(self::KEY_LAST_REFRESH_AT);
+        if ($last !== null && $last !== '' && ctype_digit($last) && (time() - (int)$last) < 60) {
+            $remaining = 60 - (time() - (int)$last);
+            $_SESSION['error'] = "Please wait {$remaining}s before refreshing again.";
+            $this->redirectAfterRefresh();
+
+            return;
+        }
+        $config->set(self::KEY_LAST_REFRESH_AT, (string)time());
+
         try {
-            $pdo = getDbConnection();
             $results = RefreshAllService::boot($pdo)->runAll(true);
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics refresh_all: ' . $e->getMessage());
@@ -157,6 +172,90 @@ final class DiagnosticsController
         );
 
         $this->redirectAfterRefresh();
+    }
+
+    /**
+     * Satellite-callable full refresh — validates `?key=` against
+     * `SEISMO_REMOTE_REFRESH_KEY`. JSON response; no session (safe for cross-origin
+     * fetch from a public satellite page). Port of 0.4 `handleRefreshAllRemote`.
+     */
+    public function refreshAllRemote(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $expected = defined('SEISMO_REMOTE_REFRESH_KEY') ? (string)SEISMO_REMOTE_REFRESH_KEY : '';
+        if ($expected === '') {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'remote refresh disabled']);
+
+            return;
+        }
+
+        if (isSatellite()) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'this instance is a satellite; call the mothership']);
+
+            return;
+        }
+
+        $provided = (string)($_GET['key'] ?? $_POST['key'] ?? '');
+        if (!hash_equals($expected, $provided)) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'invalid key']);
+
+            return;
+        }
+
+        set_time_limit(300);
+
+        $pdo = getDbConnection();
+        $config = new SystemConfigRepository($pdo);
+        $last = $config->get(self::KEY_LAST_REFRESH_AT);
+        if ($last !== null && $last !== '' && ctype_digit($last) && (time() - (int)$last) < 60) {
+            $remaining = 60 - (time() - (int)$last);
+            http_response_code(429);
+            echo json_encode([
+                'ok' => false,
+                'error' => "rate limited, retry in {$remaining}s",
+                'retry_after' => $remaining,
+            ]);
+
+            return;
+        }
+        $config->set(self::KEY_LAST_REFRESH_AT, (string)time());
+
+        $startedAt = microtime(true);
+        try {
+            $results = RefreshAllService::boot($pdo)->runAll(true);
+        } catch (\Throwable $e) {
+            error_log('Seismo refresh_all_remote: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+
+            return;
+        }
+
+        $hasErrors = false;
+        $messages = [];
+        foreach ($results as $id => $r) {
+            if ($r->status === 'error') {
+                $hasErrors = true;
+            }
+            if ($r->isOk()) {
+                $messages[] = $id . ': ok (' . $r->count . ' items)';
+            } elseif ($r->status === 'skipped') {
+                $messages[] = $id . ': skipped — ' . (string)($r->message ?? '');
+            } else {
+                $messages[] = $id . ': error — ' . (string)($r->message ?? '');
+            }
+        }
+
+        $elapsedMs = (int)round((microtime(true) - $startedAt) * 1000);
+        echo json_encode([
+            'ok' => !$hasErrors,
+            'messages' => $messages,
+            'elapsed_ms' => $elapsedMs,
+        ]);
     }
 
     public function refreshPlugin(): void

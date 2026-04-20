@@ -14,6 +14,12 @@
  * @var array<string, string|null> $magnituConfig
  * @var array{total:int, magnitu:int, recipe:int} $magnituScoreStats
  * @var string $seismoApiUrl
+ * @var list<array<string, mixed>> $satellitesRegistry
+ * @var string $satellitesMothershipUrl
+ * @var string $satellitesMothershipDb
+ * @var bool $satellitesRemoteRefreshKeyConfigured
+ * @var string $satellitesSuggestedRefreshKey
+ * @var string $satellitesHighlightSlug
  */
 
 declare(strict_types=1);
@@ -24,7 +30,7 @@ if (!function_exists('e')) {
 
 $accent = seismoBrandAccent();
 $headerTitle = 'Settings';
-$headerSubtitle = 'Preferences & data retention';
+$headerSubtitle = 'Preferences, Magnitu, retention & satellites';
 $activeNav = 'settings';
 $dashboardLimitMax = \Seismo\Repository\EntryRepository::MAX_LIMIT;
 
@@ -62,6 +68,9 @@ $tabQs = static function (string $t) use ($basePath): string {
             <a href="<?= e($tabQs('general')) ?>" class="<?= $tab === 'general' ? 'active' : '' ?>">General</a>
             <a href="<?= e($tabQs('magnitu')) ?>" class="<?= $tab === 'magnitu' ? 'active' : '' ?>">Magnitu</a>
             <a href="<?= e($tabQs('retention')) ?>" class="<?= $tab === 'retention' ? 'active' : '' ?>">Retention</a>
+            <?php if (!$satellite): ?>
+            <a href="<?= e($tabQs('satellite')) ?>" class="<?= $tab === 'satellite' ? 'active' : '' ?>">Satellites</a>
+            <?php endif; ?>
         </nav>
 
         <?php if ($tab === 'general'): ?>
@@ -71,6 +80,11 @@ $tabQs = static function (string $t) use ($basePath): string {
                 <div class="message message-error"><?= e($pageError) ?></div>
             <?php endif; ?>
             <?php require __DIR__ . '/partials/settings_magnitu.php'; ?>
+        <?php elseif ($tab === 'satellite'): ?>
+            <?php if ($pageError !== null): ?>
+                <div class="message message-error"><?= e($pageError) ?></div>
+            <?php endif; ?>
+            <?php require __DIR__ . '/partials/settings_tab_satellites.php'; ?>
         <?php else: ?>
             <?php if ($pageError !== null): ?>
                 <div class="message message-error"><?= e($pageError) ?></div>

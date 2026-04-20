@@ -80,7 +80,7 @@ final class DashboardController
         $showDaySeparators   = true;
         $showFavourites      = true;
         $showTimelineRefresh = true;
-        $returnQuery         = $this->buildReturnQuery();
+        $returnQuery         = $this->buildReturnQuery('index');
 
         $emptyTimelineHint = 'default';
         if ($dashboardError === null) {
@@ -97,21 +97,39 @@ final class DashboardController
     }
 
     /**
-     * Dashboard filter editor: checkbox pills + All/None (GET form submits to Timeline).
+     * Dashboard filter editor: checkbox pills + live timeline preview on the same page.
      */
     public function showFilter(): void
     {
         $csrfField = CsrfToken::field();
 
+        $limit  = $this->clampLimit($_GET['limit'] ?? null);
+        $offset = $this->clampOffset($_GET['offset'] ?? null);
+
+        $searchQuery = trim((string)($_GET['q'] ?? ''));
+        $currentView = (isset($_GET['view']) && (string)$_GET['view'] === 'favourites')
+            ? 'favourites'
+            : 'newest';
+
         $dashboardError = null;
+        $allItems        = [];
         $pillOpts       = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
         $timelineFilter = TimelineFilter::fromQueryArray($_GET);
+        $alertThreshold    = $this->resolveAlertThreshold();
+        $sortByRelevance   = $currentView !== 'favourites' && $this->resolveSortByRelevance();
 
         try {
             $pdo  = getDbConnection();
             $repo = new EntryRepository($pdo);
             $pillOpts        = $this->getFilterPillOptionsCached($repo);
             $timelineFilter = TimelineFilter::fromHttpGet($_GET, $pillOpts);
+            if ($currentView === 'favourites') {
+                $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter);
+            } elseif ($searchQuery !== '') {
+                $allItems = $repo->searchTimeline($searchQuery, $limit, $offset, $timelineFilter, $sortByRelevance);
+            } else {
+                $allItems = $repo->getLatestTimeline($limit, $offset, $timelineFilter, $sortByRelevance);
+            }
         } catch (\Throwable $e) {
             error_log('Seismo dashboard filter page: ' . $e->getMessage());
             $dashboardError = 'Database error. Check error_log for details.';
@@ -120,6 +138,18 @@ final class DashboardController
         require_once SEISMO_ROOT . '/views/helpers.php';
 
         $filterPillOptions = $pillOpts;
+        $returnQuery      = $this->buildReturnQuery('filter');
+
+        $emptyTimelineHint = 'default';
+        if ($dashboardError === null) {
+            if ($currentView === 'favourites') {
+                $emptyTimelineHint = 'favourites';
+            } elseif ($searchQuery !== '') {
+                $emptyTimelineHint = 'search';
+            } elseif ($timelineFilter->isActive()) {
+                $emptyTimelineHint = 'filters';
+            }
+        }
 
         require SEISMO_ROOT . '/views/dashboard_filters.php';
     }
@@ -127,13 +157,13 @@ final class DashboardController
     /**
      * Preserve dashboard GET state for favourite form round-trips (no leading "?").
      */
-    private function buildReturnQuery(): string
+    private function buildReturnQuery(string $action = 'index'): string
     {
         $p = $_GET;
         if (!is_array($p)) {
             $p = [];
         }
-        $p['action'] = 'index';
+        $p['action'] = $action === 'filter' ? 'filter' : 'index';
         return http_build_query($p);
     }
 

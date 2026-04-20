@@ -37,8 +37,17 @@ final class SettingsController
     public function show(): void
     {
         $tab = (string)($_GET['tab'] ?? 'general');
-        if (!in_array($tab, ['general', 'magnitu', 'retention'], true)) {
+        // 0.4 bookmark: ?tab=satellites
+        if ($tab === 'satellites') {
+            $tab = 'satellite';
+        }
+        if (!in_array($tab, ['general', 'magnitu', 'retention', 'satellite'], true)) {
             $tab = 'general';
+        }
+
+        if ($tab === 'satellite' && isSatellite()) {
+            header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
+            exit;
         }
 
         $csrfField = CsrfToken::field();
@@ -64,6 +73,13 @@ final class SettingsController
         $magnituScoreStats = ['total' => 0, 'magnitu' => 0, 'recipe' => 0];
         $seismoApiUrl      = '';
 
+        $satellitesRegistry                   = [];
+        $satellitesMothershipUrl              = '';
+        $satellitesMothershipDb               = '';
+        $satellitesRemoteRefreshKeyConfigured = false;
+        $satellitesSuggestedRefreshKey        = '';
+        $satellitesHighlightSlug              = '';
+
         if ($tab === 'retention') {
             try {
                 $service = RetentionService::boot($pdo);
@@ -84,6 +100,27 @@ final class SettingsController
             } catch (\Throwable $e) {
                 error_log('Seismo settings magnitu: ' . $e->getMessage());
                 $pageError = 'Could not load Magnitu state. Check error_log for details.';
+            }
+        }
+
+        if ($tab === 'satellite') {
+            try {
+                $satellitesMothershipUrl = self::mothershipBaseUrl();
+                $satellitesMothershipDb  = self::currentDatabaseName($pdo);
+                $satellitesRemoteRefreshKeyConfigured = defined('SEISMO_REMOTE_REFRESH_KEY')
+                    && (string)SEISMO_REMOTE_REFRESH_KEY !== '';
+                $satellitesSuggestedRefreshKey = (string)($config->get('satellites_suggested_refresh_key') ?? '');
+                $rawReg = $config->get('satellites_registry');
+                if ($rawReg !== null && $rawReg !== '') {
+                    $decoded = json_decode($rawReg, true);
+                    if (is_array($decoded)) {
+                        $satellitesRegistry = array_values($decoded);
+                    }
+                }
+                $satellitesHighlightSlug = trim((string)($_GET['highlight'] ?? ''));
+            } catch (\Throwable $e) {
+                error_log('Seismo settings satellites: ' . $e->getMessage());
+                $pageError = 'Could not load satellite registry. Check error_log for details.';
             }
         }
 
@@ -161,5 +198,32 @@ final class SettingsController
         $host = (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost');
 
         return $scheme . '://' . $host . $basePath . '/index.php';
+    }
+
+    /**
+     * Public site base for satellite JSON export (no `/index.php` suffix).
+     */
+    private static function mothershipBaseUrl(): string
+    {
+        $scheme = 'http';
+        $httpsFlag = (string)($_SERVER['HTTPS'] ?? '');
+        if ($httpsFlag !== '' && strtolower($httpsFlag) !== 'off') {
+            $scheme = 'https';
+        } elseif (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') {
+            $scheme = 'https';
+        }
+        $host = (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost');
+        $bp = getBasePath();
+
+        return $scheme . '://' . $host . ($bp === '' ? '' : $bp);
+    }
+
+    private static function currentDatabaseName(\PDO $pdo): string
+    {
+        try {
+            return (string)$pdo->query('SELECT DATABASE()')->fetchColumn();
+        } catch (\Throwable) {
+            return '';
+        }
     }
 }

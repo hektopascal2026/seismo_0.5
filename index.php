@@ -142,6 +142,11 @@ $router->register(
     false
 );
 $router->register(
+    'refresh_all_remote',
+    \Seismo\Controller\DiagnosticsController::class . '::refreshAllRemote',
+    true
+);
+$router->register(
     'refresh_plugin',
     \Seismo\Controller\DiagnosticsController::class . '::refreshPlugin',
     false
@@ -195,6 +200,31 @@ $router->register(
     'settings_clear_magnitu_scores',
     \Seismo\Controller\MagnituAdminController::class . '::clearScores',
     false
+);
+$router->register(
+    'satellite_add',
+    \Seismo\Controller\SatelliteController::class . '::add',
+    false
+);
+$router->register(
+    'satellite_remove',
+    \Seismo\Controller\SatelliteController::class . '::remove',
+    false
+);
+$router->register(
+    'satellite_rotate_key',
+    \Seismo\Controller\SatelliteController::class . '::rotateKey',
+    false
+);
+$router->register(
+    'satellite_rotate_refresh_key',
+    \Seismo\Controller\SatelliteController::class . '::rotateRefreshKey',
+    false
+);
+$router->register(
+    'satellite_download_json',
+    \Seismo\Controller\SatelliteController::class . '::downloadJson',
+    true
 );
 $router->register(
     'styleguide',

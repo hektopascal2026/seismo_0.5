@@ -33,17 +33,19 @@ final class AuthGate
     private const SESSION_FLAG = 'seismo_admin';
 
     private const PUBLIC_ACTIONS = [
-        'health'          => true,
-        'login'           => true,
-        'logout'          => true,
-        'migrate'         => true,
-        'magnitu_entries' => true,
-        'magnitu_scores'  => true,
-        'magnitu_recipe'  => true,
-        'magnitu_labels'  => true,
-        'magnitu_status'  => true,
-        'export_entries'  => true,
-        'export_briefing' => true,
+        'health'               => true,
+        'login'                => true,
+        'logout'               => true,
+        'migrate'              => true,
+        'magnitu_entries'      => true,
+        'magnitu_scores'       => true,
+        'magnitu_recipe'       => true,
+        'magnitu_labels'       => true,
+        'magnitu_status'       => true,
+        'export_entries'       => true,
+        'export_briefing'      => true,
+        /** Session-less JSON; gated by {@see SEISMO_REMOTE_REFRESH_KEY} (satellite → mothership refresh). */
+        'refresh_all_remote'   => true,
     ];
 
     public static function isEnabled(): bool

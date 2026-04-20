@@ -578,6 +578,12 @@ textarea.search-input.setup-code-preview {
     padding: 0 2px;
 }
 
+.filter-page-preview {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 2px solid #000000;
+}
+
 .filter-page-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1442,6 +1448,140 @@ textarea.search-input.setup-code-preview {
 
 .message-info {
     background-color: #f5f5f5;
+}
+
+.message-warning {
+    background-color: #fff3cd;
+}
+
+/* ═══ Settings → Satellites ═══ */
+.settings-code-inline {
+    background: #ffffff;
+    padding: 2px 6px;
+    border: 1px solid #000000;
+    font-size: 12px;
+    user-select: all;
+}
+
+.settings-code-block {
+    display: block;
+    margin-top: 6px;
+    background: #ffffff;
+    padding: 6px 8px;
+    border: 1px solid #000000;
+    font-size: 12px;
+    white-space: pre-wrap;
+    overflow-x: auto;
+}
+
+.settings-code-tiny {
+    font-size: 11px;
+}
+
+.settings-satellite-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 1.25rem;
+    border: 2px solid #000000;
+    background: #ffffff;
+}
+
+.settings-satellite-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.settings-satellite-table th,
+.settings-satellite-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #cccccc;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.settings-satellite-table thead th {
+    background: #ffffc5;
+    font-weight: 700;
+    border-bottom: 2px solid #000000;
+}
+
+.settings-satellite-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.settings-satellite-row-highlight {
+    background-color: #fff3cd;
+}
+
+.settings-satellite-meta {
+    font-size: 11px;
+    color: #444444;
+}
+
+.settings-satellite-rotated {
+    color: #990000;
+}
+
+.settings-accent-swatch {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 4px;
+    border: 1px solid #000000;
+}
+
+.settings-satellite-actions {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.settings-satellite-actions .admin-inline-form {
+    display: inline-block;
+    margin-left: 4px;
+}
+
+.settings-satellite-muted {
+    color: #999999;
+    font-size: 11px;
+}
+
+.settings-satellite-add {
+    border: 2px solid #000000;
+    padding: 12px 16px;
+    margin-bottom: 1.25rem;
+}
+
+.settings-satellite-add-summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.settings-satellite-form {
+    margin-top: 12px;
+    max-width: 640px;
+}
+
+.settings-satellite-context {
+    font-size: 12px;
+    color: #555555;
+    border-top: 1px solid #cccccc;
+    padding-top: 12px;
+    margin-top: 8px;
+}
+
+.settings-satellite-context ul {
+    margin: 6px 0 0 1.25rem;
+    padding: 0;
+}
+
+.settings-ok {
+    color: #006600;
+}
+
+.settings-bad {
+    color: #990000;
 }
 
 /* ═══ Tag Filters ═══ */
