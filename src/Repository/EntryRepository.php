@@ -162,8 +162,8 @@ final class EntryRepository
 
     /**
      * Dashboard "Magnitu highlights": rows scored by Magnitu at or above the
-     * configured alert threshold. Hydrates feed / email / lex only (Magnitu
-     * API contract); sorts newest-first by unified timeline `date`.
+     * configured alert threshold. Hydrates feed / email / lex / Leg; sorts
+     * newest-first by unified timeline `date`.
      *
      * Candidate rows are capped (recent `scored_at` first) so this stays
      * bounded on large `entry_scores` tables — a pragmatic trade vs scanning
@@ -183,7 +183,7 @@ final class EntryRepository
                  FROM entry_scores
                  WHERE score_source = \'magnitu\'
                    AND relevance_score >= ?
-                   AND entry_type IN (\'feed_item\',\'email\',\'lex_item\')
+                   AND entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
                  ORDER BY scored_at DESC
                  LIMIT ' . (int)$cap
             );
@@ -221,9 +221,10 @@ final class EntryRepository
         }
 
         $idsByType = [
-            'feed_item' => [],
-            'email'     => [],
-            'lex_item'  => [],
+            'feed_item'       => [],
+            'email'           => [],
+            'lex_item'        => [],
+            'calendar_event'  => [],
         ];
         foreach ($best as $k => $_row) {
             $parts = explode(':', $k, 2);
@@ -261,6 +262,14 @@ final class EntryRepository
         foreach ($this->fetchLexRowsByIds($idsByType['lex_item']) as $row) {
             $w = $this->wrapLexItem($row);
             $k = 'lex_item:' . $w['entry_id'];
+            if (isset($best[$k])) {
+                $w['score'] = $best[$k];
+                $items[]  = $w;
+            }
+        }
+        foreach ($this->fetchCalendarRowsByIds($idsByType['calendar_event']) as $row) {
+            $w = $this->wrapCalendarEvent($row);
+            $k = 'calendar_event:' . $w['entry_id'];
             if (isset($best[$k])) {
                 $w['score'] = $best[$k];
                 $items[]  = $w;

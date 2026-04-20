@@ -46,4 +46,4 @@ When `SEISMO_ADMIN_PASSWORD_HASH` is set, the browser holds a logged-in session 
 - **Never** require auth to run by default. A fresh checkout + filled-in DB credentials must load the dashboard without a login form. The point of the backbone is that it's switchable, not mandatory.
 - **Never** store the plaintext password anywhere. Only the `password_hash()` output. The setup wizard (future) should compute the hash server-side from a user-entered password and write only the hash.
 - **Never** expose the health route's full detail to unauthenticated visitors when auth is enabled. Degrade gracefully.
-- **Magnitu API auth is separate.** `SEISMO_ADMIN_PASSWORD_HASH` controls the web UI only. Magnitu's Bearer token in `magnitu_config.api_key` is independent and unaffected by this switch.
+- **Magnitu v3 API auth is separate.** `SEISMO_ADMIN_PASSWORD_HASH` controls the web UI only. The machine **Bearer** token lives in Seismo `system_config` as `api_key` (admin copies it into **Magnitu v3** config); it is independent of session login and unaffected by this switch.

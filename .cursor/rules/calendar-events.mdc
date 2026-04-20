@@ -1,13 +1,13 @@
 ---
-description: Leg (parliamentary business) — 0.5 architecture notes + the Magnitu API exclusion rule that still applies
+description: Leg (parliamentary business) — 0.5 architecture + Magnitu v3 / timeline integration
 alwaysApply: true
 ---
 
 # Leg (parliamentary business)
 
-**User-facing name:** **Leg** — Swiss Parliament business (sessions, motions, publications, hearings). Not a personal calendar. Internal table/API names still use `calendar_events` / `calendar_event` for compatibility with 0.4 data and the Magnitu `entry_type` enum.
+**User-facing name:** **Leg** — Swiss Parliament business (sessions, motions, publications, hearings). Not a personal calendar. Internal table/API names still use `calendar_events` / `calendar_event` for compatibility with 0.4 data and the **Magnitu v3** / Seismo `entry_type` enum.
 
-Events are treated like entries — scored by the recipe engine (pending Slice 5 port), displayed in the dashboard timeline, with forward-looking dates.
+Events are treated like entries — scored by the recipe engine and **Magnitu v3** (`ScoringService`, `magnitu_scores`), merged into the dashboard timeline, with forward-looking date labels on cards.
 
 ## Architecture (0.5)
 
@@ -28,35 +28,21 @@ Currently implemented:
 
 Adding a new Leg source = one new `src/Plugin/<Name>/` folder implementing `SourceFetcherInterface`, one line in `PluginRegistry`, a new config block keyed by `getConfigKey()` in `calendar_config.json`. The repository, page, and cron automatically pick it up. No controller / view / cron changes per source. See `core-plugin-architecture.mdc`.
 
-## IMPORTANT: Magnitu API exclusion (intentional)
+## Magnitu v3 / export API (0.5)
 
-**Leg rows (`calendar_event`) are deliberately excluded from all Magnitu API endpoints.** This was done in 0.4 so the feature could be tested in Seismo before Magnitu / Magnitu Mini trains on the data. The exclusions must be preserved when the Magnitu controller is ported in **Slice 5**. In the 0.4 reference instance the rule lives in `controllers/magnitu.php`:
+Leg uses `entry_type = 'calendar_event'` everywhere:
 
-1. `handleMagnituEntries` — calendar block is commented out; `calendar_event` entries are NOT exported.
-2. `handleMagnituScores` — validation whitelist is `['feed_item', 'email', 'lex_item']` only; Magnitu cannot push `calendar_event` scores.
-3. `handleMagnituLabels` — same whitelist; Magnitu cannot push `calendar_event` labels.
-4. `handleMagnituStatus` — entry counts and score counts filter out `calendar_event` rows.
+- **`magnitu_entries`** — `type=calendar_event` or `type=all`; rows shaped by `MagnituController::shapeCalendarEvent()`.
+- **`magnitu_scores` / `magnitu_labels`** — allowed types include `calendar_event` (`EntryScoreRepository::MAGNITU_ENTRY_TYPES`, `MagnituLabelRepository::LABELED_ENTRY_TYPES`).
+- **`magnitu_status`** — `entries.calendar_events` count and `entries.total` include Leg; score counts include Leg rows.
+- **`export_entries` / `export_briefing`** — same family list as `magnitu_entries` (includes Leg).
 
-In 0.5 the port will land in `Seismo\Controller\MagnituController` with the same four exclusions; see the Slice 5 definition of done in `docs/consolidation-plan.md`.
-
-**To re-enable** when ready (future, explicit user decision):
-
-- `handleMagnituEntries`: uncomment the calendar events block (search for "Calendar events are excluded from the Magnitu API").
-- `handleMagnituScores`: add `'calendar_event'` back to the `in_array()` check.
-- `handleMagnituLabels`: add `'calendar_event'` back to the `in_array()` check.
-- `handleMagnituStatus`: remove the `AND entry_type != 'calendar_event'` filters, re-add the Leg count to totals.
-
-**What still works internally** (and must keep working through 0.5 ports):
-
-- Recipe scoring via `rescoreCalendarEvents()` (0.4 name — will become a method on the Slice-5 scoring service). Called from `magnituRescore()` and whenever `calendar_events` is refreshed.
-- Scores display in: dashboard timeline, Leg page, Magnitu investigation-leads page, AI unified view.
-- `RefreshAllService::runAll()` refreshes Leg data alongside all other plugin sources; the same code path handles the 0.4-equivalent of `handleRefreshAll`.
+**Magnitu v3** **full sync** (`main.py` `_sync_pull_impl`) must pull the fourth family (`calendar_event` / `calendar_events` status key) so embeddings and training cover Leg.
 
 ## Rules when changing Leg / calendar_events
 
-- **Do NOT add `calendar_event` to the Magnitu API whitelist without explicit approval** — training on incomplete / untested data could degrade the model. This is the load-bearing reason the rule exists.
-- The `entry_type` value `calendar_event` is already in the DB ENUM — no schema change needed to re-enable.
+- The `entry_type` value `calendar_event` is fixed in the DB ENUM — **do not rename** (**Magnitu v3** + `entry_scores` PK).
 - Parliament CH API uses OData v2 format — dates may come as `/Date(timestamp)/` strings (handled inside `ParlChPlugin`, not at the repository layer).
-- Leg entries sort **ASC** by `event_date` (future first), unlike all other entry types which sort DESC (newest first). The dashboard timeline merge respects this when surfacing Leg rows alongside feeds / lex / emails.
+- **`?action=leg`** lists rows **ASC** by `event_date` (future first). The **dashboard** merge uses the same per-item `date` unix field as other families and sorts the mixed list **DESC** (see `EntryRepository::sortMergedTimeline`).
 - When adding Leg rows to the dashboard timeline, they get forward-looking date labels ("today", "tomorrow", "in 5d") — see the calendar handling in `views/partials/dashboard_entry_loop.php`.
 - All `calendar_events` reads in non-Leg code paths must go through `entryTable('calendar_events')` so satellite mode keeps working. Writes live in `CalendarEventRepository` only; satellites short-circuit before any write is attempted.

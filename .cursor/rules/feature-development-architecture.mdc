@@ -13,8 +13,8 @@ This rule is the **routing table** for future work. It does not replace the spec
 |-------|-----------|
 | Core vs plugin, repos, UTC, bounded queries, retention, plugin_run_log | `core-plugin-architecture.mdc` |
 | Session auth (dormant), CSRF, public whitelist | `auth-dormant-by-default.mdc` |
-| Magnitu / export API contract, satellite DB split, `entryTable()` ownership | `magnitu-integration.mdc` |
-| Leg / `calendar_events`, Magnitu exclusion for Leg | `calendar-events.mdc` |
+| **Magnitu v3** / export API contract, satellite DB split, `entryTable()` ownership | `magnitu-integration.mdc` |
+| Leg / `calendar_events`, **Magnitu v3** + timeline | `calendar-events.mdc` |
 | Paths, base path, cron vs web refresh parity | `deployment-portability.mdc` |
 | Webspace smoke tests, upload lists, host URLs | `webspace-testing.mdc` |
 | Slice scope, no silent scope creep | `slice-scope-fidelity.mdc` |
@@ -60,7 +60,7 @@ When adding a **new** entry-family table: decide if it is mothership-owned entry
 
 1. Register in `index.php` on `Router`: action string → `Class::method`, read-only flag as appropriate.
 2. **Session-protected UI**: not on `AuthGate` public whitelist unless it is `health`, `login`, `logout`, `migrate`, or `magnitu_*` / `export_*` (Bearer-only inside controller).
-3. **Mutating POST** from the browser: **CSRF** (`CsrfToken::field()` + `verifyRequest()`). Magnitu/export use Bearer tokens — no CSRF.
+3. **Mutating POST** from the browser: **CSRF** (`CsrfToken::field()` + `verifyRequest()`). **Magnitu v3** / `export_*` use Bearer tokens — no CSRF.
 4. **Links and redirects**: `getBasePath()` — no hardcoded host/path for app URLs.
 
 If `CsrfToken::field()` is rendered on a GET page, add the action to `Router::READONLY_KEEP_SESSION_FOR_CSRF` (see comment in `src/Http/Router.php`) so flash messages are not lost.
@@ -73,10 +73,10 @@ If `CsrfToken::field()` is rendered on a GET page, add the action to `Router::RE
 | RSS, mail, scraper (core-owned) | **Core** fetcher/service + existing family repo; follow `RefreshAllService` / `CoreRunner` patterns. |
 | New “family” of stored entries | Extend the **appropriate family table** (`lex_items`, `calendar_events`, …) via repository `upsertBatch` + plugin DTOs — **no** per-plugin tables unless a slice explicitly adds a sidecar table (see `core-plugin-architecture.mdc`). |
 
-## Magnitu and machine exports
+## Magnitu v3 and machine exports
 
-- Do **not** change JSON shapes or `entry_type` strings without coordinating **Magnitu** (`sync.py`) and docs in `magnitu-integration.mdc`.
-- **Leg (`calendar_event`)** remains excluded from Magnitu API until product explicitly re-enables — see `calendar-events.mdc`.
+- Do **not** change JSON shapes or `entry_type` strings without coordinating **Magnitu v3** (`sync.py` / `main.py`) and docs in `magnitu-integration.mdc`.
+- **Leg (`calendar_event`)** is included in **Magnitu v3** and export APIs — see `calendar-events.mdc`.
 
 ## Schema and migrations
 
@@ -107,9 +107,8 @@ If `CsrfToken::field()` is rendered on a GET page, add the action to `Router::RE
 - New templating engine / heavy framework “for one feature”.
 - Hardcoded `https://` or install path in PHP views/controllers (except documented env like `SEISMO_MOTHERSHIP_URL`).
 - Unbounded `SELECT *` list endpoints.
-- `calendar_event` in Magnitu API without explicit product approval.
 - Circuit-breaking plugins silently — use logs + diagnostics (`core-plugin-architecture.mdc`).
-- **Per-module admin UI under `Settings`.** Feeds, Scraper, and Mail management belong on the module's own page via an `Items | <thing>` toggle (0.4.4 "Module-owned management UI" pattern). `Settings` is strictly for global app state (Magnitu, Retention, UI defaults). See `docs/consolidation-plan.md` Slice 8.
+- **Per-module admin UI under `Settings`.** Feeds, Scraper, and Mail management belong on the module's own page via an `Items | <thing>` toggle (0.4.4 "Module-owned management UI" pattern). `Settings` is strictly for global app state (**Magnitu v3** keys/preferences, Retention, UI defaults). See `docs/consolidation-plan.md` Slice 8.
 - **New code built around `sender_tags`.** `sender_tags` is the pre-0.4.3 legacy data model. First-class mail admin targets **`email_subscriptions`** (domain-first matching `@example.com`, `show_in_magnitu` flag, one-click unsubscribe). Dashboard filter pills still read `sender_tags` for backwards-compat, but any new UI or repository goes against `email_subscriptions`.
 - **Setup wizard that assumes `file_put_contents()` will succeed.** On shared hosts the PHP user often can't write to the install directory. The wizard must `is_writable()`-check and seamlessly degrade to a copy-paste UI that generates the `config.local.php` block for the admin to paste via File Manager / SFTP. Never `chmod 0777`, never fall back to `/tmp`, never silently skip a config write. See `docs/consolidation-plan.md` Slice 9.
 - **Silently dropping a 0.4 feature from the URL surface.** If a route retires (e.g. `ai_view`), the in-app About page and/or `README.md` must explicitly name the replacement (e.g. the Slice 5 export API) so users can follow the forwarding pointer. Silent deletion is a support-ticket generator.

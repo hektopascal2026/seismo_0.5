@@ -7,7 +7,7 @@ alwaysApply: true
 
 Seismo has two kinds of code:
 
-- **Core** — things we control end-to-end. Stable by nature (RSS parsing, IMAP, HTML scraping, scoring, Magnitu API, dashboard, settings). Crashes here are bugs.
+- **Core** — things we control end-to-end. Stable by nature (RSS parsing, IMAP, HTML scraping, scoring, **Magnitu v3** HTTP API surface, dashboard, settings). Crashes here are bugs.
 - **Plugins** — adapters to third-party APIs that routinely change shape (Fedlex, RechtBund, EU Lex SPARQL, Légifrance, Parlament.ch OData, and future sources). Crashes here are **expected**; they must not take down core.
 
 Isolation is achieved by a runtime boundary (`try/catch` in `RefreshAllService`) **and** by directory / interface discipline. Schemas are deliberately **shared** — see "Persistence" below.
@@ -79,7 +79,7 @@ Plugins do **not** own their own tables. They write (via the runner) to the exis
 
 Keys: `(source, external_id)`. Plugin-specific fields → `metadata JSON`. A plugin that truly doesn't fit any family proposes a **new family**, not a per-plugin table.
 
-Why: keeps the dashboard timeline polymorphic (card layout stays consistent — non-negotiable), keeps Magnitu's `entry_type` enum stable (no API break), keeps `entryTable()` satellite-mode wrapping in one place (the repository) instead of per-plugin. Isolation is delivered by the runtime boundary, not by schema fragmentation.
+Why: keeps the dashboard timeline polymorphic (card layout stays consistent — non-negotiable), keeps the shared **`entry_type` enum** stable for **Magnitu v3** and Seismo (no API break), keeps `entryTable()` satellite-mode wrapping in one place (the repository) instead of per-plugin. Isolation is delivered by the runtime boundary, not by schema fragmentation.
 
 If a future plugin genuinely needs sidecar state (OAuth tokens, rate-limit cursors, raw response archives), we add a plugin-owned sidecar table **then** — not speculatively.
 
@@ -181,7 +181,7 @@ public function prune(
 Keep-predicates come from policy, not schema. Minimum set every repo honours:
 
 - `is_favourite = 1` (if the family has the concept)
-- has a Magnitu score in `['investigation_lead', 'important']`
+- has an ML (**Magnitu v3**) or recipe score in `['investigation_lead', 'important']`
 - is manually labelled in `magnitu_labels` (labelled rows are training data — never delete)
 
 `Seismo\Service\RetentionService` composes the predicates from settings and calls each repo's `prune()` at the end of `refresh_cron.php`. Default policy for 0.5:
@@ -201,7 +201,7 @@ Policy is user-overridable per family in Settings. A dry-run preview that report
 
 - `id`, `plugin_id`, `run_at`, `status` (`ok` | `skipped` | `error`), `item_count`, `error_message`, `duration_ms`.
 
-This replaces the scattered 0.4 pattern (`consecutive_failures` in `feeds`, `lex_<source>_failures` in `magnitu_config`, ad-hoc PHP error log lines). The diagnostics surface reads the last N runs per plugin.
+This replaces the scattered 0.4 pattern (`consecutive_failures` in `feeds`, `lex_<source>_failures` in legacy `magnitu_config` / `system_config`, ad-hoc PHP error log lines). The diagnostics surface reads the last N runs per plugin.
 
 **No circuit breaker in v0.5.** We do **not** auto-pause plugins after N failures — that hides signal the user needs. `try/catch` + structured logging is enough until we observe the failure mode in production. Revisit only if `plugin_run_log` shows a plugin flapping enough to matter.
 

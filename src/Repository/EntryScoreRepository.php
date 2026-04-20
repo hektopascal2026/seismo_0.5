@@ -23,10 +23,10 @@ use PDOException;
 
 final class EntryScoreRepository
 {
-    /** Entry types Magnitu may push scores for. `calendar_event` is deliberately excluded. */
-    public const MAGNITU_ENTRY_TYPES = ['feed_item', 'email', 'lex_item'];
+    /** Entry types Magnitu may push scores for (includes Leg). */
+    public const MAGNITU_ENTRY_TYPES = ['feed_item', 'email', 'lex_item', 'calendar_event'];
 
-    /** All entry types that can carry a score in `entry_scores` (incl. Leg, which is scored locally only). */
+    /** All entry types that can carry a score in `entry_scores`. */
     public const ALL_ENTRY_TYPES = ['feed_item', 'email', 'lex_item', 'calendar_event'];
 
     /**
@@ -122,8 +122,6 @@ final class EntryScoreRepository
 
     /**
      * Counts used by `?action=magnitu_status` and the future diagnostics polish.
-     * Excludes `calendar_event` — Leg is internal-only, not part of the Magnitu
-     * API contract.
      *
      * @return array{total:int, magnitu:int, recipe:int}
      */
@@ -131,13 +129,13 @@ final class EntryScoreRepository
     {
         try {
             $total = (int)$this->pdo->query(
-                "SELECT COUNT(*) FROM entry_scores WHERE entry_type != 'calendar_event'"
+                'SELECT COUNT(*) FROM entry_scores'
             )->fetchColumn();
             $magnitu = (int)$this->pdo->query(
-                "SELECT COUNT(*) FROM entry_scores WHERE score_source = 'magnitu' AND entry_type != 'calendar_event'"
+                "SELECT COUNT(*) FROM entry_scores WHERE score_source = 'magnitu'"
             )->fetchColumn();
             $recipe = (int)$this->pdo->query(
-                "SELECT COUNT(*) FROM entry_scores WHERE score_source = 'recipe' AND entry_type != 'calendar_event'"
+                "SELECT COUNT(*) FROM entry_scores WHERE score_source = 'recipe'"
             )->fetchColumn();
         } catch (PDOException $e) {
             return ['total' => 0, 'magnitu' => 0, 'recipe' => 0];
@@ -326,9 +324,8 @@ final class EntryScoreRepository
     }
 
     /**
-     * Calendar events (Leg) without a Magnitu score. Leg is internal-only
-     * for scoring purposes (it is excluded from the Magnitu API), but we
-     * still rescore it locally so the dashboard badge appears.
+     * Calendar events (Leg) without a Magnitu score (candidates for recipe
+     * rescoring until Magnitu overwrites).
      *
      * @return array<int, array<string, mixed>>
      */

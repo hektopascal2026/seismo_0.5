@@ -17,10 +17,9 @@
  *   - **Bounded.** Every list method takes an explicit `$limit`, hard-capped
  *     at {@see self::MAX_LIMIT} (the Magnitu contract historically allowed
  *     2000; kept for sync.py compatibility).
- *   - **Leg exclusion.** `calendar_event` rows are NEVER returned. Per
- *     `.cursor/rules/calendar-events.mdc`, Leg is not part of the Magnitu /
- *     export contract; lifting the exclusion is a product decision, not a
- *     technical one.
+ *   - **Leg included.** `calendar_event` rows are exported like other families
+ *     (`listCalendarEventsSince`, shared JSON shape via
+ *     {@see \Seismo\Controller\MagnituController::shapeCalendarEvent()}).
  */
 
 declare(strict_types=1);
@@ -160,6 +159,33 @@ final class MagnituExportRepository
     }
 
     /**
+     * Leg / parliamentary business (`calendar_events`).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listCalendarEventsSince(?string $since, int $limit): array
+    {
+        $limit = $this->clampLimit($limit);
+        $table = entryTable('calendar_events');
+        $sql   = "SELECT id, source, title, description, content, event_date, event_end_date,
+                         event_type, status, council, url
+                    FROM {$table}
+                   WHERE 1=1";
+        $params = [];
+        if ($since !== null && $since !== '') {
+            $sql .= ' AND (
+                (event_date IS NOT NULL AND event_date >= DATE(?))
+                OR (event_date IS NULL AND fetched_at >= ?)
+            )';
+            $params[] = $since;
+            $params[] = $since;
+        }
+        $sql .= ' ORDER BY (event_date IS NULL), event_date DESC, id DESC LIMIT ' . $limit;
+
+        return $this->selectOrEmpty($sql, $params);
+    }
+
+    /**
      * Fetch entry_scores rows for a list of (entry_type, entry_id) pairs.
      *
      * Local-only — `entry_scores` never lives on the mothership in satellite
@@ -197,17 +223,17 @@ final class MagnituExportRepository
     }
 
     /**
-     * Per-type entry counts used by `?action=magnitu_status`. Leg excluded
-     * from the contract, so we don't count `calendar_events`.
+     * Per-type entry counts used by `?action=magnitu_status`.
      *
-     * @return array{feed_items:int, emails:int, lex_items:int}
+     * @return array{feed_items:int, emails:int, lex_items:int, calendar_events:int}
      */
     public function getEntryCounts(): array
     {
         return [
-            'feed_items' => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('feed_items')),
-            'emails'     => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable(getEmailTableName())),
-            'lex_items'  => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('lex_items')),
+            'feed_items'       => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('feed_items')),
+            'emails'           => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable(getEmailTableName())),
+            'lex_items'        => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('lex_items')),
+            'calendar_events'  => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('calendar_events')),
         ];
     }
 

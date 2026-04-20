@@ -1,6 +1,6 @@
 <?php
 /**
- * Magnitu HTTP API — the contract the companion Magnitu Python app relies on.
+ * Magnitu HTTP API — the contract **Magnitu v3** relies on.
  *
  * Five actions, all Bearer-authenticated against `magnitu_config.api_key`:
  *
@@ -13,14 +13,13 @@
  *   GET  ?action=magnitu_status   — health / stats
  *
  * The response JSON shape is FROZEN — any change must be coordinated with
- * Magnitu's `sync.py` and is out of scope for v0.5 consolidation. Field names
- * and types match 0.4 exactly; see `.cursor/rules/magnitu-integration.mdc`.
+ * Magnitu v3 (`sync.py` / `main.py`). Field names and nesting follow the
+ * 0.4-era contract, extended for Leg (`calendar_event`); see
+ * `.cursor/rules/magnitu-integration.mdc`.
  *
- * Leg exclusion: `calendar_event` is NOT returned by `magnitu_entries`, is
- * NOT accepted by `magnitu_scores` or `magnitu_labels`, and is NOT counted
- * in `magnitu_status`. The rule is enforced here (controller) and again at
- * the repository layer (`MAGNITU_ENTRY_TYPES`). Lifting it is an explicit
- * product decision; see `.cursor/rules/calendar-events.mdc`.
+ * Leg (`calendar_event`) is part of the same contract as feed / email / lex:
+ * exported by `magnitu_entries`, scores and labels accepted, counted in
+ * `magnitu_status`. See `.cursor/rules/magnitu-integration.mdc`.
  */
 
 declare(strict_types=1);
@@ -52,9 +51,8 @@ final class MagnituController
     //
     // Contract note: `limit` is applied **per family** when `type=all`, not
     // as a grand total. A request of `limit=500&type=all` can therefore
-    // return up to 1,500 entries (500 feed_items + 500 emails + 500 lex_items).
-    // Matches 0.4's `sync.py` expectations — any change is a Magnitu
-    // contract break and must be coordinated. See
+    // return up to 2,000 entries (500 × four families including Leg).
+    // Coordinate with Magnitu v3 (`sync.py` / `main.py`). See
     // `.cursor/rules/magnitu-integration.mdc`.
     // ------------------------------------------------------------------
 
@@ -85,6 +83,11 @@ final class MagnituController
         if ($type === 'all' || $type === 'lex_item') {
             foreach ($repo->listLexItemsSince($since, $limit) as $row) {
                 $entries[] = self::shapeLexItem($row);
+            }
+        }
+        if ($type === 'all' || $type === 'calendar_event') {
+            foreach ($repo->listCalendarEventsSince($since, $limit) as $row) {
+                $entries[] = self::shapeCalendarEvent($row);
             }
         }
 
@@ -312,10 +315,11 @@ final class MagnituController
             'status'  => 'ok',
             'version' => SEISMO_VERSION,
             'entries' => [
-                'feed_items' => $counts['feed_items'],
-                'emails'     => $counts['emails'],
-                'lex_items'  => $counts['lex_items'],
-                'total'      => $counts['feed_items'] + $counts['emails'] + $counts['lex_items'],
+                'feed_items'       => $counts['feed_items'],
+                'emails'           => $counts['emails'],
+                'lex_items'        => $counts['lex_items'],
+                'calendar_events'  => $counts['calendar_events'],
+                'total'            => $counts['feed_items'] + $counts['emails'] + $counts['lex_items'] + $counts['calendar_events'],
             ],
             'scores' => [
                 'total'   => $scores['total'],
@@ -412,6 +416,51 @@ final class MagnituController
             'source_name'     => self::LEX_SOURCE_LABELS[$source] ?? 'EUR-Lex',
             'source_category' => (string)($row['document_type'] ?? 'Legislation'),
             'source_type'     => 'lex_' . $source,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    public static function shapeCalendarEvent(array $row): array
+    {
+        $source = (string)($row['source'] ?? '');
+        $desc   = trim((string)($row['description'] ?? ''));
+        if ($desc === '') {
+            $bits = array_filter([
+                (string)($row['event_type'] ?? ''),
+                (string)($row['status'] ?? ''),
+                (string)($row['council'] ?? ''),
+            ], static fn (string $s): bool => $s !== '');
+            $desc = $bits !== [] ? implode(' · ', $bits) : '';
+        }
+        $body = trim((string)($row['content'] ?? ''));
+        if ($body === '') {
+            $body = strip_tags($desc !== '' ? $desc : (string)($row['title'] ?? ''));
+        } else {
+            $body = strip_tags($body);
+        }
+
+        $pub = $row['event_date'] ?? null;
+        if ($pub !== null && $pub !== '') {
+            $pub = (string)$pub;
+        }
+
+        $sourceName = $source === 'parliament_ch' ? 'Parliament CH' : ($source !== '' ? $source : 'Leg');
+
+        return [
+            'entry_type'      => 'calendar_event',
+            'entry_id'        => (int)$row['id'],
+            'title'           => (string)($row['title'] ?? ''),
+            'description'     => $desc,
+            'content'         => $body,
+            'link'            => (string)($row['url'] ?? ''),
+            'author'          => (string)($row['council'] ?? ''),
+            'published_date'  => $pub,
+            'source_name'     => $sourceName,
+            'source_category' => (string)($row['event_type'] ?? 'Leg'),
+            'source_type'     => 'leg_' . ($source !== '' ? preg_replace('/[^a-z0-9_]+/i', '_', $source) : 'parliament'),
         ];
     }
 

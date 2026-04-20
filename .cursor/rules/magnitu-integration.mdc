@@ -1,17 +1,17 @@
 ---
-description: Magnitu ML integration — API contract, satellite rules, 0.5 ports
+description: Magnitu v3 — HTTP API contract with Seismo 0.5, satellite rules, export parity
 alwaysApply: true
 ---
 
-# Magnitu Integration
+# Magnitu v3 integration (Seismo server contract)
 
-Seismo has a companion project called **Magnitu** (separate repo at `../../../magnitu/`). Magnitu is a local Python app that learns which entries are relevant via ML and pushes scores back to Seismo via API.
+Seismo’s companion ML app is **Magnitu v3** (sibling checkout alongside `seismo/`, typically `../../magnitu v3/` relative to this repo root `seismo_0.5/`). Legacy **Magnitu v1/v2** trees may still exist as `magnitu/` on disk — treat them as archived; **contract and coordination work target v3**.
 
-The Magnitu HTTP surface is ported: **Slice 5** shipped the web contract (`MagnituController`), **Slice 5a** renamed `magnitu_config` → `system_config`, and **Slice 7** ported the admin UI (`MagnituAdminController` + Settings → Magnitu tab). The 0.4 reference still runs at `/seismo-staging/`; everything below is load-bearing — the contract must keep working against Magnitu's current `sync.py` on both 0.4 and 0.5 with zero Magnitu-side changes.
+The **Magnitu v3** HTTP surface is implemented in Seismo as: **Slice 5** shipped the web contract (`MagnituController`), **Slice 5a** renamed `magnitu_config` → `system_config`, and **Slice 7** ported the admin UI (`MagnituAdminController` + Settings → Magnitu tab). The 0.4 reference still runs at `/seismo-staging/`. **0.5 includes Leg** (`calendar_event`) in the **Magnitu v3** and export APIs; **Magnitu v3** `main.py` full-sync must pull the fourth family (see `calendar-events.mdc`).
 
 ## API contract (Seismo is the server)
 
-Magnitu connects via these actions in `index.php`:
+**Magnitu v3** connects via these actions in `index.php`:
 
 - `GET ?action=magnitu_entries` — export entries (params: `since`, `type`, `limit`).
 - `POST ?action=magnitu_scores` — receive batch scores (body: `{scores: [...], model_version, model_meta?}`).
@@ -22,25 +22,25 @@ Magnitu connects via these actions in `index.php`:
 
 **Auth — two accepted transports.** All six actions are gated by `BearerAuth::guardMagnitu()`, which accepts the presented token via **either**:
 1. `Authorization: Bearer <api_key>` (preferred, modern); or
-2. `?api_key=<api_key>` query-string or POST-body parameter — a **load-bearing 0.4-compat fallback** relied on by Magnitu's current `sync.py` (it passes `params["api_key"] = cfg["api_key"]` in `httpx.Client.request`). Do NOT remove the fallback from `BearerAuth::presentedToken()` without coordinating a matching `sync.py` release; a silent drop will break every deployed Magnitu overnight.
+2. `?api_key=<api_key>` query-string or POST-body parameter — a **load-bearing 0.4-compat fallback** relied on by **Magnitu v3** `sync.py` (it passes `params["api_key"] = cfg["api_key"]` in `httpx.Client.request`). Do NOT remove the fallback from `BearerAuth::presentedToken()` without coordinating a matching **Magnitu v3** release; a silent drop will break every deployed client overnight.
 
 The `magnitu_*` prefix is whitelisted by `AuthGate::check()` so the Bearer-token endpoints are not redirected through the session login flow. See `auth-dormant-by-default.mdc`.
 
-In 0.5 these will be registered through the `Router` like every other action, pointing at `Seismo\Controller\MagnituController`. Bearer-token auth stays separate from the dormant web-admin session auth.
+In 0.5 these routes are registered on the `Router` like every other action, pointing at `Seismo\Controller\MagnituController`. Bearer-token auth stays separate from the dormant web-admin session auth.
 
 ## Entry format returned by `magnitu_entries`
 
 ```json
 {
-  "entry_type": "feed_item|email|lex_item",
+  "entry_type": "feed_item|email|lex_item|calendar_event",
   "entry_id": 123,
   "title": "...", "description": "...", "content": "...",
   "link": "...", "author": "...", "published_date": "...",
-  "source_name": "...", "source_category": "...", "source_type": "rss|substack|email|lex_eu|lex_ch"
+  "source_name": "...", "source_category": "...", "source_type": "rss|substack|email|lex_eu|lex_ch|leg_<source>"
 }
 ```
 
-`calendar_event` rows (Leg) are deliberately excluded — see `calendar-events.mdc`.
+Leg rows use `entry_type` `calendar_event` and `source_type` prefixed with `leg_` (e.g. `leg_parliament_ch`).
 
 ## Score format expected by `magnitu_scores`
 
@@ -62,15 +62,15 @@ In 0.5 these will be registered through the `Router` like every other action, po
 
 - `entry_scores` — local, per-instance. **Never** wrap with `entryTable()`.
 - `magnitu_labels` — local, per-instance. **Never** wrap with `entryTable()`.
-- `system_config` — local key/value store (renamed from `magnitu_config` in Slice 5a, schema 21). Holds both the `api_key` / `export:api_key` Magnitu keys and the `alert_threshold` / `sort_by_relevance` preferences. Never wrap with `entryTable()`. Managed from the UI via **Settings → Magnitu** (`?action=settings&tab=magnitu`, Slice 7) — `MagnituAdminController` handles key rotation, preference save, and the "Clear all scores" danger-zone action.
+- `system_config` — local key/value store (renamed from `magnitu_config` in Slice 5a, schema 21). Holds both the `api_key` / `export:api_key` keys consumed by **Magnitu v3** / briefing clients and the `alert_threshold` / `sort_by_relevance` preferences. Never wrap with `entryTable()`. Managed from the UI via **Settings → Magnitu** (`?action=settings&tab=magnitu`, Slice 7) — `MagnituAdminController` handles key rotation, preference save, and the "Clear all scores" danger-zone action.
 
 ## Shared styleguide
 
-Magnitu uses Seismo's styleguide (`views/styleguide.php` in 0.4; pending port to 0.5 as part of Slice 6). When building or updating Magnitu's UI, follow the same design system: colors, typography, button styles, card layout, expand / collapse patterns, etc.
+**Magnitu v3** should stay visually aligned with Seismo (`views/styleguide.php` in 0.4; styleguide port in 0.5 per consolidation plan). When building or updating the v3 UI, follow the same design system: colors, typography, button styles, card layout, expand / collapse patterns, etc.
 
 ## Satellite mode (multi-profile groundwork)
 
-Seismo supports a **satellite mode** so a second, lightweight Seismo instance can serve a topic-specific Magnitu profile (e.g. "security", "digital policy") without independent scraping.
+Seismo supports a **satellite mode** so a second, lightweight Seismo instance can serve a topic-specific **Magnitu v3** profile (e.g. "security", "digital policy") without independent scraping.
 
 ### How it works
 
@@ -87,7 +87,7 @@ Seismo supports a **satellite mode** so a second, lightweight Seismo instance ca
 - **Repositories** are the only place `entryTable()` / `entryDbSchemaExpr()` appear. `EntryRepository`, `LexItemRepository`, `CalendarEventRepository`, and the future `FeedItemRepository` / `EmailRepository` all wrap every entry-source SELECT. Score / favourite / config / run-log writes remain on the local PDO and are never wrapped.
 - **`RefreshAllService`** short-circuits on satellite at both the master-cron boundary (`refresh_cron.php` exits 0) and per-plugin (`runOne()` returns a `skipped(satellite)` result). No plugin ever runs on a satellite.
 - **`LexItemRepository::upsertBatch/prune` and `CalendarEventRepository::upsertBatch/prune`** throw if `isSatellite()` is true — defence in depth, so any future caller that forgets the runner-level guard still can't corrupt the mothership's tables.
-- **Magnitu controller (Slice 5 port)**: all entry-table reads use `entryTable()` / `entryDbSchemaExpr()`. Score / config writes remain on the local PDO untouched.
+- **`MagnituController` (Slice 5 port)** — all entry-table reads use `entryTable()` / `entryDbSchemaExpr()`. Score / config writes remain on the local PDO untouched.
 
 ### Rules
 
@@ -95,27 +95,27 @@ Seismo supports a **satellite mode** so a second, lightweight Seismo instance ca
 - **Clearest test:** if writing to this table from a satellite would corrupt the mothership, it's an entry-source table (use `entryTable()` for reads, forbid writes on satellite). If it's something each instance tracks independently (per-satellite API key, per-satellite labels, per-satellite cron log), it's local — never wrap.
 - The MySQL user for the satellite DB must have `SELECT` granted on the mothership database. The setup wizard is responsible for prompting this; see `docs/setup-wizard-notes.md`.
 - **Do NOT reuse the mothership API key** — generate a fresh one for each satellite.
-- The API contract (JSON formats, endpoint signatures) is identical between mothership and satellite. Magnitu does not need any changes to support satellites.
+- The API contract (JSON formats, endpoint signatures) is identical between mothership and satellite. **Magnitu v3** does not need satellite-specific forks — the same client works against both.
 
 ## Rules when changing Seismo
 
-- Do NOT change the API response format without updating Magnitu's `sync.py`.
-- Do NOT rename `entry_type` values — Magnitu depends on: `feed_item`, `email`, `lex_item`. `calendar_event` exists in the ENUM but is excluded from the API; see `calendar-events.mdc`.
-- The recipe JSON format (`keywords`, `source_weights`, `classes`, `class_weights`) is a contract — changes require updating both the Seismo scoring code (currently 0.4 `scoreEntryWithRecipe()` in `config.php`; future `src/Core/Scoring/` in 0.5 per the Slice 5 plan) **and** `distiller.py` in Magnitu.
-- Config keys in `system_config`: `api_key`, `export:api_key` (Slice 5, read-only briefing key — **must never share a value with `api_key`**; `BearerAuth::verifyExportKey` rejects the write key even if the admin accidentally seeds it here), `alert_threshold`, `sort_by_relevance`, `recipe_json`, `recipe_version`, `last_sync_at`, `model_name` / `model_description` / `model_version` / `model_trained_at` (written by `magnitu_scores` POST when Magnitu includes `model_meta`).
-- **`magnitu_status` response shape (Slice 5, verified against current Magnitu).** 0.5 returns:
+- Do NOT change the API response format without updating **Magnitu v3** (`sync.py` / `main.py` as applicable).
+- Do NOT rename `entry_type` values — **Magnitu v3** and Seismo share: `feed_item`, `email`, `lex_item`, `calendar_event`.
+- The recipe JSON format (`keywords`, `source_weights`, `classes`, `class_weights`) is a contract — changes require updating both the Seismo scoring code (`src/Core/Scoring/` in 0.5) **and** `distiller.py` in **Magnitu v3**.
+- Config keys in `system_config`: `api_key`, `export:api_key` (Slice 5, read-only briefing key — **must never share a value with `api_key`**; `BearerAuth::verifyExportKey` rejects the write key even if the admin accidentally seeds it here), `alert_threshold`, `sort_by_relevance`, `recipe_json`, `recipe_version`, `last_sync_at`, `model_name` / `model_description` / `model_version` / `model_trained_at` (written by `magnitu_scores` POST when **Magnitu v3** includes `model_meta`).
+- **`magnitu_status` response shape (Slice 5, verified against Magnitu v3).** 0.5 returns:
   ```json
   {
     "status": "ok",
     "version": "<SEISMO_VERSION>",
-    "entries": {"feed_items": N, "emails": N, "lex_items": N, "total": N},
+    "entries": {"feed_items": N, "emails": N, "lex_items": N, "calendar_events": N, "total": N},
     "scores":  {"total": N, "magnitu": N, "recipe": N},
     "recipe_version": <int>,
     "alert_threshold": <float>,
     "last_sync_at": "<Y-m-d H:i:s>" | null
   }
   ```
-  Magnitu's `sync.py` (`test_connection`) and `main.py` (`_sync_pull_impl`) consume `status`, `entries.total`, `entries.feed_items`, `entries.emails`, and `entries.lex_items`. Those five keys and the `entries.*` nesting are the part of this contract that is actually load-bearing — renaming `entries` to `score_counts`, or flattening `entries.*` to top-level `schema_version`-style keys, breaks Magnitu. If you are changing `MagnituController::status()`, update `sync.py` / `main.py` in the same push and note it here, not post-hoc in a review.
+  **Magnitu v3** `sync.py` (`test_connection`) and `main.py` (`_sync_pull_impl`) consume `status`, `entries.total`, `entries.feed_items`, `entries.emails`, `entries.lex_items`, and **`entries.calendar_events`** (full sync pull). The `entries` object and its per-family keys must stay nested — renaming `entries` or flattening breaks clients. If you are changing `MagnituController::status()`, update the v3 client when counts or keys change.
 - **0.4 subscription-based email hiding is NOT ported in 0.5.** v0.4 Magnitu responses filtered emails by `email_subscriptions.show_in_magnitu = 1`. v0.5 exposes every email row. Re-adding the filter is a product decision tracked in `docs/consolidation-plan.md`; do not sneak it back into a repository query without pairing it with a slice entry.
-- When changing Seismo's styleguide or CSS, be aware that Magnitu's UI depends on the same design system.
+- When changing Seismo's styleguide or CSS, be aware that **Magnitu v3**'s UI should track the same design system.
 - When adding new entry-source table queries (e.g. a new content type), wrap them with `entryTable()` inside the owning repository so satellites stay in sync. Never do entry-source SQL outside a repository — see `core-plugin-architecture.mdc` ("Repositories return raw data").

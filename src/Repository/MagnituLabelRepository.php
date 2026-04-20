@@ -17,8 +17,8 @@ use PDOException;
 
 final class MagnituLabelRepository
 {
-    /** Entry types Magnitu may label. `calendar_event` is deliberately excluded. */
-    public const LABELED_ENTRY_TYPES = ['feed_item', 'email', 'lex_item'];
+    /** Entry types Magnitu may label (includes Leg). */
+    public const LABELED_ENTRY_TYPES = ['feed_item', 'email', 'lex_item', 'calendar_event'];
 
     /** Safety cap on GET responses so a runaway client can't OOM the host. */
     public const MAX_LIST_LIMIT = 5000;

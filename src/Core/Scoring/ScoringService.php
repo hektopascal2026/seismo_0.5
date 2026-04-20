@@ -20,10 +20,8 @@
  * bounded on shared hosts and avoids long-running request timeouts for
  * the `magnitu_recipe` POST.
  *
- * Leg (`calendar_event`) IS rescored here even though Leg is excluded
- * from the Magnitu API — per `calendar-events.mdc` the scoring works
- * internally so the dashboard badge is visible; the exclusion is at the
- * export layer.
+ * Leg (`calendar_event`) is rescored here for recipe backfill until Magnitu
+ * overwrites with ML scores.
  */
 
 declare(strict_types=1);

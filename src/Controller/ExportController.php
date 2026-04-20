@@ -9,10 +9,8 @@
  * write key is rejected here (two-key model, see `BearerAuth`). A compromised
  * briefing key therefore can't corrupt scores or labels.
  *
- * Same family reads as {@see \Seismo\Controller\MagnituController} (Leg
- * excluded). If a briefing consumer ever needs Leg rows, that is a product
- * decision per `.cursor/rules/calendar-events.mdc` — not a quick config
- * toggle.
+ * Same family reads as {@see \Seismo\Controller\MagnituController} (includes
+ * Leg / `calendar_event`).
  */
 
 declare(strict_types=1);
@@ -139,6 +137,11 @@ final class ExportController
         if ($type === 'all' || $type === 'lex_item') {
             foreach ($repo->listLexItemsSince($since, $limit) as $row) {
                 $entries[] = MagnituController::shapeLexItem($row);
+            }
+        }
+        if ($type === 'all' || $type === 'calendar_event') {
+            foreach ($repo->listCalendarEventsSince($since, $limit) as $row) {
+                $entries[] = MagnituController::shapeCalendarEvent($row);
             }
         }
 

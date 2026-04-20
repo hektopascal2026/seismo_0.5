@@ -28,7 +28,7 @@ Three documents, three purposes. Do not conflate them.
 ## `views/about.php` — the in-app product doc
 
 - **Audience:** users / journalists / admins looking at the running site.
-- **Content:** what Seismo does, what the sources are, what Leg / Magnitu / Lex etc. mean.
+- **Content:** what Seismo does, what the sources are, what Leg / **Magnitu v3** / Lex etc. mean (user-language, not repo layout).
 - **When finalised:** only **after** the feature set has stopped shifting — i.e. at the end of the consolidation, *after* the code README is polished and all slices are accepted. One pass, user-language, not developer-language.
 - **During consolidation:** only touch for strict factual correctness (e.g. the "Calendar → Leg" rename). No architectural or UX rewrites until the end.
 

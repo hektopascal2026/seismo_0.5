@@ -25,7 +25,7 @@ Keep behaviour **honest and documented**:
 
 | Mechanism | Typical role |
 |-----------|----------------|
-| **Web “Refresh all”** (`refreshAllSources()` in `controllers/dashboard.php`) | Feeds, mail fetch, Lex/Jus sources, **Leg (parliament_ch)**, Magnitu recipe rescore |
+| **Web “Refresh all”** (0.5: `DiagnosticsController::refreshAll` → `RefreshAllService::runAll()`) | Feeds, mail fetch, Lex/Jus sources, **Leg (parliament_ch)**, recipe rescore (scores visible to **Magnitu v3** on the mothership) |
 | **`refresh_cron.php` (CLI)** | Intended to mirror the above for automation — **verify it stays in sync** with `refreshAllSources()` when adding pipeline steps |
 | **Mail CLI** (`fetcher/mail/fetch_mail.php`) | Separate cron; configured via downloaded `config.php` |
 | **Scraper CLI** (`fetcher/scraper/seismo_scraper.php`) | Separate cron; not part of the main PHP refresh loop by design |
