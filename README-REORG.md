@@ -9,6 +9,16 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## parl_press — “Untitled” cards (legacy RSS on SharePoint URL + cron cleanup)
+
+**Why.** If the Parliament **`…/items`** URL was ever refreshed as **`source_type = rss`**, SimplePie treated the JSON like a feed and stored **`Untitled`** for almost every row (see `FeedItemRepository::deleteAlienParlPressFeedItems()`). Real headlines live in **`Title_de`** / **`Title_*`** on the list row, not in that RSS-shaped parse.
+
+**What moved.** `src/Service/CoreRunner.php` — `deleteAlienParlPressFeedItems()` now runs **before every** `parl_press` fetch, not only when `force=true` (web “Refresh all”); `refresh_cron.php` therefore removes legacy GUIDs that are not `parl_mm:` / `parl_sda:` on the same schedule as mothership ingest. `src/Core/Fetcher/ParlPressFetchService.php` — **`resolveParlPressSlug()`** falls back to the **`FileRef`** basename when **`Title`** is empty or a SharePoint placeholder; items whose resolved display title is still meaningless are **skipped** so corrupt `parl_mm:Untitled` rows are not written.
+
+**Gotchas.** After deploy, trigger **one** successful `core:parl_press` run (cron or Diagnostics / Timeline refresh); junk rows disappear on pre-clean, then the SharePoint list repopulates with proper titles.
+
+---
+
 ## Parlament.ch — SDA second feed (`parl_press`, same `Pages` list)
 
 **Why.** Operators want **SDA-Meldungen** (agency wire) alongside official **Medienmitteilungen** in the timeline. The public **suche-news** UI is backed by SharePoint **search** (`/_api/search/query`); that surface is a poor fit for Seismo’s unattended HTTP fetcher (WAF / host / template constraints in real deployments). The **same** SharePoint **`Pages`** list used for press releases already contains SDA rows; they are distinguishable by **`Title`** containing **`sda-`** (including slugs like `mm-sda-…`).

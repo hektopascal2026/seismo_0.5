@@ -159,14 +159,14 @@ final class CoreRunner
                         continue;
                     }
                     try {
-                        if ($force) {
-                            $pre = $this->feeds->deleteAlienParlPressFeedItems($id);
-                            if ($pre > 0) {
-                                error_log(
-                                    'Seismo core:parl_press feed ' . $id . ': pre-clean removed ' . $pre
-                                    . ' non-SharePoint feed_items row(s) before fetch (legacy RSS on this URL).'
-                                );
-                            }
+                        // Always strip legacy rows (e.g. SimplePie against the SharePoint URL stored
+                        // "Untitled" per item). Cron uses force=false — alien cleanup must not be web-only.
+                        $pre = $this->feeds->deleteAlienParlPressFeedItems($id);
+                        if ($pre > 0) {
+                            error_log(
+                                'Seismo core:parl_press feed ' . $id . ': pre-clean removed ' . $pre
+                                . ' non-SharePoint feed_items row(s) before fetch (legacy RSS on this URL).'
+                            );
                         }
                         $rows = $this->parlPress->fetchForFeed($feed);
                         $n = $this->feeds->upsertFeedItems($id, $rows);

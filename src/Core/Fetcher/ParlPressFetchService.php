@@ -111,7 +111,7 @@ final class ParlPressFetchService
 
         $out = [];
         foreach ($items as $item) {
-            $slug = trim((string)($item['Title'] ?? ''));
+            $slug = $this->resolveParlPressSlug($item);
             if ($slug === '') {
                 continue;
             }
@@ -143,6 +143,10 @@ final class ParlPressFetchService
             $guid = mb_substr($guid, 0, 500);
 
             $commission = self::commissionFromSlug($slug);
+
+            if (self::isMeaninglessParlPressTitle($title)) {
+                continue;
+            }
 
             $out[] = [
                 'guid'             => $guid,
@@ -186,6 +190,31 @@ final class ParlPressFetchService
         $l = strtolower(trim($raw));
 
         return in_array($l, self::LANGUAGES, true) ? $l : 'de';
+    }
+
+    /**
+     * Internal URL slug: list column {@see Title}, or basename of {@see FileRef} when Title is empty / "Untitled".
+     *
+     * @param array<string, mixed> $item SharePoint list row (verbose JSON).
+     */
+    private function resolveParlPressSlug(array $item): string
+    {
+        $fromTitle = trim((string)($item['Title'] ?? ''));
+        if ($fromTitle !== '' && !self::isMeaninglessParlPressTitle($fromTitle)) {
+            return $fromTitle;
+        }
+        $ref = trim((string)($item['FileRef'] ?? ''));
+        if ($ref === '') {
+            return $fromTitle;
+        }
+        $base = basename($ref);
+        if ($base === '' || $base === '.' || $base === '..') {
+            return $fromTitle;
+        }
+        $slug = preg_replace('/\.aspx$/i', '', $base) ?? $base;
+        $slug = trim((string)$slug);
+
+        return $slug !== '' ? $slug : $fromTitle;
     }
 
     /**
