@@ -9,6 +9,18 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 10 — README developer surface + plan hygiene
+
+**Why.** After Slice 9, numbered feature work in this repo arc is complete, but `README.md` still read “mid-consolidation” and `docs/consolidation-plan.md` **Open decisions** still listed email schema unification as if Slice 4 had not shipped.
+
+**What moved.** `README.md` — quick start (PHP/DB, config / `?action=setup`, migrate, health), useful URL table, repository sketch, Magnitu/export pointer, Composer/`vendor` reminder. `docs/consolidation-plan.md` — Slice 10 subsection, **Consolidation arc** capstone (Slice 10 doc-only; no Slice 11 defined here), **Open decisions** email bullet marked **resolved (Slice 4)**.
+
+**New wiring.** None — documentation only.
+
+**Gotchas.** `README-REORG.md` remains the migration log; do not duplicate slice narratives inside `README.md` per `documentation-strategy.mdc`.
+
+---
+
 ## parl_press — “Untitled” cards (legacy RSS on SharePoint URL + cron cleanup)
 
 **Why.** If the Parliament **`…/items`** URL was ever refreshed as **`source_type = rss`**, SimplePie treated the JSON like a feed and stored **`Untitled`** for almost every row (see `FeedItemRepository::deleteAlienParlPressFeedItems()`). Real headlines live in **`Title_de`** / **`Title_*`** on the list row, not in that RSS-shaped parse.

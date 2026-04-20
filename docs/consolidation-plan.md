@@ -268,7 +268,20 @@ The "last-mile polish" slice. Closes three small ergonomics gaps (dashboard refr
 
 **Definition of done:** dashboard has a working Refresh button (CSRF-guarded, redirects back); `?action=about` renders a human-readable product description that names the export API as the AI-view successor; a dry run of the wizard-stub on a host with `is_writable(__DIR__) === false` produces the copy-paste screen and never silently fails; `docs/setup-wizard-notes.md` gains at least one entry from live testing.
 
-**Consolidation arc.** Slices **7a → 8 → 9** shipped as the final numbered tranche for 0.5. No further numbered slices are planned for recipe-scoring polish in this document; sophisticated scoring belongs in **Magnitu** (the ML companion). The PHP `RecipeScorer` stays the cheap deterministic fallback — good enough to sort the dashboard until Magnitu overwrites scores.
+### Slice 10 — README developer surface + plan hygiene — **shipped**
+
+**Why.** Numbered feature slices (through 9) are shipped; `README.md` still read like “mid-consolidation” while `Open decisions` still listed pre–Slice 4 email work. A **small** doc slice closes that gap without pretending the whole consolidation write-up moved into `README.md` (deep history stays in `README-REORG.md` per `documentation-strategy.mdc`).
+
+**What.**
+
+- **`README.md`** — Adds a concise **Quick start** (PHP, extensions, config, migrate, health), **Useful URLs**, and a **Repository layout** sketch so a new developer or host operator can orient in one screen. Keeps `README-REORG.md` as the migration log pointer.
+- **`docs/consolidation-plan.md`** — This subsection + **Consolidation arc** update; **Open decisions** scrub: email schema unification marked resolved (Slice 4); remaining bullets are genuinely open product follow-ups.
+
+**Explicitly out of Slice 10:** new routes, schema, or Magnitu/export contract changes; rewriting `views/about.php`; duplicating slice-by-slice prose from `README-REORG.md` into `README.md`.
+
+**Definition of done:** `README.md` answers “how do I run this?” at a glance; stale plan bullets are fixed; `README-REORG.md` records Slice 10.
+
+**Consolidation arc.** Slices **7a → 8 → 9** shipped the feature arc; **Slice 10** is a documentation-only capstone in this document. **No Slice 11** is defined here — further work is tracked as follow-ups or product decisions (Magnitu companion, optional Magnitu API tweaks, etc.). Sophisticated scoring belongs in **Magnitu**; the PHP `RecipeScorer` stays the cheap deterministic fallback.
 
 ## Portability checklist (applies to every slice)
 
@@ -296,7 +309,7 @@ Revisit a templating engine only if real pain emerges (duplicated markup, escapi
 ## Open decisions
 
 - **Per-feed full-text backfill** — when to add "readability" / scraper fetch for thin RSS items (see Fetcher output contract). Product/settings decision once Slice 3 feed settings exist.
-- **Email schema unification** — exact column mapping from `emails` → unified structure. Needs a migration draft before Slice 4.
+- **Email schema unification** — **resolved (Slice 4 shipped).** Core mail + repositories use the unified `emails` table; migration shipped with that slice. Further column tweaks are ordinary schema work, not an open “unification” decision.
 - **`ai_view`** — **resolved (Slice 9 shipped).** Not ported in 0.5. `views/about.php` documents the official replacement: read-only export API (`?action=export_briefing` / `export_entries`, Bearer key `export:api_key` in `system_config`).
 - **Magnitu Leg API** — when (or whether) to lift the `calendar_event` exclusion. Product decision, not technical.
 
