@@ -23,6 +23,12 @@ final class RssFetchService
         if ($feedUrl === '') {
             return [];
         }
+        // SharePoint list REST URLs are not RSS — 0.4 SimplePie stored "Untitled" for every item here.
+        if (preg_match('#/_api/web/lists#i', $feedUrl) || str_contains($feedUrl, 'getByTitle(')) {
+            throw new \RuntimeException(
+                'This URL is a SharePoint list API endpoint. Use source_type parl_press (Feeds → Parlament Medien), not RSS.'
+            );
+        }
 
         $pie = new SimplePie();
         $pie->set_feed_url($feedUrl);

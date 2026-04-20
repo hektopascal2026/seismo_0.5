@@ -40,6 +40,13 @@ use PDOException;
 final class EntryRepository
 {
     /**
+     * Explicit feed_items column list for JOIN queries — never `fi.*` so joined
+     * `feeds` columns can never collide with item fields in associative fetchers.
+     */
+    private const SQL_FEED_ITEMS_JOIN_SELECT = 'fi.id, fi.feed_id, fi.guid, fi.title, fi.link, fi.description, fi.content, fi.author,
+            fi.published_date, fi.content_hash, fi.hidden, fi.cached_at';
+
+    /**
      * Hard cap on the final timeline size.
      *
      * Per-source queries each take (limit + offset) rows so merge+sort produces
@@ -430,7 +437,7 @@ final class EntryRepository
     {
         $extra = $this->feedSqlFilter($filter);
         $sql = '
-            SELECT fi.*,
+            SELECT ' . self::SQL_FEED_ITEMS_JOIN_SELECT . ',
                    f.title       AS feed_title,
                    f.category    AS feed_category,
                    f.source_type AS feed_source_type,
@@ -635,7 +642,7 @@ final class EntryRepository
     {
         $extra = $this->feedSqlFilter($filter);
         $sql = '
-            SELECT fi.*,
+            SELECT ' . self::SQL_FEED_ITEMS_JOIN_SELECT . ',
                    f.title       AS feed_title,
                    f.category    AS feed_category,
                    f.source_type AS feed_source_type,
@@ -817,7 +824,7 @@ final class EntryRepository
         foreach ($this->chunkIds($ids, 400) as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
             $sql = '
-                SELECT fi.*,
+                SELECT ' . self::SQL_FEED_ITEMS_JOIN_SELECT . ',
                        f.title       AS feed_title,
                        f.category    AS feed_category,
                        f.source_type AS feed_source_type,
@@ -1097,7 +1104,7 @@ final class EntryRepository
         }
 
         $sql = "
-            SELECT fi.*,
+            SELECT " . self::SQL_FEED_ITEMS_JOIN_SELECT . ",
                    f.title       AS feed_title,
                    f.category    AS feed_category,
                    f.source_type AS feed_source_type,

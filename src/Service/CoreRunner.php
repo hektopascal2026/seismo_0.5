@@ -159,9 +159,27 @@ final class CoreRunner
                         continue;
                     }
                     try {
+                        if ($force) {
+                            $pre = $this->feeds->deleteAlienParlPressFeedItems($id);
+                            if ($pre > 0) {
+                                error_log(
+                                    'Seismo core:parl_press feed ' . $id . ': pre-clean removed ' . $pre
+                                    . ' non-SharePoint feed_items row(s) before fetch (legacy RSS on this URL).'
+                                );
+                            }
+                        }
                         $rows = $this->parlPress->fetchForFeed($feed);
                         $n = $this->feeds->upsertFeedItems($id, $rows);
                         $total += $n;
+                        if ($n > 0) {
+                            $purged = $this->feeds->deleteAlienParlPressFeedItems($id);
+                            if ($purged > 0) {
+                                error_log(
+                                    'Seismo core:parl_press feed ' . $id . ': removed ' . $purged
+                                    . ' non-SharePoint feed_items row(s) after upsert.'
+                                );
+                            }
+                        }
                         $this->feeds->touchFeedSuccess($id);
                     } catch (\Throwable $e) {
                         error_log('Seismo core:parl_press feed ' . $id . ': ' . $e->getMessage());

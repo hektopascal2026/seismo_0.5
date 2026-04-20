@@ -188,6 +188,36 @@ final class FeedItemRepository
         }
     }
 
+    /**
+     * Remove feed_items rows that cannot come from {@see \Seismo\Core\Fetcher\ParlPressFetchService}
+     * (guids are always `parl_mm:{slug}`). Same feed_id may contain RSS-shaped junk if the row was
+     * ever refreshed as `source_type = rss` against the SharePoint URL — 0.4 stored `Untitled`
+     * in that case ({@see cacheFeedItems} in 0.4 controllers/rss.php).
+     */
+    public function deleteAlienParlPressFeedItems(int $feedId): int
+    {
+        if (isSatellite()) {
+            return 0;
+        }
+        if ($feedId <= 0) {
+            return 0;
+        }
+        $table = entryTable('feed_items');
+        try {
+            $stmt = $this->pdo->prepare(
+                'DELETE FROM ' . $table . ' WHERE feed_id = ? AND guid NOT LIKE ?'
+            );
+            // Default LIKE escape: backslash before _ so only literal parl_mm: prefix matches.
+            $stmt->execute([$feedId, 'parl\\_mm:%']);
+
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            error_log('FeedItemRepository::deleteAlienParlPressFeedItems: ' . $e->getMessage());
+
+            return 0;
+        }
+    }
+
     public function touchFeedFailure(int $feedId, string $message): void
     {
         if (isSatellite()) {
