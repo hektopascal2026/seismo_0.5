@@ -8,6 +8,7 @@
  *   feed_categories: list<string>,
  *   feed_category_labels?: array<string, string>,
  *   lex_sources: list<string>,
+ *   lex_source_labels?: array<string, string>,
  *   email_tags: list<string>
  * } $filterPillOptions
  * @var \Seismo\Repository\TimelineFilter $timelineFilter
@@ -73,16 +74,17 @@ $filterDropSearchQs = http_build_query($filterDropSearchParams);
 $feedOn = static function (string $cat) use ($timelineFilter): bool {
     return !in_array($cat, $timelineFilter->excludedFeedCategories, true);
 };
-$lexOn = static function (string $src) use ($timelineFilter): bool {
-    return !in_array($src, $timelineFilter->excludedLexSources, true);
+$lexExcludedEffective = $timelineFilter->effectiveExcludedLexSources();
+$lexOn                = static function (string $src) use ($lexExcludedEffective): bool {
+    return !in_array($src, $lexExcludedEffective, true);
 };
 $mailOn = static function (string $tg) use ($timelineFilter): bool {
     return !in_array($tg, $timelineFilter->excludedEmailTags, true);
 };
 $legOn = !$timelineFilter->excludeCalendar;
-$jusOn = !$timelineFilter->excludeJusLex;
 
 $feedCategoryLabels = $filterPillOptions['feed_category_labels'] ?? [];
+$lexSourceLabels    = $filterPillOptions['lex_source_labels'] ?? [];
 
 $formAction = $basePath . '/index.php';
 ?>
@@ -169,14 +171,17 @@ $formAction = $basePath . '/index.php';
 
                 <?php if ($filterPillOptions['lex_sources'] !== []): ?>
                 <div class="filter-toolbar__row">
-                    <span class="filter-toolbar__hint">Lex</span>
+                    <span class="filter-toolbar__hint">Lex &amp; Jus</span>
                     <?php foreach ($filterPillOptions['lex_sources'] as $src): ?>
-                        <?php $cid = 'df-lex-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $src); ?>
+                        <?php
+                        $cid       = 'df-lex-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $src);
+                        $lexLabel  = $lexSourceLabels[$src] ?? $src;
+                        ?>
                         <label class="filter-pill-label" for="<?= e($cid) ?>">
                             <input type="checkbox" class="filter-pill-input" id="<?= e($cid) ?>"
                                    name="filters[lex][]" value="<?= e($src) ?>"
                                 <?= $lexOn($src) ? ' checked' : '' ?>>
-                            <span class="filter-pill-text filter-pill-text--lex"><?= e($src) ?></span>
+                            <span class="filter-pill-text filter-pill-text--lex"><?= e($lexLabel) ?></span>
                         </label>
                     <?php endforeach; ?>
                 </div>
@@ -198,16 +203,11 @@ $formAction = $basePath . '/index.php';
                 <?php endif; ?>
 
                 <div class="filter-toolbar__row">
-                    <span class="filter-toolbar__hint">Leg / Jus</span>
+                    <span class="filter-toolbar__hint">Leg</span>
                     <label class="filter-pill-label" for="df-cal">
                         <input type="checkbox" class="filter-pill-input" id="df-cal" name="filters[calendar]" value="1"
                             <?= $legOn ? ' checked' : '' ?>>
                         <span class="filter-pill-text filter-pill-text--leg" title="Parliamentary calendar (Leg)">Leg</span>
-                    </label>
-                    <label class="filter-pill-label" for="df-jus">
-                        <input type="checkbox" class="filter-pill-input" id="df-jus" name="filters[jus]" value="1"
-                            <?= $jusOn ? ' checked' : '' ?>>
-                        <span class="filter-pill-text filter-pill-text--lex" title="Swiss case law (BGer / BGE / BVGE)">Jus</span>
                     </label>
                 </div>
             </form>

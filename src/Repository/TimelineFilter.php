@@ -9,8 +9,9 @@ namespace Seismo\Repository;
  *
  * **Native form (preferred):** `TimelineFilter::fromHttpGet()` reads
  * `filters[feed][]` (normal `feeds.category` strings plus `sc:<scraper_config.id>`
- * and `sf:<feeds.id>` scraper tokens), `filters[lex][]`, `filters[email][]`,
- * `filters[calendar]=1` (Leg), `filters[jus]=1` (Jus), plus `filter_form=1` when the filter form
+ * and `sf:<feeds.id>` scraper tokens), `filters[lex][]` (includes Swiss Jus sources
+ * `ch_bger` / `ch_bge` / `ch_bvger` as separate toggles), `filters[email][]`,
+ * `filters[calendar]=1` (Leg), plus `filter_form=1` when the filter form
  * submitted so “all checkboxes off in a row” is not confused with the default
  * “all on” first visit. `none=1` means every dimension off (empty timeline).
  *
@@ -204,17 +205,26 @@ final class TimelineFilter
         $inLex   = array_values(array_intersect($lexAll, self::stringListFromFilterBranch($filters['lex'] ?? null)));
         $inEm    = array_values(array_intersect($emAll, self::stringListFromFilterBranch($filters['email'] ?? null)));
 
+        // Older filter URLs used a single `filters[jus]=1` instead of three `filters[lex][]` keys.
+        $jusLegacy = $filters['jus'] ?? null;
+        if (is_scalar($jusLegacy) && trim((string)$jusLegacy) === '1') {
+            foreach (self::JUS_LEX_SOURCES as $j) {
+                if (!in_array($j, $inLex, true)) {
+                    $inLex[] = $j;
+                }
+            }
+            $inLex = array_values(array_unique($inLex));
+        }
+
         $calRaw = $filters['calendar'] ?? null;
-        $jusRaw = $filters['jus'] ?? null;
         $calOn  = is_scalar($calRaw) && trim((string)$calRaw) === '1';
-        $jusOn  = is_scalar($jusRaw) && trim((string)$jusRaw) === '1';
 
         return new self(
             excludedFeedCategories: array_values(array_diff($feedAll, $inFeeds)),
             excludedLexSources: array_values(array_diff($lexAll, $inLex)),
             excludedEmailTags: array_values(array_diff($emAll, $inEm)),
             excludeCalendar: !$calOn,
-            excludeJusLex: !$jusOn,
+            excludeJusLex: false,
         );
     }
 

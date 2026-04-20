@@ -48,7 +48,7 @@ $activeNav = 'styleguide';
             On <code>?action=index</code>, <strong>Selection: All | None</strong> (next to View) is a shortcut: <strong>All</strong> clears exclusions (<code>efc</code> / <code>elx</code> / <code>eet</code>) and shows Leg+Jus again; <strong>None</strong> excludes every pill token plus Leg and Jus so the timeline is empty until you turn sources back on.
             With Selection <strong>All</strong>, pills default to on; clicking turns one <strong>off</strong> via exclusions <code>efc</code>, <code>elx</code>, <code>eet</code>.
             After <strong>None</strong>, the first pill you click uses <strong>inclusion</strong> (<code>fc</code> / <code>lx</code> / <code>etag</code>): only that pill is on until you add more or reset.
-            <strong>Leg / Jus</strong>: Leg toggles <code>ecal=1</code> to hide calendar rows; Jus toggles <code>ejus=1</code> to hide Swiss case-law Lex sources. Colours: feeds blue, scraper violet, Lex yellow, mail peach, Leg green.
+            <strong>Leg</strong> toggles <code>ecal=1</code> to hide calendar rows. Swiss case-law sources (BGer / BGE / BVGE) are separate Lex-row pills (<code>filters[lex][]</code>); legacy <code>ejus=1</code> still hides all three. Colours: feeds blue, scraper violet, Lex yellow, mail peach, Leg green.
         </p>
         <div class="tag-pills-section filter-toolbar">
             <div class="filter-toolbar__head">

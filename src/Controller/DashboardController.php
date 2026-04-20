@@ -35,7 +35,7 @@ final class DashboardController
      * stays SQL-only; the cache degrades gracefully when the session isn't
      * active (e.g. CLI or an error in early session bootstrap).
      */
-    private const FILTER_PILL_CACHE_KEY = '_seismo_filter_pill_opts_v2';
+    private const FILTER_PILL_CACHE_KEY = '_seismo_filter_pill_opts_v3';
     private const FILTER_PILL_CACHE_AT  = '_seismo_filter_pill_at';
     private const FILTER_PILL_CACHE_TTL = 60;
 
@@ -240,6 +240,7 @@ final class DashboardController
      *   feed_categories: list<string>,
      *   feed_category_labels?: array<string, string>,
      *   lex_sources: list<string>,
+     *   lex_source_labels?: array<string, string>,
      *   email_tags: list<string>
      * }
      */
@@ -249,7 +250,7 @@ final class DashboardController
             && isset($_SESSION[self::FILTER_PILL_CACHE_KEY], $_SESSION[self::FILTER_PILL_CACHE_AT])
             && (time() - (int)$_SESSION[self::FILTER_PILL_CACHE_AT]) < self::FILTER_PILL_CACHE_TTL
         ) {
-            /** @var array{feed_categories: list<string>, feed_category_labels?: array<string, string>, lex_sources: list<string>, email_tags: list<string>} $cached */
+            /** @var array{feed_categories: list<string>, feed_category_labels?: array<string, string>, lex_sources: list<string>, lex_source_labels?: array<string, string>, email_tags: list<string>} $cached */
             $cached = $_SESSION[self::FILTER_PILL_CACHE_KEY];
 
             return $cached;

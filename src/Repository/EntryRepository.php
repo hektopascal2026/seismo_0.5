@@ -39,6 +39,13 @@ use PDOException;
 
 final class EntryRepository
 {
+    /** Short labels for Swiss case-law Lex `source` keys (Jus row merged into Lex pills). */
+    private const LEX_SOURCE_LABELS = [
+        'ch_bger'  => 'BGer',
+        'ch_bge'   => 'BGE',
+        'ch_bvger' => 'BVGE',
+    ];
+
     /**
      * Explicit feed_items column list for JOIN queries — never `fi.*` so joined
      * `feeds` columns can never collide with item fields in associative fetchers.
@@ -1652,6 +1659,7 @@ final class EntryRepository
      *   feed_categories: list<string>,
      *   feed_category_labels: array<string, string>,
      *   lex_sources: list<string>,
+     *   lex_source_labels: array<string, string>,
      *   email_tags: list<string>,
      * }
      */
@@ -1678,11 +1686,24 @@ final class EntryRepository
             $labels[$row['token']] = $row['label'];
         }
 
+        $lex = $this->selectDistinctLexSources();
+        foreach (TimelineFilter::JUS_LEX_SOURCES as $jusSrc) {
+            if (!in_array($jusSrc, $lex, true)) {
+                $lex[] = $jusSrc;
+            }
+        }
+        sort($lex);
+        $lexLabels = [];
+        foreach ($lex as $src) {
+            $lexLabels[$src] = self::LEX_SOURCE_LABELS[$src] ?? $src;
+        }
+
         return [
-            'feed_categories'      => $tokens,
-            'feed_category_labels' => $labels,
-            'lex_sources'          => $this->selectDistinctLexSources(),
-            'email_tags'           => $this->selectDistinctEmailTags(),
+            'feed_categories'       => $tokens,
+            'feed_category_labels'  => $labels,
+            'lex_sources'           => $lex,
+            'lex_source_labels'     => $lexLabels,
+            'email_tags'            => $this->selectDistinctEmailTags(),
         ];
     }
 
