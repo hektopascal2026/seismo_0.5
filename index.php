@@ -41,6 +41,11 @@ $router->register(
     true
 );
 $router->register(
+    'filter',
+    \Seismo\Controller\DashboardController::class . '::showFilter',
+    true
+);
+$router->register(
     'health',
     \Seismo\Controller\HealthController::class . '::show',
     true

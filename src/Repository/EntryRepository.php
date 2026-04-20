@@ -128,6 +128,10 @@ final class EntryRepository
      * Full-text-ish search across all entry families (LIKE %term%).
      * Empty `$q` returns [] — callers should use getLatestTimeline instead.
      *
+     * `$filter` uses the same {@see TimelineFilter} rules as the newest timeline
+     * (including native `filters[feed][]` / `filter_form` GET shapes from the
+     * dashboard filter form).
+     *
      * @return array<int, array<string, mixed>>
      */
     public function searchTimeline(string $q, int $limit, int $offset = 0, ?TimelineFilter $filter = null, bool $sortByRelevance = false): array

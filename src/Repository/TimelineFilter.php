@@ -7,21 +7,20 @@ namespace Seismo\Repository;
 /**
  * Dashboard tag-filter state. Default = show everything (no query params).
  *
- * **Per-pill OFF lists:** `efc` / `elx` / `eet` are comma-separated tokens that
- * are turned **off** (excluded from SQL). Empty list = every pill in that row
- * is **on**. Pills are independent: toggling one only changes its list.
+ * **Native form (preferred):** `TimelineFilter::fromHttpGet()` reads
+ * `filters[feed][]`, `filters[lex][]`, `filters[email][]`, `filters[calendar]=1`
+ * (Leg), `filters[jus]=1` (Jus), plus `filter_form=1` when the filter form
+ * submitted so “all checkboxes off in a row” is not confused with the default
+ * “all on” first visit. `none=1` means every dimension off (empty timeline).
  *
- * **Leg / Jus:** `ecal=1` hides calendar rows; `ejus=1` hides Jus Lex sources.
- *
- * **Selection All (UI):** clears all exclusions + legacy params.
- * **Selection None (UI):** sets `efc`/`elx`/`eet` to every known pill option,
- * plus `ecal=1` and `ejus=1`, so the timeline is empty until the user turns
- * pills back on.
+ * **Legacy per-pill OFF lists:** `efc` / `elx` / `eet` are comma-separated tokens
+ * that are turned **off** (excluded from SQL). `ecal=1` / `ejus=1` hide Leg / Jus.
+ * Parsed when the native `filter_form` / `none` branch does not apply.
  *
  * **Legacy inclusion** (`fc`, `fk`, `lx`, `etag`) is still parsed for old links.
  *
- * Keep in sync with {@see DashboardController} and {@see FavouriteController::RETURN_QUERY_ALLOW}
- * (dashboard filter query keys only).
+ * Keep in sync with {@see DashboardController}, {@see FavouriteController::RETURN_QUERY_ALLOW},
+ * and the dashboard filter view.
  */
 final class TimelineFilter
 {
@@ -151,6 +150,104 @@ final class TimelineFilter
     }
 
     /**
+     * Build filter state from `$_GET` using native `filters[…]` arrays when present,
+     * then `none=1`, then legacy query keys.
+     *
+     * @param array<string, mixed> $get Typically $_GET
+     * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $pillOpts
+     */
+    public static function fromHttpGet(array $get, array $pillOpts): self
+    {
+        $noneRaw = isset($get['none']) ? trim((string)$get['none']) : '';
+        if ($noneRaw === '1' || strtolower($noneRaw) === 'true') {
+            return self::fromNoneFlag($pillOpts);
+        }
+
+        $filterForm = isset($get['filter_form']) ? trim((string)$get['filter_form']) : '';
+        if ($filterForm === '1') {
+            return self::fromNativeFilterForm($get, $pillOpts);
+        }
+
+        return self::fromQueryArray($get);
+    }
+
+    /**
+     * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $pillOpts
+     */
+    private static function fromNoneFlag(array $pillOpts): self
+    {
+        return new self(
+            excludedFeedCategories: array_values($pillOpts['feed_categories'] ?? []),
+            excludedLexSources: array_values($pillOpts['lex_sources'] ?? []),
+            excludedEmailTags: array_values($pillOpts['email_tags'] ?? []),
+            excludeCalendar: true,
+            excludeJusLex: true,
+        );
+    }
+
+    /**
+     * Checkbox form: checked values are inclusions; unchecked dimensions are empty lists.
+     *
+     * @param array<string, mixed> $get
+     * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $pillOpts
+     */
+    private static function fromNativeFilterForm(array $get, array $pillOpts): self
+    {
+        $filters = isset($get['filters']) && is_array($get['filters']) ? $get['filters'] : [];
+
+        $feedAll = array_values($pillOpts['feed_categories'] ?? []);
+        $lexAll  = array_values($pillOpts['lex_sources'] ?? []);
+        $emAll   = array_values($pillOpts['email_tags'] ?? []);
+
+        $inFeeds = array_values(array_intersect($feedAll, self::stringListFromFilterBranch($filters['feed'] ?? null)));
+        $inLex   = array_values(array_intersect($lexAll, self::stringListFromFilterBranch($filters['lex'] ?? null)));
+        $inEm    = array_values(array_intersect($emAll, self::stringListFromFilterBranch($filters['email'] ?? null)));
+
+        $calRaw = $filters['calendar'] ?? null;
+        $jusRaw = $filters['jus'] ?? null;
+        $calOn  = is_scalar($calRaw) && trim((string)$calRaw) === '1';
+        $jusOn  = is_scalar($jusRaw) && trim((string)$jusRaw) === '1';
+
+        return new self(
+            excludedFeedCategories: array_values(array_diff($feedAll, $inFeeds)),
+            excludedLexSources: array_values(array_diff($lexAll, $inLex)),
+            excludedEmailTags: array_values(array_diff($emAll, $inEm)),
+            excludeCalendar: !$calOn,
+            excludeJusLex: !$jusOn,
+        );
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function stringListFromFilterBranch(mixed $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        if (is_array($raw)) {
+            $out = [];
+            foreach ($raw as $v) {
+                if (!is_scalar($v)) {
+                    continue;
+                }
+                $s = trim((string)$v);
+                if ($s !== '') {
+                    $out[] = $s;
+                }
+            }
+
+            return array_values(array_unique($out));
+        }
+        $s = trim((string)$raw);
+
+        return $s === '' ? [] : [$s];
+    }
+
+    /**
+     * Legacy-only parser (`efc`/`elx`/… and old inclusion keys). Prefer
+     * {@see self::fromHttpGet()} for dashboard requests.
+     *
      * @param array<string, mixed> $get Typically $_GET
      */
     public static function fromQueryArray(array $get): self

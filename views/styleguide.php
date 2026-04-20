@@ -77,7 +77,7 @@ $activeNav = 'styleguide';
                 <span class="filter-pill filter-pill--lex filter-pill--active">Jus</span>
             </div>
         </div>
-        <p class="admin-intro">Classes: <code>filter-pill</code> + <code>filter-pill--feed|scraper|lex|mail|leg</code>; active state <code>filter-pill--active</code>. Live markup: <code>views/index.php</code>; rules: <code>assets/css/style.css</code> (filter toolbar + filter-pill).</p>
+        <p class="admin-intro">Classes: <code>filter-pill</code> + <code>filter-pill--feed|scraper|lex|mail|leg</code>; active state <code>filter-pill--active</code>. Live dashboard filters: <code>views/dashboard_filters.php</code> (<code>filter-pill-label</code> + hidden checkbox + <code>filter-pill-text</code>); rules: <code>assets/css/style.css</code>.</p>
 
         <h2 class="section-title module-section-spaced">Tag inputs (Settings)</h2>
         <p class="admin-intro">

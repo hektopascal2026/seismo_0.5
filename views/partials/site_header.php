@@ -5,7 +5,7 @@
  * @var string $basePath
  * @var string $headerTitle
  * @var string|null $headerSubtitle
- * @var string $activeNav index|about|magnitu|feeds|scraper|mail|lex|leg|diagnostics|settings|styleguide
+ * @var string $activeNav index|filter|about|magnitu|feeds|scraper|mail|lex|leg|diagnostics|settings|styleguide
  * @var string $csrfField
  */
 
@@ -14,6 +14,7 @@ declare(strict_types=1);
 use Seismo\Http\AuthGate;
 
 $activeNav = $activeNav ?? 'index';
+$filterNavQs = $filterNavQs ?? 'action=filter';
 ?>
         <div class="top-bar">
             <div class="top-bar-left">
@@ -50,6 +51,7 @@ $activeNav = $activeNav ?? 'index';
 
         <nav id="seismo-nav-drawer" class="nav-drawer" aria-label="Main navigation" aria-hidden="true">
             <a href="<?= e($basePath) ?>/index.php?action=index" class="nav-link<?= $activeNav === 'index' ? ' active' : '' ?>">Timeline</a>
+            <a href="<?= e($basePath) ?>/index.php?<?= e($filterNavQs) ?>" class="nav-link<?= $activeNav === 'filter' ? ' active' : '' ?>">Filter</a>
             <a href="<?= e($basePath) ?>/index.php?action=about" class="nav-link<?= $activeNav === 'about' ? ' active' : '' ?>">About</a>
             <a href="<?= e($basePath) ?>/index.php?action=magnitu" class="nav-link<?= $activeNav === 'magnitu' ? ' active' : '' ?>">Highlights</a>
             <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>

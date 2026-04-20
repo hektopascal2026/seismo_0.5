@@ -53,15 +53,16 @@ final class DashboardController
 
         $dashboardError = null;
         $allItems        = [];
-        $timelineFilter  = TimelineFilter::fromQueryArray($_GET);
-        $filterPillOptions = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
+        $pillOpts       = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
+        $timelineFilter = TimelineFilter::fromQueryArray($_GET);
         $alertThreshold    = $this->resolveAlertThreshold();
         $sortByRelevance   = $currentView !== 'favourites' && $this->resolveSortByRelevance();
 
         try {
             $pdo  = getDbConnection();
             $repo = new EntryRepository($pdo);
-            $filterPillOptions = $this->getFilterPillOptionsCached($repo);
+            $pillOpts        = $this->getFilterPillOptionsCached($repo);
+            $timelineFilter = TimelineFilter::fromHttpGet($_GET, $pillOpts);
             if ($currentView === 'favourites') {
                 $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter);
             } elseif ($searchQuery !== '') {
@@ -93,6 +94,34 @@ final class DashboardController
         }
 
         require SEISMO_ROOT . '/views/index.php';
+    }
+
+    /**
+     * Dashboard filter editor: checkbox pills + All/None (GET form submits to Timeline).
+     */
+    public function showFilter(): void
+    {
+        $csrfField = CsrfToken::field();
+
+        $dashboardError = null;
+        $pillOpts       = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
+        $timelineFilter = TimelineFilter::fromQueryArray($_GET);
+
+        try {
+            $pdo  = getDbConnection();
+            $repo = new EntryRepository($pdo);
+            $pillOpts        = $this->getFilterPillOptionsCached($repo);
+            $timelineFilter = TimelineFilter::fromHttpGet($_GET, $pillOpts);
+        } catch (\Throwable $e) {
+            error_log('Seismo dashboard filter page: ' . $e->getMessage());
+            $dashboardError = 'Database error. Check error_log for details.';
+        }
+
+        require_once SEISMO_ROOT . '/views/helpers.php';
+
+        $filterPillOptions = $pillOpts;
+
+        require SEISMO_ROOT . '/views/dashboard_filters.php';
     }
 
     /**

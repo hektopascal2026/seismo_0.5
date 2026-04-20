@@ -26,6 +26,7 @@ final class FavouriteController
         'q', 'view', 'limit', 'offset',
         'fc', 'fk', 'lx', 'etag',
         'efc', 'elx', 'eet', 'ecal', 'ejus',
+        'none', 'filter_form',
     ];
 
     /**
@@ -95,7 +96,7 @@ final class FavouriteController
 
     /**
      * @param array<string, mixed> $params
-     * @return array<string, scalar>
+     * @return array<string, mixed>
      */
     private function sanitizeReturnParams(array $params): array
     {
@@ -112,6 +113,12 @@ final class FavouriteController
                 $out[$key] = $v;
             }
         }
+        if (isset($params['filters']) && is_array($params['filters'])) {
+            $clean = self::sanitizeReturnFilters($params['filters']);
+            if ($clean !== []) {
+                $out['filters'] = $clean;
+            }
+        }
         if (isset($params['action']) && is_scalar($params['action']) && !is_array($params['action'])) {
             $a = (string)$params['action'];
             if (in_array($a, self::RETURN_ACTION_ALLOW, true)) {
@@ -122,7 +129,45 @@ final class FavouriteController
     }
 
     /**
-     * @param array<string, scalar> $params
+     * @param array<mixed, mixed> $raw
+     * @return array<string, mixed>
+     */
+    private static function sanitizeReturnFilters(array $raw): array
+    {
+        $out = [];
+        foreach (['feed', 'lex', 'email'] as $k) {
+            if (!isset($raw[$k]) || !is_array($raw[$k])) {
+                continue;
+            }
+            $vals = [];
+            foreach ($raw[$k] as $v) {
+                if (!is_scalar($v)) {
+                    continue;
+                }
+                $s = trim((string)$v);
+                if ($s !== '' && strlen($s) <= 128) {
+                    $vals[] = $s;
+                }
+            }
+            $vals = array_values(array_unique($vals));
+            if ($vals !== []) {
+                $out[$k] = $vals;
+            }
+        }
+        foreach (['calendar', 'jus'] as $k) {
+            if (!isset($raw[$k]) || !is_scalar($raw[$k])) {
+                continue;
+            }
+            if (trim((string)$raw[$k]) === '1') {
+                $out[$k] = '1';
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $params
      */
     private function redirectToIndex(array $params): void
     {

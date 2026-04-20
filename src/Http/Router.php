@@ -7,9 +7,9 @@
  * features.
  *
  * Two concerns that existed in the 0.4 front controller and are preserved here:
- *   1. Most read-only actions release the session lock early so PHP's file-based
- *      session handler doesn't serialise concurrent requests. Routes that render
- *      CSRF forms (`index`, `lex`, `leg`, `calendar`, `settings`, `styleguide`, `feeds`, `scraper`, `mail`, `about`, `setup`) skip early
+     *   1. Most read-only actions release the session lock early so PHP's file-based
+     *      session handler doesn't serialise concurrent requests. Routes that render
+     *      CSRF forms (`index`, `filter`, `lex`, `leg`, `calendar`, `settings`, `styleguide`, `feeds`, `scraper`, `mail`, `about`, `setup`) skip early
  *      release — see {@see READONLY_KEEP_SESSION_FOR_CSRF}. Any future
  *      read-only route whose controller calls `CsrfToken::field()` (e.g. `magnitu` highlights, `about`, `setup`) MUST be
  *      added to that list; otherwise `session_write_close()` fires before
@@ -39,6 +39,7 @@ final class Router
      */
     private const READONLY_KEEP_SESSION_FOR_CSRF = [
         'index'      => true,
+        'filter'     => true,
         'lex'        => true,
         'leg'        => true,
         'calendar'   => true,
