@@ -84,7 +84,7 @@ $feedLoopPrevDayKey = null;
                                 $contentPreview .= '...';
                             }
                             $hasMore = mb_strlen($fullContent) > 200;
-                            $feedTagColor = ($itemWrapper['type'] === 'substack') ? 'background-color: #C5B4D1;' : 'background-color: #add8e6;';
+                            $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-substack' : 'entry-tag--feed-rss';
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
@@ -95,12 +95,12 @@ $feedLoopPrevDayKey = null;
                                         $parlIsSda = strncmp((string)($item['guid'] ?? ''), 'parl_sda:', 9) === 0
                                             || $parlCat === 'parl_sda';
                                     ?>
-                                    <span class="entry-tag" style="background-color: #f5f562; border-color: #000000;"><?= $parlIsSda ? '🏛 SDA' : '🏛 Parl MM' ?></span>
+                                    <span class="entry-tag entry-tag--parl"><?= $parlIsSda ? '🏛 SDA' : '🏛 Parl MM' ?></span>
                                     <?php if ($parlCommission !== ''): ?>
-                                        <span class="entry-tag" style="background-color: #f5f5f5;"><?= htmlspecialchars($parlCommission) ?></span>
+                                        <span class="entry-tag entry-tag--meta"><?= htmlspecialchars($parlCommission) ?></span>
                                     <?php endif; ?>
                                 <?php elseif (!empty($item['feed_category']) && $item['feed_category'] !== 'unsortiert'): ?>
-                                    <span class="entry-tag" style="<?= $feedTagColor ?>"><?= htmlspecialchars($item['feed_category']) ?></span>
+                                    <span class="entry-tag <?= $feedCatTagClass ?>"><?= htmlspecialchars($item['feed_category']) ?></span>
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
@@ -136,13 +136,13 @@ $feedLoopPrevDayKey = null;
                                         }
                                     ?>
                                     <?php if (seismo_is_navigable_url($itemUrl)): ?>
-                                        <a href="<?= htmlspecialchars($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link" style="margin-left: 4px;">Read more →</a>
+                                        <a href="<?= htmlspecialchars($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">Read more →</a>
                                     <?php endif; ?>
                                 </div>
-                                <div class="entry-full-content" style="display:none"><?= htmlspecialchars($fullContent) ?></div>
+                                <div class="entry-full-content"><?= htmlspecialchars($fullContent) ?></div>
                             <?php endif; ?>
                             <div class="entry-actions">
-                                <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="entry-actions-main">
                                     <?php if ($hasMore): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                     <?php endif; ?>
@@ -179,7 +179,7 @@ $feedLoopPrevDayKey = null;
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
-                                <span class="entry-tag" style="background-color: #FFDBBB; border-color: #000000;">🌐 <?= htmlspecialchars($item['feed_name'] ?? 'Scraper') ?></span>
+                                <span class="entry-tag entry-tag--scraper">🌐 <?= htmlspecialchars($item['feed_name'] ?? 'Scraper') ?></span>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
                                 <?php endif; ?>
@@ -200,13 +200,13 @@ $feedLoopPrevDayKey = null;
                                 <div class="entry-content entry-preview">
                                     <?= htmlspecialchars($scraperPreview) ?>
                                     <?php if (seismo_is_navigable_url($scraperLink)): ?>
-                                    <a href="<?= htmlspecialchars($scraperLink) ?>" target="_blank" rel="noopener" class="entry-link" style="margin-left: 4px;">Open page &rarr;</a>
+                                    <a href="<?= htmlspecialchars($scraperLink) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">Open page &rarr;</a>
                                     <?php endif; ?>
                                 </div>
-                                <div class="entry-full-content" style="display:none"><?= htmlspecialchars($scraperContent) ?></div>
+                                <div class="entry-full-content"><?= htmlspecialchars($scraperContent) ?></div>
                             <?php endif; ?>
                             <div class="entry-actions">
-                                <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="entry-actions-main">
                                     <?php if ($scraperHasMore): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                     <?php endif; ?>
@@ -295,8 +295,8 @@ $feedLoopPrevDayKey = null;
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
-                                <span class="entry-tag" style="background-color: #f5f562; border-color: #000000;"><?= $lexSourceEmoji ?> <?= $lexSourceLabel ?></span>
-                                <span class="entry-tag" style="background-color: #f5f5f5;"><?= htmlspecialchars($lexDocType) ?></span>
+                                <span class="entry-tag entry-tag--lex-source"><?= $lexSourceEmoji ?> <?= $lexSourceLabel ?></span>
+                                <span class="entry-tag entry-tag--lex-doc"><?= htmlspecialchars($lexDocType) ?></span>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
                                 <?php endif; ?>
@@ -324,15 +324,15 @@ $feedLoopPrevDayKey = null;
                             <?php if (!empty($lexDesc)): ?>
                                 <div class="entry-content entry-preview"><?= nl2br(htmlspecialchars($lexPreview)) ?></div>
                                 <?php if ($lexHasMore): ?>
-                                    <div class="entry-full-content" style="display: none;"><?= nl2br(htmlspecialchars($lexDesc)) ?></div>
+                                    <div class="entry-full-content"><?= nl2br(htmlspecialchars($lexDesc)) ?></div>
                                 <?php endif; ?>
                             <?php endif; ?>
                             <div class="entry-actions">
-                                <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="entry-actions-main">
                                     <?php if (!empty($lexDesc) && $lexHasMore): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                     <?php endif; ?>
-                                    <span style="font-family: monospace;<?= $isJus ? ' font-size: 12px; font-weight: 600;' : '' ?>"><?= htmlspecialchars($lexCelexDisplay) ?></span>
+                                    <span class="entry-meta-mono<?= $isJus ? ' entry-meta-mono--jus' : '' ?>"><?= htmlspecialchars($lexCelexDisplay) ?></span>
                                     <?php if ($lexHasUrl): ?>
                                     <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= $lexLinkLabel ?></a>
                                     <?php endif; ?>
@@ -377,9 +377,9 @@ $feedLoopPrevDayKey = null;
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
-                                <span class="entry-tag" style="background-color: #d4edda;"><?= htmlspecialchars($calTypeLabel) ?></span>
+                                <span class="entry-tag entry-tag--leg-type"><?= htmlspecialchars($calTypeLabel) ?></span>
                                 <?php if ($calCouncil): ?>
-                                    <span class="entry-tag" style="background-color: #e2e3f1;"><?= htmlspecialchars($calCouncil) ?></span>
+                                    <span class="entry-tag entry-tag--leg-council"><?= htmlspecialchars($calCouncil) ?></span>
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
@@ -399,12 +399,12 @@ $feedLoopPrevDayKey = null;
                             </h3>
                             <?php if ($calDesc): ?>
                                 <div class="entry-content entry-preview"><?= htmlspecialchars($calPreview) ?></div>
-                                <div class="entry-full-content" style="display:none"><?= htmlspecialchars($calDesc) ?></div>
+                                <div class="entry-full-content"><?= htmlspecialchars($calDesc) ?></div>
                             <?php endif; ?>
                             <div class="entry-actions">
-                                <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="entry-actions-main">
                                     <?php if (!empty($calMeta['business_number'])): ?>
-                                        <span style="font-family: monospace;"><?= htmlspecialchars($calMeta['business_number']) ?></span>
+                                        <span class="entry-meta-mono"><?= htmlspecialchars($calMeta['business_number']) ?></span>
                                     <?php endif; ?>
                                     <?php if ($calHasUrl): ?>
                                     <a href="<?= htmlspecialchars($calUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch &rarr;</a>
@@ -460,7 +460,7 @@ $feedLoopPrevDayKey = null;
                         <div class="entry-card">
                             <div class="entry-header">
                                 <?php if (!empty($email['sender_tag']) && $email['sender_tag'] !== 'unclassified'): ?>
-                                    <span class="entry-tag" style="background-color: #FFDBBB;"><?= htmlspecialchars($email['sender_tag']) ?></span>
+                                    <span class="entry-tag entry-tag--email-sender"><?= htmlspecialchars($email['sender_tag']) ?></span>
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
@@ -487,9 +487,9 @@ $feedLoopPrevDayKey = null;
                                     }
                                 ?>
                             </div>
-                            <div class="entry-full-content" style="display:none"><?= htmlspecialchars($body) ?></div>
+                            <div class="entry-full-content"><?= htmlspecialchars($body) ?></div>
                             <div class="entry-actions">
-                                <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="entry-actions-main">
                                     <?php if ($hasMore): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                     <?php endif; ?>

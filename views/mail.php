@@ -171,7 +171,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                                 </form>
                             </div>
                             <?php else: ?>
-                            <span style="opacity:0.6;">—</span>
+                            <span class="table-cell-placeholder">—</span>
                             <?php endif; ?>
                         </td>
                     </tr>

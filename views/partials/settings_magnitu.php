@@ -41,7 +41,6 @@ declare(strict_types=1);
                            value="<?= e($seismoApiUrl) ?>"
                            readonly
                            class="search-input magnitu-readonly-url"
-                           style="width:100%; box-sizing:border-box;"
                            onclick="this.select(); document.execCommand('copy');"
                            title="Click to copy">
                     <div class="magnitu-field-hint">Paste into Magnitu's <code>magnitu_config.json</code> as <code>seismo_url</code>.</div>
@@ -49,7 +48,7 @@ declare(strict_types=1);
             </div>
 
             <div class="magnitu-panel">
-                <h3 class="section-title" style="margin-top:0;">Scoring state</h3>
+                <h3 class="section-title">Scoring state</h3>
                 <div class="magnitu-stats-grid">
                     <div class="magnitu-stat-tile">
                         <div class="magnitu-stat-value"><?= (int)$magnituScoreStats['total'] ?></div>
@@ -110,8 +109,8 @@ declare(strict_types=1);
             <form method="post" action="<?= e($basePath) ?>/index.php?action=settings_save_magnitu">
                 <?= $csrfField ?>
                 <div class="magnitu-panel">
-                    <h3 class="section-title" style="margin-top:0;">Scoring preferences</h3>
-                    <p class="magnitu-field-hint" style="margin-bottom:12px;">
+                    <h3 class="section-title">Scoring preferences</h3>
+                    <p class="magnitu-field-hint magnitu-field-hint--spaced">
                         These preferences are stored now so Magnitu sync can read them, but the 0.5 timeline and calendar don't yet react to them — wiring lands in a later slice.
                     </p>
 
@@ -121,7 +120,7 @@ declare(strict_types=1);
                             <input type="number" id="alert_threshold" name="alert_threshold"
                                    value="<?= e((string)($magnituConfig['alert_threshold'] ?? '0.75')) ?>"
                                    min="0" max="1" step="0.05"
-                                   class="search-input" style="width:100%; box-sizing:border-box;">
+                                   class="search-input" style="width:100%;">
                             <div class="magnitu-field-hint">Entries scoring above this will be flagged as alerts once the dashboard reads this value.</div>
                         </div>
                         <div>
@@ -142,7 +141,7 @@ declare(strict_types=1);
 
             <div class="magnitu-panel magnitu-panel--danger">
                 <h3 class="section-title">Danger zone</h3>
-                <p class="admin-intro" style="margin-top:0;">
+                <p class="admin-intro">
                     Delete every row in <code>entry_scores</code> and reset the scoring recipe. The timeline goes back to chronological order. Magnitu's local labels (in the Magnitu app) are untouched and can be re-pushed.
                 </p>
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=settings_clear_magnitu_scores" class="admin-inline-form">

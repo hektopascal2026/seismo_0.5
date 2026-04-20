@@ -155,7 +155,7 @@ $sourcesQs = 'action=feeds&view=sources';
                         <td><?= (int)$row['id'] ?></td>
                         <td><?= e((string)$row['title']) ?></td>
                         <td><?= e((string)($row['source_type'] ?? '')) ?></td>
-                        <td style="word-break:break-all;"><a href="<?= e((string)$row['url']) ?>" target="_blank" rel="noopener"><?= e((string)$row['url']) ?></a></td>
+                        <td class="data-table-url"><a href="<?= e((string)$row['url']) ?>" target="_blank" rel="noopener"><?= e((string)$row['url']) ?></a></td>
                         <td>
                             <?php if (!$satellite): ?>
                             <div class="admin-table-actions">
@@ -167,7 +167,7 @@ $sourcesQs = 'action=feeds&view=sources';
                                 </form>
                             </div>
                             <?php else: ?>
-                            <span style="opacity:0.6;">—</span>
+                            <span class="table-cell-placeholder">—</span>
                             <?php endif; ?>
                         </td>
                     </tr>

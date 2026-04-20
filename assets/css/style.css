@@ -399,6 +399,26 @@ textarea.search-input.setup-code-preview {
     opacity: 0.85;
 }
 
+.data-table-url {
+    word-break: break-all;
+}
+
+.table-cell-placeholder {
+    opacity: 0.6;
+}
+
+.top-bar-form-gap {
+    margin: 0 8px 0 0;
+}
+
+.top-bar-form-flush {
+    margin: 0;
+}
+
+.magnitu-field-hint--spaced {
+    margin-bottom: 12px;
+}
+
 .admin-table-actions {
     display: flex;
     flex-wrap: wrap;
@@ -427,6 +447,17 @@ textarea.search-input.setup-code-preview {
 }
 
 /* ═══ Timeline filter toolbar (dashboard) ═══ */
+.type-sample-big {
+    font-size: 18px;
+    font-weight: 700;
+    color: #000000;
+}
+
+.type-sample-small {
+    font-size: 12px;
+    color: #000000;
+}
+
 .search-section-spaced {
     margin-bottom: 16px;
 }
@@ -787,7 +818,12 @@ textarea.search-input.setup-code-preview {
     margin-top: 0;
 }
 
-.magnitu-panel h3 {
+.magnitu-panel--danger > .admin-intro:first-of-type {
+    margin-top: 0;
+}
+
+.magnitu-panel > h3:first-of-type,
+.magnitu-panel > .section-title:first-of-type {
     margin-top: 0;
 }
 
@@ -819,11 +855,6 @@ textarea.search-input.setup-code-preview {
     gap: 8px;
     align-items: center;
     flex-wrap: wrap;
-}
-
-.magnitu-copy-row .search-input {
-    flex: 1;
-    min-width: 12rem;
 }
 
 .magnitu-stats-grid {
@@ -945,10 +976,21 @@ textarea.search-input.setup-code-preview {
 
 .search-input[readonly].magnitu-readonly-key,
 .search-input[readonly].magnitu-readonly-url {
+    box-sizing: border-box;
     background-color: #f5f5f5;
     cursor: pointer;
     font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
     font-size: 12px;
+}
+
+.search-input[readonly].magnitu-readonly-key {
+    flex: 1;
+    min-width: 12rem;
+    width: auto;
+}
+
+.search-input[readonly].magnitu-readonly-url {
+    width: 100%;
 }
 
 /* ═══ Health (minimal public page) ═══ */

@@ -27,26 +27,34 @@ $activeNav = 'styleguide';
         <?php require __DIR__ . '/partials/site_header.php'; ?>
 
         <h2 class="section-title">Typography</h2>
-        <p>Body uses the system stack at 14px. <span style="font-size:18px;font-weight:700;">Big (18px)</span> for titles. <span style="font-size:12px;">Small (12px)</span> for meta.</p>
+        <p class="admin-intro">Body uses the system stack at 14px. <span class="type-sample-big">Big (18px)</span> for titles. <span class="type-sample-small">Small (12px)</span> for meta.</p>
 
-        <h2 class="section-title" style="margin-top:24px;">Buttons</h2>
-        <p style="margin-bottom:10px;">
+        <h2 class="section-title module-section-spaced">Buttons</h2>
+        <p class="admin-form-actions">
             <a href="#" class="btn btn-primary" onclick="return false;">Primary</a>
             <a href="#" class="btn btn-secondary" onclick="return false;">Secondary</a>
+            <a href="#" class="btn btn-success" onclick="return false;">Success</a>
+            <a href="#" class="btn btn-warning" onclick="return false;">Warning</a>
+            <a href="#" class="btn btn-danger" onclick="return false;">Danger</a>
         </p>
 
-        <h2 class="section-title" style="margin-top:24px;">Entry card sample</h2>
+        <h2 class="section-title module-section-spaced">Messages</h2>
+        <div class="message message-success">Success — 12px, 2px border</div>
+        <div class="message message-error">Error</div>
+        <div class="message message-info">Info</div>
+
+        <h2 class="section-title module-section-spaced">Entry card sample</h2>
         <div class="entry-card">
             <div class="entry-header">
-                <span class="entry-tag" style="background:#f5f5f5;">feed_item</span>
+                <span class="entry-tag entry-tag--meta">feed_item</span>
                 <span class="entry-tag">investigation_lead</span>
             </div>
-            <div class="entry-content" style="margin-top:8px;">
+            <div class="entry-content">
                 <p>Card body — expand/collapse pattern matches the dashboard.</p>
             </div>
         </div>
 
-        <p style="margin-top:24px; color:#555; font-size:12px;">Shared with Magnitu tooling; keep components aligned when changing <code>assets/css/style.css</code>.</p>
+        <p class="admin-intro module-section-spaced">Shared with Magnitu tooling; keep components aligned when changing <code>assets/css/style.css</code>.</p>
     </div>
 </body>
 </html>
