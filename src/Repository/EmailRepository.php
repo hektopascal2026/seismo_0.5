@@ -6,8 +6,8 @@
  * single table (`Migration003EmailsUnified`, schema 19). Reads for the
  * dashboard timeline live on {@see EntryRepository}; reads for the
  * Magnitu / export API live on {@see MagnituExportRepository}; the
- * ingestion path is the external CLI `fetcher/mail/fetch_mail.php`
- * (not a plugin, per `core-plugin-architecture.mdc`).
+ * ingestion path is {@see \Seismo\Service\CoreRunner} `core:mail` (IMAP in-process)
+ * plus optional legacy CLI under `fetcher/mail/` if you still run it.
  *
  * This class exists so Slice 5a's retention policy has a single SQL
  * owner for `emails`-scoped prune. The contract mirrors the other

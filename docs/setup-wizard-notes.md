@@ -28,7 +28,7 @@ Wizard steps (eventual, when implemented):
 1. Detect existing 0.4 cron lines that target Lex / Jus / Leg / parliament_ch. Offer to **comment them out** (one click, never auto-deleted) and replace with the single master line above.
 2. **Mail and scraper crons stay as they are.** Slice 3 only consolidates plugin refreshes (Fedlex, ParlCh today). Core RSS / mail / scraper stay on their dedicated crons until the Core port lands in a later slice.
 3. Surface the per-plugin **throttle** (Fedlex 4h, ParlCh 4h, hardcoded in `getMinIntervalSeconds()`). The cron may run every 5 min; `RefreshAllService` will skip plugins inside their throttle window. Throttle skips appear in cron mail (stdout) but not in the diagnostics table.
-4. Validate that the chosen interpreter has the required PHP extensions (cURL, PDO MySQL) by running `php -m`.
+4. Validate that the chosen interpreter has the required PHP extensions (cURL, PDO MySQL, **ext-imap** if you use `core:mail` / master cron mail fetch) by running `php -m`.
 
 The web "Refresh all" button (`?action=refresh_all` from Diagnostics) is the manual override — it always passes `force=true` and bypasses throttles.
 

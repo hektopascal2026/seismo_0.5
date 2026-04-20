@@ -9,6 +9,18 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Core mail — in-process IMAP (`core:mail`)
+
+**Why.** Slice 4 left `core:mail` as a stub (“use CLI mail cron”). Master cron and Diagnostics **Refresh** must fetch into unified `emails` when IMAP is configured.
+
+**What moved.** `src/Core/Fetcher/ImapMailFetchService.php` (IMAP connect, `imap_search`, MIME walk, optional `\\Seen` after persist), `src/Repository/EmailIngestRepository.php` (`upsertImapBatch` into `emails` via `entryTable()`), `CoreRunner::runMail()` + `RefreshAllService::boot()` wiring. `PluginRunResult::skipped()` gains an optional second flag to suppress `plugin_run_log` rows on cron when IMAP is absent (avoids log spam).
+
+**New wiring.** `system_config` keys (0.4-shaped): `mail_imap_mailbox` **or** `mail_imap_host` + `mail_imap_port` + `mail_imap_flags` + `mail_imap_folder`, `mail_imap_username`, `mail_imap_password`, optional `mail_max_messages`, `mail_search_criteria` (default `UNSEEN`), `mail_mark_seen`.
+
+**Gotchas.** PHP **ext-imap** required on the host. `\Seen` is set in a second short connection **only after** a successful upsert. Legacy `fetcher/mail/` CLI remains optional if you still run it.
+
+---
+
 ## Parlament Medien (“Parl MM”) — feeds family, not Lex (**Option 2**)
 
 **Why.** Parlament.ch press releases are **news-shaped** (timeline, announcements), not statutory legal text. Collapsing them into `lex_items` mixed product semantics and complicated Magnitu / dashboard filters.
@@ -290,7 +302,7 @@ Retention run : refresh_cron.php
 | Area | 0.5 |
 |---|---|
 | Dual email tables | `Migration003EmailsUnified` (schema **v19**) merges `fetched_emails` into `emails` (BIGINT ids, IMAP/body columns). `DROP` `fetched_emails` after merge. `getEmailTableName()` in `bootstrap.php` returns `emails`. |
-| Core refresh | `Seismo\Service\CoreRunner` runs `core:rss`, **`core:parl_press`** (Parlament Medien → `feed_items`), `core:scraper`, `core:mail`, then plugins. Throttle matches plugin semantics (stdout-only when throttled; `plugin_run_log` stores outcomes except noise). **`core:mail` is a stub** (no in-process IMAP yet); mail ingestion is the **CLI** under `fetcher/mail/` writing to unified `emails`. Diagnostics “Refresh” records a skipped row only when `$force` (web), not on cron — avoids log spam. |
+| Core refresh | `Seismo\Service\CoreRunner` runs `core:rss`, **`core:parl_press`** (Parlament Medien → `feed_items`), `core:scraper`, `core:mail`, then plugins. Throttle matches plugin semantics (stdout-only when throttled; `plugin_run_log` stores outcomes except noise). **`core:mail`** now runs **in-process IMAP** (`ImapMailFetchService` → `EmailIngestRepository`) when configured — see **Core mail — in-process IMAP** entry above. |
 | RSS | `Seismo\Core\Fetcher\RssFetchService` (SimplePie 1.9). Normalises title/link/body per consolidation-plan fetcher contract. |
 | Scraper | `Seismo\Core\Fetcher\ScraperFetchService` + `FeedItemRepository::listFeedsForScraperRefresh()` (feeds with `source_type=scraper` or URL in `scraper_configs`). |
 | Feeds persistence | `Seismo\Repository\FeedItemRepository` — transactional `upsertFeedItems`, `prune()` stub (180d policy lands with RetentionService). |
@@ -302,7 +314,7 @@ Retention run : refresh_cron.php
 **Gotchas.**
 
 - **Supersedes D4 deferrals:** LexEu / LexLegifrance / LexRechtBund shipped in a later reorg entry (**not** in the original Slice 4 PR). **Parl MM is not a Lex plugin** — it is **`core:parl_press`** → `feed_items` (see topmost **Parlament Medien — Option 2** entry).
-- **`core:mail` rows:** Always **skipped** with a message pointing at the CLI mail fetcher — until in-process IMAP is implemented, do not expect `mail_imap_*` in `magnitu_config` to change behaviour. **`plugin_run_log`:** skipped row is written on **forced** runs (Refresh all / per-core Refresh on diagnostics), not on CLI cron (`$force = false`), so cron does not append a useless row every tick.
+- **`core:mail` (superseded stub note):** If IMAP is **not** configured or **ext-imap** is missing, the run is **skipped**; cron passes `persistToPluginRunLog = false` on that skip so `plugin_run_log` is not spammed. Forced web refresh still records the skip so Diagnostics stays honest.
 - **Retention:** `FeedItemRepository::prune()` is callable; `RetentionService` (Slice 5a) will invoke family prunes — no automatic feed/email prune in this slice’s cron beyond plugin runs.
 
 **Test URLs.**
