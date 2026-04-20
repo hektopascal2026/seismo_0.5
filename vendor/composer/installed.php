@@ -1,0 +1,41 @@
+<?php return array(
+    'root' => array(
+        'name' => 'hektopascal/seismo',
+        'pretty_version' => 'dev-main',
+        'version' => 'dev-main',
+        'reference' => 'f56168cc6a3e18acbf76d10a9f0eb68148ceaa5e',
+        'type' => 'library',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => false,
+    ),
+    'versions' => array(
+        'easyrdf/easyrdf' => array(
+            'pretty_version' => '1.1.1',
+            'version' => '1.1.1.0',
+            'reference' => 'c7b0a9dbcb211eb7de03ee99ff5b52d17f2a8e64',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../easyrdf/easyrdf',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'hektopascal/seismo' => array(
+            'pretty_version' => 'dev-main',
+            'version' => 'dev-main',
+            'reference' => 'f56168cc6a3e18acbf76d10a9f0eb68148ceaa5e',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'simplepie/simplepie' => array(
+            'pretty_version' => '1.9.0',
+            'version' => '1.9.0.0',
+            'reference' => '76cccb1b2c5dcaf44f304c925ab30c0f48643992',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../simplepie/simplepie',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);

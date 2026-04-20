@@ -7,6 +7,7 @@ Consolidated codebase, being built gradually from [seismo_0.4](../seismo_0.4). *
 - **Reference (running):** `seismo_0.4` at `https://www.hektopascal.org/seismo-staging/`
 - **Build target (live):** `seismo_0.5` at `https://www.hektopascal.org/seismo/`
 - Both share the same MariaDB. Read-only slices of 0.5 run safely against live data while 0.4 remains the authoritative writer until the consolidation is complete.
+- **Composer:** production `vendor/` is committed so shared-host deploys do not require `composer install` on the server. See `README-REORG.md` (section *committed `vendor/`*).
 
 ## Where to look
 

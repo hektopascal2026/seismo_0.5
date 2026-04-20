@@ -9,6 +9,18 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Shared-host deploy: committed `vendor/` (no Composer on Plesk)
+
+**Why.** Partial FTP uploads and hosts without Composer left `vendor/` inconsistent with `composer.lock`; PHP fatals when autoload references packages that are not on disk (e.g. dev-only `myclabs/deep-copy`).
+
+**What moved.** `vendor/` is **tracked in Git** (production install: `composer install --no-dev --optimize-autoloader`). `.gitignore` drops `/vendor/` and ignores `.phpunit.cache/` instead; any previously tracked PHPUnit cache file is removed from the index.
+
+**New wiring.** A plain `git pull` on the webspace brings the runtime Composer tree with **EasyRdf + SimplePie** only; `bootstrap.php` still loads `vendor/autoload.php` when present.
+
+**Gotchas.** After changing `composer.json` or `composer.lock`, regenerate and commit `vendor/` with `--no-dev` so production autoload never points at PHPUnit’s dependency tree. Local PHPUnit: run `composer install` (with dev) on your machine; do not push a dev-expanded `vendor/` unless you intend shared hosts to ship those packages.
+
+---
+
 ## Core mail — in-process IMAP (`core:mail`)
 
 **Why.** Slice 4 left `core:mail` as a stub (“use CLI mail cron”). Master cron and Diagnostics **Refresh** must fetch into unified `emails` when IMAP is configured.
