@@ -24,7 +24,8 @@ final class FavouriteController
      */
     private const RETURN_QUERY_ALLOW = [
         'q', 'view', 'limit', 'offset',
-        'fc', 'fk', 'lx', 'etag', 'leg',
+        'fc', 'fk', 'lx', 'etag',
+        'sel', 'efc', 'elx', 'eet', 'ecal', 'ejus',
     ];
 
     /**

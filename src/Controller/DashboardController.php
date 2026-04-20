@@ -62,7 +62,9 @@ final class DashboardController
             $pdo  = getDbConnection();
             $repo = new EntryRepository($pdo);
             $filterPillOptions = $this->getFilterPillOptionsCached($repo);
-            if ($currentView === 'favourites') {
+            if ($timelineFilter->selectionNone) {
+                $allItems = [];
+            } elseif ($currentView === 'favourites') {
                 $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter);
             } elseif ($searchQuery !== '') {
                 $allItems = $repo->searchTimeline($searchQuery, $limit, $offset, $timelineFilter, $sortByRelevance);
@@ -83,7 +85,9 @@ final class DashboardController
 
         $emptyTimelineHint = 'default';
         if ($dashboardError === null) {
-            if ($currentView === 'favourites') {
+            if ($timelineFilter->selectionNone) {
+                $emptyTimelineHint = 'selection_none';
+            } elseif ($currentView === 'favourites') {
                 $emptyTimelineHint = 'favourites';
             } elseif ($searchQuery !== '') {
                 $emptyTimelineHint = 'search';

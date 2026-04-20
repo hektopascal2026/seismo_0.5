@@ -101,20 +101,19 @@ final class EntryRepository
         $f        = $filter;
 
         $items = [];
-        $calOnly = $f !== null && $f->calendarOnly;
-        if (!$calOnly) {
-            foreach ($this->fetchFeedItems($perSource, $f) as $row) {
-                $items[] = $this->wrapFeedItem($row);
-            }
-            foreach ($this->fetchEmails($perSource, $f) as $row) {
-                $items[] = $this->wrapEmail($row);
-            }
-            foreach ($this->fetchLexItems($perSource, $f) as $row) {
-                $items[] = $this->wrapLexItem($row);
-            }
+        foreach ($this->fetchFeedItems($perSource, $f) as $row) {
+            $items[] = $this->wrapFeedItem($row);
         }
-        foreach ($this->fetchCalendarEvents($perSource) as $row) {
-            $items[] = $this->wrapCalendarEvent($row);
+        foreach ($this->fetchEmails($perSource, $f) as $row) {
+            $items[] = $this->wrapEmail($row);
+        }
+        foreach ($this->fetchLexItems($perSource, $f) as $row) {
+            $items[] = $this->wrapLexItem($row);
+        }
+        if ($f === null || !$f->excludeCalendar) {
+            foreach ($this->fetchCalendarEvents($perSource) as $row) {
+                $items[] = $this->wrapCalendarEvent($row);
+            }
         }
 
         $this->attachScores($items);
@@ -145,20 +144,19 @@ final class EntryRepository
         $f    = $filter;
 
         $items = [];
-        $calOnly = $f !== null && $f->calendarOnly;
-        if (!$calOnly) {
-            foreach ($this->fetchFeedItemsSearch($term, $perSource, $f) as $row) {
-                $items[] = $this->wrapFeedItem($row);
-            }
-            foreach ($this->searchEmailRows($term, $perSource, $f) as $row) {
-                $items[] = $this->wrapEmail($row);
-            }
-            foreach ($this->fetchLexItemsSearch($term, $perSource, $f) as $row) {
-                $items[] = $this->wrapLexItem($row);
-            }
+        foreach ($this->fetchFeedItemsSearch($term, $perSource, $f) as $row) {
+            $items[] = $this->wrapFeedItem($row);
         }
-        foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
-            $items[] = $this->wrapCalendarEvent($row);
+        foreach ($this->searchEmailRows($term, $perSource, $f) as $row) {
+            $items[] = $this->wrapEmail($row);
+        }
+        foreach ($this->fetchLexItemsSearch($term, $perSource, $f) as $row) {
+            $items[] = $this->wrapLexItem($row);
+        }
+        if ($f === null || !$f->excludeCalendar) {
+            foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
+                $items[] = $this->wrapCalendarEvent($row);
+            }
         }
 
         $this->attachScores($items);
@@ -503,6 +501,32 @@ final class EntryRepository
             return $this->selectPreparedOrEmpty($sql, $params);
         }
 
+        $excludedTags = $filter !== null && $filter->excludedEmailTags !== []
+            ? $filter->excludedEmailTags
+            : [];
+        if ($excludedTags !== []) {
+            $st   = entryTable('sender_tags');
+            $ph   = implode(',', array_fill(0, count($excludedTags), '?'));
+            $sql  = 'SELECT e.*, (
+                    SELECT st0.tag FROM ' . $st . ' st0
+                    WHERE st0.from_email = e.from_email
+                      AND st0.removed_at IS NULL
+                    ORDER BY st0.tag ASC
+                    LIMIT 1
+                ) AS sender_tag
+                FROM ' . entryTable('emails') . ' e
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM ' . $st . ' x
+                    WHERE x.from_email = e.from_email
+                      AND x.removed_at IS NULL
+                      AND x.tag IN (' . $ph . ')
+                )
+                ' . $orderBy . '
+                LIMIT ' . (int)$limit;
+
+            return $this->selectPreparedOrEmpty($sql, $excludedTags);
+        }
+
         $sql = 'SELECT e.*, st.tag AS sender_tag
                 FROM ' . entryTable('emails') . ' e
                 LEFT JOIN ' . entryTable('sender_tags') . ' st
@@ -518,14 +542,21 @@ final class EntryRepository
      */
     private function fetchLexItems(int $limit, ?TimelineFilter $filter = null): array
     {
-        $where = '';
-        $params = [];
+        $clauses = [];
+        $params  = [];
         if ($filter !== null && $filter->lexSources !== []) {
-            $ph = implode(',', array_fill(0, count($filter->lexSources), '?'));
-            $where = ' WHERE source IN (' . $ph . ') ';
-            $params = $filter->lexSources;
+            $ph       = implode(',', array_fill(0, count($filter->lexSources), '?'));
+            $clauses[] = 'source IN (' . $ph . ')';
+            $params    = array_merge($params, $filter->lexSources);
         }
-        $sql = 'SELECT * FROM ' . entryTable('lex_items') . $where . '
+        $excl = $filter !== null ? $filter->effectiveExcludedLexSources() : [];
+        if ($excl !== []) {
+            $ph        = implode(',', array_fill(0, count($excl), '?'));
+            $clauses[] = 'source NOT IN (' . $ph . ')';
+            $params    = array_merge($params, $excl);
+        }
+        $where = $clauses === [] ? '' : ' WHERE ' . implode(' AND ', $clauses);
+        $sql   = 'SELECT * FROM ' . entryTable('lex_items') . $where . '
                 ORDER BY document_date DESC, created_at DESC
                 LIMIT ' . (int)$limit;
 
@@ -725,6 +756,34 @@ final class EntryRepository
             return $this->selectPreparedOrEmpty($sql, $params);
         }
 
+        $excludedTags = $filter !== null && $filter->excludedEmailTags !== []
+            ? $filter->excludedEmailTags
+            : [];
+        if ($excludedTags !== []) {
+            $st  = entryTable('sender_tags');
+            $ph  = implode(',', array_fill(0, count($excludedTags), '?'));
+            $sql = 'SELECT e.*, (
+                    SELECT st0.tag FROM ' . $st . ' st0
+                    WHERE st0.from_email = e.from_email
+                      AND st0.removed_at IS NULL
+                    ORDER BY st0.tag ASC
+                    LIMIT 1
+                ) AS sender_tag
+                FROM ' . entryTable('emails') . ' e
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM ' . $st . ' x
+                    WHERE x.from_email = e.from_email
+                      AND x.removed_at IS NULL
+                      AND x.tag IN (' . $ph . ')
+                )
+                AND ' . $where . '
+                ' . $orderBy . '
+                LIMIT ' . (int)$limit;
+            $params = array_merge($excludedTags, $params);
+
+            return $this->selectPreparedOrEmpty($sql, $params);
+        }
+
         $sql = 'SELECT e.*, st.tag AS sender_tag
                 FROM ' . entryTable('emails') . ' e
                 LEFT JOIN ' . entryTable('sender_tags') . ' st
@@ -803,13 +862,18 @@ final class EntryRepository
      */
     private function fetchLexItemsSearch(string $term, int $limit, ?TimelineFilter $filter = null): array
     {
-        $lexWhere = '';
-        $params = [$term, $term];
+        $params   = [$term, $term];
         $lexWhere = '';
         if ($filter !== null && $filter->lexSources !== []) {
-            $ph = implode(',', array_fill(0, count($filter->lexSources), '?'));
-            $lexWhere = ' AND source IN (' . $ph . ') ';
-            $params = array_merge($params, $filter->lexSources);
+            $ph        = implode(',', array_fill(0, count($filter->lexSources), '?'));
+            $lexWhere .= ' AND source IN (' . $ph . ') ';
+            $params    = array_merge($params, $filter->lexSources);
+        }
+        $excl = $filter !== null ? $filter->effectiveExcludedLexSources() : [];
+        if ($excl !== []) {
+            $ph        = implode(',', array_fill(0, count($excl), '?'));
+            $lexWhere .= ' AND source NOT IN (' . $ph . ') ';
+            $params    = array_merge($params, $excl);
         }
         $sql = 'SELECT * FROM ' . entryTable('lex_items') . '
                 WHERE (title LIKE ? OR description LIKE ?)
@@ -1238,6 +1302,11 @@ final class EntryRepository
             $sql[]    = ' AND f.category IN (' . $ph . ')';
             $params   = array_merge($params, $filter->feedCategories);
         }
+        if ($filter->excludedFeedCategories !== []) {
+            $ph     = implode(',', array_fill(0, count($filter->excludedFeedCategories), '?'));
+            $sql[]  = ' AND (f.category IS NULL OR f.category NOT IN (' . $ph . '))';
+            $params = array_merge($params, $filter->excludedFeedCategories);
+        }
         if ($filter->feedSourceKinds !== []) {
             $frag = $this->feedSqlSourceKindOrClause($filter->feedSourceKinds);
             if ($frag['sql'] !== '') {
@@ -1283,7 +1352,7 @@ final class EntryRepository
     {
         $et = (string)($item['entry_type'] ?? '');
 
-        if ($filter->calendarOnly && $et !== 'calendar_event') {
+        if ($filter->selectionNone) {
             return false;
         }
 
@@ -1292,8 +1361,18 @@ final class EntryRepository
             $data = [];
         }
 
+        if ($filter->excludeCalendar && $et === 'calendar_event') {
+            return false;
+        }
+
         if ($filter->feedCategories !== [] && $et === 'feed_item') {
             if (!in_array((string)($data['feed_category'] ?? ''), $filter->feedCategories, true)) {
+                return false;
+            }
+        }
+        if ($filter->excludedFeedCategories !== [] && $et === 'feed_item') {
+            $cat = (string)($data['feed_category'] ?? '');
+            if ($cat !== '' && in_array($cat, $filter->excludedFeedCategories, true)) {
                 return false;
             }
         }
@@ -1308,8 +1387,21 @@ final class EntryRepository
                 return false;
             }
         }
+        $exLex = $filter->effectiveExcludedLexSources();
+        if ($exLex !== [] && $et === 'lex_item') {
+            $src = (string)($data['source'] ?? '');
+            if (in_array($src, $exLex, true)) {
+                return false;
+            }
+        }
         if ($filter->emailTags !== [] && $et === 'email') {
             if (!in_array((string)($data['sender_tag'] ?? ''), $filter->emailTags, true)) {
+                return false;
+            }
+        }
+        if ($filter->excludedEmailTags !== [] && $et === 'email') {
+            $tg = (string)($data['sender_tag'] ?? '');
+            if ($tg !== '' && in_array($tg, $filter->excludedEmailTags, true)) {
                 return false;
             }
         }
@@ -1353,11 +1445,26 @@ final class EntryRepository
      */
     public function getFilterPillOptions(): array
     {
+        $cats = $this->selectDistinctFeedCategories();
+        if ($this->hasActiveParlPressFeeds() && !in_array('parl_mm', $cats, true)) {
+            $cats[] = 'parl_mm';
+            sort($cats);
+        }
+
         return [
-            'feed_categories' => $this->selectDistinctFeedCategories(),
+            'feed_categories' => $cats,
             'lex_sources'     => $this->selectDistinctLexSources(),
             'email_tags'      => $this->selectDistinctEmailTags(),
         ];
+    }
+
+    private function hasActiveParlPressFeeds(): bool
+    {
+        $sql = 'SELECT 1 FROM ' . entryTable('feeds') . '
+            WHERE disabled = 0 AND source_type = \'parl_press\'
+            LIMIT 1';
+
+        return $this->selectOrEmpty($sql) !== [];
     }
 
     /**
@@ -1396,9 +1503,13 @@ final class EntryRepository
         $out  = [];
         foreach ($rows as $r) {
             $s = trim((string)($r['source'] ?? ''));
-            if ($s !== '') {
-                $out[] = $s;
+            if ($s === '' || $s === 'parl_mm') {
+                continue;
             }
+            if (in_array($s, TimelineFilter::JUS_LEX_SOURCES, true)) {
+                continue;
+            }
+            $out[] = $s;
         }
 
         return $out;

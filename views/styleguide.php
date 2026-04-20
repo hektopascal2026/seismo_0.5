@@ -45,10 +45,9 @@ $activeNav = 'styleguide';
 
         <h2 class="section-title module-section-spaced">Dashboard filter pills</h2>
         <p class="admin-intro">
-            Timeline filters on <code>?action=index</code>: each row starts with <strong>None</strong> (clears that row only).
-            Other pills toggle on/off (comma-separated <code>fc</code>, <code>fk</code>, <code>lx</code>, <code>etag</code>).
-            <strong>Leg</strong> with <code>leg=1</code> shows Leg / calendar entries only until cleared.
-            Colours: feeds blue, scraper violet, Lex yellow, mail peach, Leg green.
+            On <code>?action=index</code>, <strong>Selection: All | None</strong> (next to View) clears the timeline when set to None (<code>sel=none</code>).
+            Pills default to <strong>on</strong> (include); clicking turns a pill <strong>off</strong> and adds it to exclusion lists <code>efc</code>, <code>elx</code>, <code>eet</code>.
+            <strong>Leg / Jus</strong>: Leg toggles <code>ecal=1</code> to hide calendar rows; Jus toggles <code>ejus=1</code> to hide Swiss case-law Lex sources. Colours: feeds blue, scraper violet, Lex yellow, mail peach, Leg green.
         </p>
         <div class="tag-pills-section filter-toolbar">
             <div class="filter-toolbar__head">
@@ -56,38 +55,28 @@ $activeNav = 'styleguide';
                 <a href="#" class="filter-toolbar__clear-all" onclick="return false;">Reset all</a>
             </div>
             <div class="filter-toolbar__row">
-                <span class="filter-toolbar__hint">Feed type</span>
-                <span class="filter-pill filter-pill--none filter-pill--active">None</span>
-                <span class="filter-pill filter-pill--feed">RSS</span>
-                <span class="filter-pill filter-pill--feed filter-pill--active">Substack</span>
-                <span class="filter-pill filter-pill--scraper">Scraper</span>
-            </div>
-            <div class="filter-toolbar__row">
-                <span class="filter-toolbar__hint">Feed category</span>
-                <span class="filter-pill filter-pill--none">None</span>
+                <span class="filter-toolbar__hint">Feed</span>
                 <span class="filter-pill filter-pill--feed filter-pill--active">Bund</span>
                 <span class="filter-pill filter-pill--feed">SRF</span>
                 <span class="filter-pill filter-pill--scraper filter-pill--active">scraper</span>
             </div>
             <div class="filter-toolbar__row">
                 <span class="filter-toolbar__hint">Lex</span>
-                <span class="filter-pill filter-pill--none filter-pill--active">None</span>
                 <span class="filter-pill filter-pill--lex">ch</span>
                 <span class="filter-pill filter-pill--lex filter-pill--active">eu</span>
             </div>
             <div class="filter-toolbar__row">
                 <span class="filter-toolbar__hint">Email tag</span>
-                <span class="filter-pill filter-pill--none">None</span>
                 <span class="filter-pill filter-pill--mail filter-pill--active">Bund</span>
                 <span class="filter-pill filter-pill--mail">Blick Wirtschaft</span>
             </div>
             <div class="filter-toolbar__row">
-                <span class="filter-toolbar__hint">Leg</span>
-                <span class="filter-pill filter-pill--none filter-pill--active">None</span>
-                <span class="filter-pill filter-pill--leg">Leg</span>
+                <span class="filter-toolbar__hint">Leg / Jus</span>
+                <span class="filter-pill filter-pill--leg filter-pill--active">Leg</span>
+                <span class="filter-pill filter-pill--lex filter-pill--active">Jus</span>
             </div>
         </div>
-        <p class="admin-intro">Classes: <code>filter-pill</code> + <code>filter-pill--none|feed|scraper|lex|mail|leg</code>; active state <code>filter-pill--active</code>. Live markup: <code>views/index.php</code>; rules: <code>assets/css/style.css</code> (filter toolbar + filter-pill).</p>
+        <p class="admin-intro">Classes: <code>filter-pill</code> + <code>filter-pill--feed|scraper|lex|mail|leg</code>; active state <code>filter-pill--active</code>. Live markup: <code>views/index.php</code>; rules: <code>assets/css/style.css</code> (filter toolbar + filter-pill).</p>
 
         <h2 class="section-title module-section-spaced">Tag inputs (Settings)</h2>
         <p class="admin-intro">

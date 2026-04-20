@@ -325,6 +325,19 @@ textarea.search-input.setup-code-preview {
     margin-top: 12px;
 }
 
+.view-toggle-bar--split {
+    justify-content: flex-start;
+    column-gap: 28px;
+    row-gap: 10px;
+}
+
+.view-toggle-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
 .admin-form-field {
     margin-bottom: 10px;
 }

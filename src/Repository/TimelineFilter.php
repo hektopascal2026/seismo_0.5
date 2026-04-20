@@ -5,39 +5,79 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 /**
- * Dashboard tag-filter state (Slice 4). Parsed from GET — keep in sync with
- * {@see DashboardController} and {@see FavouriteController::RETURN_QUERY_ALLOW}.
+ * Dashboard tag-filter state. Default = show everything (no query params).
  *
- * Multi-select: `fc`, `fk`, `lx`, `etag` accept comma-separated tokens (or a
- * single token). `leg=1` limits the merged timeline to Leg / `calendar_event`
- * rows only (other filter params are ignored until Leg-only is cleared).
+ * **Exclusion model (index UI):** pills start “on”; turning a pill off appends
+ * to `efc` / `elx` / `eet` (comma lists). `ecal=1` hides Leg / `calendar_event`
+ * rows; `ejus=1` hides Swiss case-law Lex sources (`ch_bger`, `ch_bge`, `ch_bvger`).
+ *
+ * **Selection:** `sel=none` shows an intentionally empty timeline (no DB merge).
+ *
+ * **Legacy inclusion** (`fc`, `fk`, `lx`, `etag`) is still parsed for old links.
+ *
+ * Keep in sync with {@see DashboardController} and {@see FavouriteController::RETURN_QUERY_ALLOW}.
  */
 final class TimelineFilter
 {
     private const FK_ALLOWED = ['rss', 'substack', 'scraper'];
 
+    /** Lex sources treated as “Jus” on the Leg / Jus filter row (not Lex pills). */
+    public const JUS_LEX_SOURCES = ['ch_bger', 'ch_bge', 'ch_bvger'];
+
     /**
-     * @param list<string> $feedCategories `feeds.category` values (OR).
-     * @param list<string> $feedSourceKinds subset of rss|substack|scraper (OR).
-     * @param list<string> $lexSources Lex `source` values (OR).
-     * @param list<string> $emailTags `sender_tags.tag` values (OR).
+     * @param list<string> $feedCategories       Legacy: include only these `feeds.category` values.
+     * @param list<string> $feedSourceKinds      Legacy: rss|substack|scraper OR.
+     * @param list<string> $lexSources           Legacy: Lex `source` IN (…).
+     * @param list<string> $emailTags            Legacy: sender tag IN (…).
+     * @param list<string> $excludedFeedCategories Dashboard: exclude these feed categories.
+     * @param list<string> $excludedLexSources     Dashboard: exclude these Lex `source` values.
+     * @param list<string> $excludedEmailTags      Dashboard: exclude these sender tags.
      */
     public function __construct(
+        public readonly bool $selectionNone = false,
         public readonly array $feedCategories = [],
         public readonly array $feedSourceKinds = [],
         public readonly array $lexSources = [],
         public readonly array $emailTags = [],
-        public readonly bool $calendarOnly = false,
+        public readonly array $excludedFeedCategories = [],
+        public readonly array $excludedLexSources = [],
+        public readonly array $excludedEmailTags = [],
+        public readonly bool $excludeCalendar = false,
+        public readonly bool $excludeJusLex = false,
     ) {
     }
 
     public function isActive(): bool
     {
-        return $this->feedCategories !== []
+        return $this->selectionNone
+            || $this->feedCategories !== []
             || $this->feedSourceKinds !== []
             || $this->lexSources !== []
             || $this->emailTags !== []
-            || $this->calendarOnly;
+            || $this->excludedFeedCategories !== []
+            || $this->excludedLexSources !== []
+            || $this->excludedEmailTags !== []
+            || $this->excludeCalendar
+            || $this->excludeJusLex;
+    }
+
+    /**
+     * Lex sources excluded per-pill plus optional Jus trio when `ejus=1`.
+     *
+     * @return list<string>
+     */
+    public function effectiveExcludedLexSources(): array
+    {
+        $x = $this->excludedLexSources;
+        if ($this->excludeJusLex) {
+            foreach (self::JUS_LEX_SOURCES as $j) {
+                if (!in_array($j, $x, true)) {
+                    $x[] = $j;
+                }
+            }
+        }
+
+        return array_values(array_unique($x));
     }
 
     /**
@@ -45,19 +85,31 @@ final class TimelineFilter
      */
     public static function fromQueryArray(array $get): self
     {
-        $fcList = self::parseListParam($get['fc'] ?? null);
-        $fkList = self::normalizeFkList(self::parseListParam($get['fk'] ?? null));
-        $lxList = self::parseListParam($get['lx'] ?? null);
+        $sel = isset($get['sel']) ? strtolower(trim((string)$get['sel'])) : '';
+
+        $fcList   = self::parseListParam($get['fc'] ?? null);
+        $fkList   = self::normalizeFkList(self::parseListParam($get['fk'] ?? null));
+        $lxList   = self::parseListParam($get['lx'] ?? null);
         $etagList = self::parseListParam($get['etag'] ?? null);
 
-        $legRaw = isset($get['leg']) ? trim((string)$get['leg']) : '';
+        $efcList = self::parseListParam($get['efc'] ?? null);
+        $elxList = self::parseListParam($get['elx'] ?? null);
+        $eetList = self::parseListParam($get['eet'] ?? null);
+
+        $ecalRaw = isset($get['ecal']) ? trim((string)$get['ecal']) : '';
+        $ejusRaw = isset($get['ejus']) ? trim((string)$get['ejus']) : '';
 
         return new self(
+            selectionNone: ($sel === 'none'),
             feedCategories: $fcList,
             feedSourceKinds: $fkList,
             lexSources: $lxList,
             emailTags: $etagList,
-            calendarOnly: ($legRaw === '1' || strtolower($legRaw) === 'true'),
+            excludedFeedCategories: $efcList,
+            excludedLexSources: $elxList,
+            excludedEmailTags: $eetList,
+            excludeCalendar: ($ecalRaw === '1' || strtolower($ecalRaw) === 'true'),
+            excludeJusLex: ($ejusRaw === '1' || strtolower($ejusRaw) === 'true'),
         );
     }
 
