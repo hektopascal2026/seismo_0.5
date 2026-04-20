@@ -9,6 +9,18 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## In-app About page (product copy + 0.4 history)
+
+**Why.** The developer README is now the primary onboarding doc; the running-site **About** should match the same product story and preserve the narrative operators knew from **0.4** (including Magnitu milestones and what moved in consolidation).
+
+**What moved.** `views/about.php` — full rewrite: hero, source tables with outbound links, Magnitu + export sections, operations, **live row counts** (feeds, items, emails, lex, Leg, scraper configs, score totals), condensed **version history** (0.1–0.5) with a link to the public **0.4 About** on staging for comparison. `src/Controller/AboutController.php` — loads `AboutStatsRepository` + `EntryScoreRepository::getScoreCounts()`. **`src/Repository/AboutStatsRepository.php`** — `COUNT(*)` per entry-source table via `entryTable()` (satellite-safe). **`assets/css/style.css`** — `.about-page` layout, tables, history rail.
+
+**New wiring.** `GET ?action=about` runs bounded aggregate COUNTs only (no unbounded lists).
+
+**Gotchas.** Swiss **case law (Jus)** is described as a **0.4** capability; it is **not** claimed as shipped in this 0.5 tree. Staging URL in copy is an **example** operator link, not a hardcoded app requirement.
+
+---
+
 ## Slice 10 — README developer surface + plan hygiene
 
 **Why.** After Slice 9, numbered feature work in this repo arc is complete, but `README.md` still read “mid-consolidation” and `docs/consolidation-plan.md` **Open decisions** still listed email schema unification as if Slice 4 had not shipped.
