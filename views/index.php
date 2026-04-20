@@ -90,6 +90,8 @@ if ($currentView === 'favourites') {
     $clearSearchParams['view'] = 'favourites';
 }
 $clearSearchQs = http_build_query($clearSearchParams);
+
+$selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) === 'none';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -139,9 +141,6 @@ $clearSearchQs = http_build_query($clearSearchParams);
                     <a href="?<?= e($indexFavouritesQs) ?>" class="btn <?= $currentView === 'favourites' ? 'btn-primary' : 'btn-secondary' ?>">Favourites</a>
                 </div>
                 <div class="view-toggle-group">
-                    <?php
-                        $selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) === 'none';
-                    ?>
                     <span class="view-toggle-label">Selection:</span>
                     <a href="?<?= e($selAllQs) ?>" class="btn <?= !$selectionNone ? 'btn-primary' : 'btn-secondary' ?>">All</a>
                     <a href="?<?= e($selNoneQs) ?>" class="btn <?= $selectionNone ? 'btn-primary' : 'btn-secondary' ?>">None</a>
@@ -151,6 +150,9 @@ $clearSearchQs = http_build_query($clearSearchParams);
                 $efcRaw = isset($_GET['efc']) && !is_array($_GET['efc']) ? trim((string)$_GET['efc']) : '';
                 $elxRaw = isset($_GET['elx']) && !is_array($_GET['elx']) ? trim((string)$_GET['elx']) : '';
                 $eetRaw = isset($_GET['eet']) && !is_array($_GET['eet']) ? trim((string)$_GET['eet']) : '';
+                $fcRaw = isset($_GET['fc']) && !is_array($_GET['fc']) ? trim((string)$_GET['fc']) : '';
+                $lxRaw = isset($_GET['lx']) && !is_array($_GET['lx']) ? trim((string)$_GET['lx']) : '';
+                $etagRaw = isset($_GET['etag']) && !is_array($_GET['etag']) ? trim((string)$_GET['etag']) : '';
                 $ecalRaw = isset($_GET['ecal']) && !is_array($_GET['ecal']) ? trim((string)$_GET['ecal']) : '';
                 $ejusRaw = isset($_GET['ejus']) && !is_array($_GET['ejus']) ? trim((string)$_GET['ejus']) : '';
 
@@ -187,10 +189,94 @@ $clearSearchQs = http_build_query($clearSearchParams);
                         'sel' => null,
                     ]);
                 };
+                /** Inclusion list `fc`: pick only this category after Selection None, or toggle when `fc` already set. */
+                $toggleFeedCategoryQs = static function (string $cat) use ($dashboardQs, $selectionNone, $fcRaw, $toggleExclusionQs): string {
+                    if ($selectionNone) {
+                        return $dashboardQs(['sel' => null, 'efc' => null, 'fc' => $cat]);
+                    }
+                    if ($fcRaw !== '') {
+                        $parts = [];
+                        foreach (explode(',', $fcRaw) as $p) {
+                            $p = trim($p);
+                            if ($p !== '') {
+                                $parts[] = $p;
+                            }
+                        }
+                        $idx = array_search($cat, $parts, true);
+                        if ($idx !== false) {
+                            unset($parts[$idx]);
+                            $parts = array_values($parts);
+                        } else {
+                            $parts[] = $cat;
+                        }
+                        $next = implode(',', $parts);
+
+                        return $dashboardQs(['fc' => $next !== '' ? $next : null, 'efc' => null, 'sel' => null]);
+                    }
+
+                    return $toggleExclusionQs('efc', $cat);
+                };
+                $toggleLexSourceQs = static function (string $src) use ($dashboardQs, $selectionNone, $lxRaw, $toggleExclusionQs): string {
+                    if ($selectionNone) {
+                        return $dashboardQs(['sel' => null, 'elx' => null, 'lx' => $src]);
+                    }
+                    if ($lxRaw !== '') {
+                        $parts = [];
+                        foreach (explode(',', $lxRaw) as $p) {
+                            $p = trim($p);
+                            if ($p !== '') {
+                                $parts[] = $p;
+                            }
+                        }
+                        $idx = array_search($src, $parts, true);
+                        if ($idx !== false) {
+                            unset($parts[$idx]);
+                            $parts = array_values($parts);
+                        } else {
+                            $parts[] = $src;
+                        }
+                        $next = implode(',', $parts);
+
+                        return $dashboardQs(['lx' => $next !== '' ? $next : null, 'elx' => null, 'sel' => null]);
+                    }
+
+                    return $toggleExclusionQs('elx', $src);
+                };
+                $toggleEmailTagQs = static function (string $tg) use ($dashboardQs, $selectionNone, $etagRaw, $toggleExclusionQs): string {
+                    if ($selectionNone) {
+                        return $dashboardQs(['sel' => null, 'eet' => null, 'etag' => $tg]);
+                    }
+                    if ($etagRaw !== '') {
+                        $parts = [];
+                        foreach (explode(',', $etagRaw) as $p) {
+                            $p = trim($p);
+                            if ($p !== '') {
+                                $parts[] = $p;
+                            }
+                        }
+                        $idx = array_search($tg, $parts, true);
+                        if ($idx !== false) {
+                            unset($parts[$idx]);
+                            $parts = array_values($parts);
+                        } else {
+                            $parts[] = $tg;
+                        }
+                        $next = implode(',', $parts);
+
+                        return $dashboardQs(['etag' => $next !== '' ? $next : null, 'eet' => null, 'sel' => null]);
+                    }
+
+                    return $toggleExclusionQs('eet', $tg);
+                };
                 $excludeCal = ($ecalRaw === '1');
                 $excludeJus = ($ejusRaw === '1');
-                $legToggleQs = $dashboardQs(['ecal' => $excludeCal ? null : '1', 'sel' => null]);
-                $jusToggleQs = $dashboardQs(['ejus' => $excludeJus ? null : '1', 'sel' => null]);
+                if ($selectionNone) {
+                    $legToggleQs = $dashboardQs(['sel' => null, 'ecal' => null, 'ejus' => '1']);
+                    $jusToggleQs = $dashboardQs(['sel' => null, 'ecal' => '1', 'ejus' => null]);
+                } else {
+                    $legToggleQs = $dashboardQs(['ecal' => $excludeCal ? null : '1', 'sel' => null]);
+                    $jusToggleQs = $dashboardQs(['ejus' => $excludeJus ? null : '1', 'sel' => null]);
+                }
             ?>
             <div class="tag-pills-section filter-toolbar">
                 <div class="filter-toolbar__head">
@@ -203,9 +289,9 @@ $clearSearchQs = http_build_query($clearSearchParams);
                     <?php foreach ($filterPillOptions['feed_categories'] as $cat): ?>
                         <?php
                             $fcClass = ($cat === 'scraper') ? 'filter-pill--scraper' : 'filter-pill--feed';
-                            $fcOn   = !$csvHas($efcRaw, $cat);
+                            $fcOn    = $fcRaw !== '' ? $csvHas($fcRaw, $cat) : !$csvHas($efcRaw, $cat);
                         ?>
-                        <a href="?<?= e($toggleExclusionQs('efc', $cat)) ?>"
+                        <a href="?<?= e($toggleFeedCategoryQs($cat)) ?>"
                            class="filter-pill <?= e($fcClass) ?><?= $fcOn ? ' filter-pill--active' : '' ?>"><?= e($cat) ?></a>
                     <?php endforeach; ?>
                 </div>
@@ -214,8 +300,8 @@ $clearSearchQs = http_build_query($clearSearchParams);
                 <div class="filter-toolbar__row">
                     <span class="filter-toolbar__hint">Lex</span>
                     <?php foreach ($filterPillOptions['lex_sources'] as $src): ?>
-                        <?php $lxOn = !$csvHas($elxRaw, $src); ?>
-                        <a href="?<?= e($toggleExclusionQs('elx', $src)) ?>"
+                        <?php $lxOn = $lxRaw !== '' ? $csvHas($lxRaw, $src) : !$csvHas($elxRaw, $src); ?>
+                        <a href="?<?= e($toggleLexSourceQs($src)) ?>"
                            class="filter-pill filter-pill--lex<?= $lxOn ? ' filter-pill--active' : '' ?>"><?= e($src) ?></a>
                     <?php endforeach; ?>
                 </div>
@@ -224,8 +310,8 @@ $clearSearchQs = http_build_query($clearSearchParams);
                 <div class="filter-toolbar__row">
                     <span class="filter-toolbar__hint">Email tag</span>
                     <?php foreach ($filterPillOptions['email_tags'] as $tg): ?>
-                        <?php $etOn = !$csvHas($eetRaw, $tg); ?>
-                        <a href="?<?= e($toggleExclusionQs('eet', $tg)) ?>"
+                        <?php $etOn = $etagRaw !== '' ? $csvHas($etagRaw, $tg) : !$csvHas($eetRaw, $tg); ?>
+                        <a href="?<?= e($toggleEmailTagQs($tg)) ?>"
                            class="filter-pill filter-pill--mail<?= $etOn ? ' filter-pill--active' : '' ?>"><?= e($tg) ?></a>
                     <?php endforeach; ?>
                 </div>

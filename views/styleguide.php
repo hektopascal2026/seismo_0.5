@@ -46,7 +46,8 @@ $activeNav = 'styleguide';
         <h2 class="section-title module-section-spaced">Dashboard filter pills</h2>
         <p class="admin-intro">
             On <code>?action=index</code>, <strong>Selection: All | None</strong> (next to View) clears the timeline when set to None (<code>sel=none</code>).
-            Pills default to <strong>on</strong> (include); clicking turns a pill <strong>off</strong> and adds it to exclusion lists <code>efc</code>, <code>elx</code>, <code>eet</code>.
+            With Selection <strong>All</strong>, pills default to on; clicking turns one <strong>off</strong> via exclusions <code>efc</code>, <code>elx</code>, <code>eet</code>.
+            After <strong>None</strong>, the first pill you click uses <strong>inclusion</strong> (<code>fc</code> / <code>lx</code> / <code>etag</code>): only that pill is on until you add more or reset.
             <strong>Leg / Jus</strong>: Leg toggles <code>ecal=1</code> to hide calendar rows; Jus toggles <code>ejus=1</code> to hide Swiss case-law Lex sources. Colours: feeds blue, scraper violet, Lex yellow, mail peach, Leg green.
         </p>
         <div class="tag-pills-section filter-toolbar">

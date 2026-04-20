@@ -549,11 +549,13 @@ final class EntryRepository
             $clauses[] = 'source IN (' . $ph . ')';
             $params    = array_merge($params, $filter->lexSources);
         }
-        $excl = $filter !== null ? $filter->effectiveExcludedLexSources() : [];
-        if ($excl !== []) {
-            $ph        = implode(',', array_fill(0, count($excl), '?'));
-            $clauses[] = 'source NOT IN (' . $ph . ')';
-            $params    = array_merge($params, $excl);
+        if ($filter === null || $filter->lexSources === []) {
+            $excl = $filter !== null ? $filter->effectiveExcludedLexSources() : [];
+            if ($excl !== []) {
+                $ph        = implode(',', array_fill(0, count($excl), '?'));
+                $clauses[] = 'source NOT IN (' . $ph . ')';
+                $params    = array_merge($params, $excl);
+            }
         }
         $where = $clauses === [] ? '' : ' WHERE ' . implode(' AND ', $clauses);
         $sql   = 'SELECT * FROM ' . entryTable('lex_items') . $where . '
@@ -869,11 +871,13 @@ final class EntryRepository
             $lexWhere .= ' AND source IN (' . $ph . ') ';
             $params    = array_merge($params, $filter->lexSources);
         }
-        $excl = $filter !== null ? $filter->effectiveExcludedLexSources() : [];
-        if ($excl !== []) {
-            $ph        = implode(',', array_fill(0, count($excl), '?'));
-            $lexWhere .= ' AND source NOT IN (' . $ph . ') ';
-            $params    = array_merge($params, $excl);
+        if ($filter === null || $filter->lexSources === []) {
+            $excl = $filter !== null ? $filter->effectiveExcludedLexSources() : [];
+            if ($excl !== []) {
+                $ph        = implode(',', array_fill(0, count($excl), '?'));
+                $lexWhere .= ' AND source NOT IN (' . $ph . ') ';
+                $params    = array_merge($params, $excl);
+            }
         }
         $sql = 'SELECT * FROM ' . entryTable('lex_items') . '
                 WHERE (title LIKE ? OR description LIKE ?)
@@ -1302,7 +1306,7 @@ final class EntryRepository
             $sql[]    = ' AND f.category IN (' . $ph . ')';
             $params   = array_merge($params, $filter->feedCategories);
         }
-        if ($filter->excludedFeedCategories !== []) {
+        if ($filter->feedCategories === [] && $filter->excludedFeedCategories !== []) {
             $ph     = implode(',', array_fill(0, count($filter->excludedFeedCategories), '?'));
             $sql[]  = ' AND (f.category IS NULL OR f.category NOT IN (' . $ph . '))';
             $params = array_merge($params, $filter->excludedFeedCategories);
@@ -1370,7 +1374,7 @@ final class EntryRepository
                 return false;
             }
         }
-        if ($filter->excludedFeedCategories !== [] && $et === 'feed_item') {
+        if ($filter->feedCategories === [] && $filter->excludedFeedCategories !== [] && $et === 'feed_item') {
             $cat = (string)($data['feed_category'] ?? '');
             if ($cat !== '' && in_array($cat, $filter->excludedFeedCategories, true)) {
                 return false;
@@ -1387,11 +1391,13 @@ final class EntryRepository
                 return false;
             }
         }
-        $exLex = $filter->effectiveExcludedLexSources();
-        if ($exLex !== [] && $et === 'lex_item') {
-            $src = (string)($data['source'] ?? '');
-            if (in_array($src, $exLex, true)) {
-                return false;
+        if ($filter->lexSources === []) {
+            $exLex = $filter->effectiveExcludedLexSources();
+            if ($exLex !== [] && $et === 'lex_item') {
+                $src = (string)($data['source'] ?? '');
+                if (in_array($src, $exLex, true)) {
+                    return false;
+                }
             }
         }
         if ($filter->emailTags !== [] && $et === 'email') {
@@ -1399,7 +1405,7 @@ final class EntryRepository
                 return false;
             }
         }
-        if ($filter->excludedEmailTags !== [] && $et === 'email') {
+        if ($filter->emailTags === [] && $filter->excludedEmailTags !== [] && $et === 'email') {
             $tg = (string)($data['sender_tag'] ?? '');
             if ($tg !== '' && in_array($tg, $filter->excludedEmailTags, true)) {
                 return false;
