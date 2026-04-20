@@ -85,7 +85,6 @@ $sourcesQs = 'action=feeds&view=sources';
         <?php else: ?>
         <div class="latest-entries-section">
             <h2 class="section-title">Feed sources</h2>
-            <p style="margin-bottom:12px; opacity:0.9;">Manage RSS and Substack URLs. Scraper-backed feeds belong on the <a href="<?= e($basePath) ?>/index.php?action=scraper&amp;view=sources">Scraper</a> page.</p>
 
             <?php if (!$satellite): ?>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_save" style="max-width:640px; margin-bottom:24px; padding:16px; border:1px solid #ccc; background:#fafafa;">
