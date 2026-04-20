@@ -54,7 +54,7 @@ final class BaseClient
 
     /**
      * @param array<string, mixed> $payload
-     * @param array<string, string> $headers
+     * @param array<string, string> $headers Merged after defaults; same keys override (e.g. odata=verbose for SharePoint).
      */
     public function postJson(string $url, array $payload, array $headers = []): Response
     {

@@ -109,12 +109,7 @@ $sourcesQs = 'action=feeds&view=sources';
                 </div>
                 <?php if (($editRow['source_type'] ?? '') === 'parl_press'): ?>
                 <div class="admin-help">
-                    For <strong>parl_press</strong>, the URL is the SharePoint list <code>…/items</code> endpoint (same host as Medienmitteilungen). Put JSON in Description, e.g.
-                    <code>{"lookback_days":90,"limit":50,"language":"de"}</code>
-                    <br><br>
-                    <strong>SDA-Meldungen</strong> (same <code>Pages</code> list, slug filter): use the same URL as press releases, then e.g.
-                    <code>{"lookback_days":365,"limit":80,"language":"de","odata_title_substring":"sda-"}</code>
-                    — with <code>odata_title_substring</code> set, <code>guid_prefix</code> defaults to <code>parl_sda</code> when omitted (explicit <code>"guid_prefix":"parl_sda"</code> is still fine). Set <strong>Category</strong> to <code>parl_sda</code> so the timeline shows the SDA pill even for older rows until the next refresh rewrites GUIDs. Use a generous <code>lookback_days</code> if few SDA pages fall in the window.
+                    For <strong>parl_press</strong>, the URL is still the SharePoint list <code>…/items</code> endpoint — Seismo derives <code>…/press-releases/_api/search/postquery</code> and uses <strong>POST</strong> with SharePoint <strong>RefinementFilters</strong> (taxonomy <code>PdNewsTypeDE</code>): <code>guid_prefix</code> <code>parl_mm</code> = Medienmitteilungen, <code>parl_sda</code> = SDA-Meldungen. Optional JSON: <code>refinement_filters</code> (array of FQL strings) or <code>search_post_url</code> to override the POST URL. Example Medien: <code>{"lookback_days":90,"limit":50,"language":"de"}</code>. Example SDA (same list URL): <code>{"lookback_days":365,"limit":80,"language":"de","guid_prefix":"parl_sda"}</code> — set <strong>Category</strong> to <code>parl_sda</code> for the timeline pill. Legacy <code>odata_title_substring</code> only hints <code>guid_prefix</code> when omitted.
                 </div>
                 <?php endif; ?>
                 <div class="admin-form-field">

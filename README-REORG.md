@@ -55,22 +55,20 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ## Parlament.ch — SDA second feed (`parl_press`, same `Pages` list)
 
-**Why.** Operators want **SDA-Meldungen** (agency wire) alongside official **Medienmitteilungen** in the timeline. The public **suche-news** UI is backed by SharePoint **search** (`/_api/search/query`); that surface is a poor fit for Seismo’s unattended HTTP fetcher (WAF / host / template constraints in real deployments). The **same** SharePoint **`Pages`** list used for press releases already contains SDA rows; they are distinguishable by **`Title`** containing **`sda-`** (including slugs like `mm-sda-…`).
+**Why.** Operators want **SDA-Meldungen** (agency wire) alongside official **Medienmitteilungen** in the timeline. Ingest uses the same suche-news taxonomy as the public UI: SharePoint **search** **POST** `/_api/search/postquery` with **`RefinementFilters`** on **`PdNewsTypeDE`** (not list `items` `$filter`).
 
-**What moved.** No new entry family — this extends the existing **`parl_press`** path. `src/Core/Fetcher/ParlPressFetchService.php` — optional `description` keys **`odata_title_substring`** (adds `and substringof('…',Title)` to the OData `$filter`) and **`guid_prefix`** (`parl_mm` default, **`parl_sda`** for a dedicated SDA feed so `feed_items.guid` stays unique vs Medienmitteilungen). `src/Repository/FeedItemRepository.php` — `deleteAlienParlPressFeedItems()` retains GUIDs for both **`parl_mm:`** and **`parl_sda:`**. `views/helpers.php` + `views/partials/dashboard_entry_loop.php` — commission / pill affordances for `parl_sda`. `views/feeds.php` — copy-paste example JSON for a second feed row.
+**What moved.** No new entry family — **`parl_press`** only. `src/Core/Fetcher/ParlPressFetchService.php` — **`guid_prefix`** `parl_mm` vs **`parl_sda`** selects the built-in **`PdNewsTypeDE:"ǂǂ…"`** refinement token (UTF-8 `U+01C2` ×2 + ASCII-hex label); optional **`refinement_filters`** / **`search_post_url`** in feed `description` JSON. Legacy **`odata_title_substring`** still only hints **`guid_prefix`** when omitted. `FeedItemRepository::deleteAlienParlPressFeedItems()` unchanged (`parl_mm:` / `parl_sda:`). Dashboard / helpers unchanged.
 
 **New wiring (operator setup).** Add a **second** `feeds` row:
 
 - **`source_type`:** `parl_press`
-- **`url`:** same list endpoint as Medienmitteilungen, e.g. `https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items`
-- **`description`:** JSON, e.g. `{"lookback_days":365,"limit":80,"language":"de","odata_title_substring":"sda-","guid_prefix":"parl_sda"}` — name/category as you like (e.g. “Parlament.ch – SDA”, `parl_sda` category for pills).
+- **`url`:** same list `…/items` URL as Medienmitteilungen (used to derive `…/press-releases/_api/search/postquery`).
+- **`description`:** e.g. `{"lookback_days":365,"limit":80,"language":"de","guid_prefix":"parl_sda"}` — category **`parl_sda`** for the SDA pill.
 
 **Gotchas.**
 
-- **Do not** rely on reproducing the browser hash / `PdNewsTypeDE` search refiner via REST search unless you control a supported client and accept operational risk; the **list** API remains the supported integration.
-- **OData:** SharePoint rejects `substringof('x',Title) eq true` **when combined** with `Created ge …`; the fetcher uses `… and substringof('x',Title)` only (no `eq true`).
-- **Taxonomy:** `NewsType` / taxonomy fields are **not** usable in `$filter` on this farm (“cannot be used in the query filter expression”), so **title substring** is the practical server-side filter.
-- **Volume:** SDA pages are **sparser** than daily press releases — a short **`lookback_days`** window can return **zero** rows even though older items exist; use a generous lookback for the SDA feed if you care about history.
+- **WAF / POST:** some client networks return HTML “Request Rejected” on `postquery` — the fetcher surfaces that in the exception; your mothership PHP host may behave differently from curl/datacentre probes.
+- **Volume:** SDA is sparser — use a generous **`lookback_days`** if you care about history (KQL date scope may be tightened later).
 - Keep **`guid_prefix`** to **`parl_mm`** or **`parl_sda`** only (unknown values fall back to `parl_mm`); alien cleanup only keeps those two prefixes.
 
 ---
