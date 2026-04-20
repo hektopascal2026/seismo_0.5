@@ -19,6 +19,7 @@ declare(strict_types=1);
 /** @var string $csrfField CSRF hidden input HTML from DashboardController::show() */
 /** @var array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $filterPillOptions */
 /** @var \Seismo\Repository\TimelineFilter $timelineFilter */
+/** @var float $alertThreshold Magnitu alert threshold for “!” pill on cards (Slice 7a) */
 
 $basePath = getBasePath();
 $accent   = seismoBrandAccent();

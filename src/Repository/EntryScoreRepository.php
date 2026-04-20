@@ -160,6 +160,57 @@ final class EntryScoreRepository
         }
     }
 
+    /**
+     * Batch-read score rows for Leg / diagnostics-style callers.
+     *
+     * @param array<int, array{0: string, 1: int}> $pairs (entry_type, entry_id)
+     *
+     * @return array<string, array<string, mixed>> keyed by `entry_type:entry_id`
+     */
+    public function fetchScoresIndexedByPairs(array $pairs): array
+    {
+        $pairs = array_values(array_filter(
+            $pairs,
+            static fn (array $p): bool => isset($p[0], $p[1]) && $p[1] > 0 && $p[0] !== ''
+        ));
+        if ($pairs === []) {
+            return [];
+        }
+        $seen = [];
+        $dedup = [];
+        foreach ($pairs as $p) {
+            $k = $p[0] . ':' . $p[1];
+            if (isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $dedup[] = $p;
+        }
+        $placeholders = implode(', ', array_fill(0, count($dedup), '(?, ?)'));
+        $flat         = [];
+        foreach ($dedup as [$t, $id]) {
+            $flat[] = $t;
+            $flat[] = $id;
+        }
+        $sql = 'SELECT entry_type, entry_id, relevance_score, predicted_label,
+                       explanation, score_source, model_version
+                FROM entry_scores
+                WHERE (entry_type, entry_id) IN (' . $placeholders . ')';
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($flat);
+            $rows = $stmt->fetchAll();
+        } catch (PDOException $e) {
+            return [];
+        }
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(string)$row['entry_type'] . ':' . (int)$row['entry_id']] = $row;
+        }
+
+        return $map;
+    }
+
     // -----------------------------------------------------------------
     // Unscored-row lookups used by ScoringService.
     //

@@ -27,6 +27,17 @@ final class FavouriteController
         'fc', 'fk', 'lx', 'etag', 'nocal',
     ];
 
+    /**
+     * `action` is validated separately — only these may survive `return_query`
+     * (star toggle must return to a real page, not an arbitrary route).
+     *
+     * @var list<string>
+     */
+    private const RETURN_ACTION_ALLOW = [
+        'index',
+        'magnitu',
+    ];
+
     public function toggle(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -97,6 +108,12 @@ final class FavouriteController
                 $out[$key] = $v;
             }
         }
+        if (isset($params['action']) && is_scalar($params['action']) && !is_array($params['action'])) {
+            $a = (string)$params['action'];
+            if (in_array($a, self::RETURN_ACTION_ALLOW, true)) {
+                $out['action'] = $a;
+            }
+        }
         return $out;
     }
 
@@ -105,7 +122,10 @@ final class FavouriteController
      */
     private function redirectToIndex(array $params): void
     {
-        $params['action'] = 'index';
+        $action = $params['action'] ?? 'index';
+        $params['action'] = is_string($action) && in_array($action, self::RETURN_ACTION_ALLOW, true)
+            ? $action
+            : 'index';
         unset($params['entry_type'], $params['entry_id']);
         $qs = http_build_query($params);
         // 303 = POST→GET; relative `?…` keeps subfolder installs working (same as 0.4).

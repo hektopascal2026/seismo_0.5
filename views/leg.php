@@ -17,6 +17,8 @@
  * @var int $totalRows        Total rows for current sources/type (past + upcoming)
  * @var int $hiddenPastRows   Rows the current filter is hiding (i.e. past-dated)
  * @var string $csrfField Hidden CSRF inputs (LegController)
+ * @var array<string, array<string, mixed>> $legEntryScores `entry_type:entry_id` → `entry_scores` row
+ * @var float $alertThreshold Magnitu alert threshold (0.0–1.0) from `system_config`
  */
 
 declare(strict_types=1);
@@ -248,12 +250,40 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                         $author = (string)($metadata['author'] ?? '');
 
                         $eventUrl = (string)($event['url'] ?? '');
+
+                        $legEid = (int)($event['id'] ?? 0);
+                        $legScoreRow = ($legEntryScores['calendar_event:' . $legEid] ?? null);
+                        $legRel = is_array($legScoreRow) ? (float)($legScoreRow['relevance_score'] ?? 0) : null;
+                        if ($legRel === null || $legRel <= 0.0) {
+                            $legRel = null;
+                        }
+                        $legPred = is_array($legScoreRow) ? ($legScoreRow['predicted_label'] ?? null) : null;
+                        $legShowAlert = $legRel !== null && $legRel >= (float)$alertThreshold;
+                        $legBadgeClass = '';
+                        if ($legRel !== null) {
+                            $legPct = (int)round($legRel * 100);
+                            if ($legPct <= 25) {
+                                $legBadgeClass = 'magnitu-badge-noise';
+                            } elseif ($legPct <= 50) {
+                                $legBadgeClass = 'magnitu-badge-background';
+                            } elseif ($legPct <= 75) {
+                                $legBadgeClass = 'magnitu-badge-important';
+                            } else {
+                                $legBadgeClass = 'magnitu-badge-investigation';
+                            }
+                        }
                     ?>
                     <div class="entry-card">
                         <div class="entry-header">
                             <span class="entry-tag" style="background-color: #d4edda;"><?= e($typeLabel) ?></span>
                             <?php if ($councilLabel !== ''): ?>
                                 <span class="entry-tag" style="background-color: #e2e3f1;"><?= e($councilLabel) ?></span>
+                            <?php endif; ?>
+                            <?php if ($legRel !== null): ?>
+                                <span class="magnitu-badge <?= e($legBadgeClass) ?>" title="<?= e((string)$legPred) ?> (<?= round($legRel * 100) ?>%)"><?= round($legRel * 100) ?></span>
+                            <?php endif; ?>
+                            <?php if ($legShowAlert): ?>
+                                <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                             <?php endif; ?>
                             <?php if ($statusRaw !== 'scheduled'): ?>
                                 <?php $statusColor = $statusRaw === 'completed' ? '#f5f5f5' : ($statusRaw === 'cancelled' ? '#ffcccc' : '#fff3cd'); ?>

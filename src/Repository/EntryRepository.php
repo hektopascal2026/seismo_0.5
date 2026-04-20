@@ -81,7 +81,7 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getLatestTimeline(int $limit, int $offset = 0, ?TimelineFilter $filter = null): array
+    public function getLatestTimeline(int $limit, int $offset = 0, ?TimelineFilter $filter = null, bool $sortByRelevance = false): array
     {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
@@ -109,10 +109,9 @@ final class EntryRepository
             }
         }
 
-        usort($items, static fn ($a, $b) => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
-        $items = array_slice($items, $offset, $limit);
-
         $this->attachScores($items);
+        $this->sortMergedTimeline($items, $sortByRelevance);
+        $items = array_slice($items, $offset, $limit);
         $this->attachFavourites($items);
 
         return $items;
@@ -124,7 +123,7 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function searchTimeline(string $q, int $limit, int $offset = 0, ?TimelineFilter $filter = null): array
+    public function searchTimeline(string $q, int $limit, int $offset = 0, ?TimelineFilter $filter = null, bool $sortByRelevance = false): array
     {
         $q = trim($q);
         if ($q === '') {
@@ -153,13 +152,157 @@ final class EntryRepository
             }
         }
 
-        usort($items, static fn ($a, $b) => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
-        $items = array_slice($items, $offset, $limit);
-
         $this->attachScores($items);
+        $this->sortMergedTimeline($items, $sortByRelevance);
+        $items = array_slice($items, $offset, $limit);
         $this->attachFavourites($items);
 
         return $items;
+    }
+
+    /**
+     * Dashboard "Magnitu highlights": rows scored by Magnitu at or above the
+     * configured alert threshold. Hydrates feed / email / lex only (Magnitu
+     * API contract); sorts newest-first by unified timeline `date`.
+     *
+     * Candidate rows are capped (recent `scored_at` first) so this stays
+     * bounded on large `entry_scores` tables — a pragmatic trade vs scanning
+     * every qualifying row on shared hosts.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getMagnituHighlightsTimeline(float $alertThreshold, int $limit, int $offset = 0): array
+    {
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+        $alertThreshold = max(0.0, min(1.0, $alertThreshold));
+        $cap            = min(500, self::MAX_LIMIT * 3);
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT entry_type, entry_id, relevance_score, predicted_label, explanation, score_source
+                 FROM entry_scores
+                 WHERE score_source = \'magnitu\'
+                   AND relevance_score >= ?
+                   AND entry_type IN (\'feed_item\',\'email\',\'lex_item\')
+                 ORDER BY scored_at DESC
+                 LIMIT ' . (int)$cap
+            );
+            $stmt->execute([$alertThreshold]);
+            /** @var array<int, array<string, mixed>> $scoreRows */
+            $scoreRows = $stmt->fetchAll() ?: [];
+        } catch (PDOException $e) {
+            return [];
+        }
+
+        return $this->hydrateTimelineFromMagnituScoreRows($scoreRows, $limit, $offset);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $scoreRows
+     * @return array<int, array<string, mixed>>
+     */
+    private function hydrateTimelineFromMagnituScoreRows(array $scoreRows, int $limit, int $offset): array
+    {
+        /** @var array<string, array<string, mixed>> $best */
+        $best = [];
+        foreach ($scoreRows as $row) {
+            $t = (string)($row['entry_type'] ?? '');
+            $id = (int)($row['entry_id'] ?? 0);
+            if ($t === '' || $id <= 0) {
+                continue;
+            }
+            $k = $t . ':' . $id;
+            if (!isset($best[$k]) || (float)$row['relevance_score'] > (float)$best[$k]['relevance_score']) {
+                $best[$k] = $row;
+            }
+        }
+        if ($best === []) {
+            return [];
+        }
+
+        $idsByType = [
+            'feed_item' => [],
+            'email'     => [],
+            'lex_item'  => [],
+        ];
+        foreach ($best as $k => $_row) {
+            $parts = explode(':', $k, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            [$t, $idStr] = $parts;
+            $id = (int)$idStr;
+            if ($id <= 0 || !isset($idsByType[$t])) {
+                continue;
+            }
+            $idsByType[$t][] = $id;
+        }
+        foreach ($idsByType as $t => $ids) {
+            $idsByType[$t] = array_values(array_unique($ids));
+        }
+
+        $items = [];
+        foreach ($this->fetchFeedRowsByIds($idsByType['feed_item']) as $row) {
+            $w = $this->wrapFeedItem($row);
+            $k = 'feed_item:' . $w['entry_id'];
+            if (isset($best[$k])) {
+                $w['score'] = $best[$k];
+                $items[]  = $w;
+            }
+        }
+        foreach ($this->fetchEmailRowsByIds($idsByType['email']) as $row) {
+            $w = $this->wrapEmail($row);
+            $k = 'email:' . $w['entry_id'];
+            if (isset($best[$k])) {
+                $w['score'] = $best[$k];
+                $items[]  = $w;
+            }
+        }
+        foreach ($this->fetchLexRowsByIds($idsByType['lex_item']) as $row) {
+            $w = $this->wrapLexItem($row);
+            $k = 'lex_item:' . $w['entry_id'];
+            if (isset($best[$k])) {
+                $w['score'] = $best[$k];
+                $items[]  = $w;
+            }
+        }
+
+        $this->sortMergedTimeline($items, false);
+        $items = array_slice($items, $offset, $limit);
+        $this->attachFavourites($items);
+
+        return $items;
+    }
+
+    /**
+     * After {@see attachScores()}, order the merged multi-family window either
+     * by entry date (default) or by relevance score then date (Magnitu setting).
+     *
+     * @param array<int, array<string, mixed>> $items
+     */
+    private function sortMergedTimeline(array &$items, bool $byRelevance): void
+    {
+        if ($byRelevance) {
+            usort(
+                $items,
+                static function (array $a, array $b): int {
+                    $sa = isset($a['score']['relevance_score']) ? (float)$a['score']['relevance_score'] : -1.0;
+                    $sb = isset($b['score']['relevance_score']) ? (float)$b['score']['relevance_score'] : -1.0;
+                    if (($sb <=> $sa) !== 0) {
+                        return $sb <=> $sa;
+                    }
+
+                    return ($b['date'] ?? 0) <=> ($a['date'] ?? 0);
+                }
+            );
+
+            return;
+        }
+
+        usort(
+            $items,
+            static fn (array $a, array $b): int => ($b['date'] ?? 0) <=> ($a['date'] ?? 0)
+        );
     }
 
     /**

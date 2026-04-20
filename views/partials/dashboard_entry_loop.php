@@ -47,6 +47,8 @@ $feedLoopPrevDayKey = null;
                         $favouriteEntryType = $itemWrapper['entry_type'] ?? '';
                         $favouriteEntryId = (int)($itemWrapper['entry_id'] ?? 0);
                         $isFavourite = !empty($itemWrapper['is_favourite']);
+                        $showAlertBadge = isset($alertThreshold) && $relevanceScore !== null
+                            && $relevanceScore >= (float)$alertThreshold;
                     ?>
                     <?php if ($showDaySeparators): ?>
                         <?php
@@ -89,6 +91,9 @@ $feedLoopPrevDayKey = null;
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
+                                <?php endif; ?>
+                                <?php if (!empty($showAlertBadge)): ?>
+                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
@@ -164,6 +169,9 @@ $feedLoopPrevDayKey = null;
                                 <span class="entry-tag" style="background-color: #FFDBBB; border-color: #000000;">🌐 <?= htmlspecialchars($item['feed_name'] ?? 'Scraper') ?></span>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
+                                <?php endif; ?>
+                                <?php if (!empty($showAlertBadge)): ?>
+                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
@@ -283,6 +291,9 @@ $feedLoopPrevDayKey = null;
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
                                 <?php endif; ?>
+                                <?php if (!empty($showAlertBadge)): ?>
+                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
+                                <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
                                 <?php if ($lexHasUrl): ?>
@@ -366,6 +377,9 @@ $feedLoopPrevDayKey = null;
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
                                 <?php endif; ?>
+                                <?php if (!empty($showAlertBadge)): ?>
+                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
+                                <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
                                 <?php if ($calHasUrl): ?>
@@ -443,6 +457,9 @@ $feedLoopPrevDayKey = null;
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
+                                <?php endif; ?>
+                                <?php if (!empty($showAlertBadge)): ?>
+                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">

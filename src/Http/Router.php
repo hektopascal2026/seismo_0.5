@@ -11,7 +11,7 @@
  *      session handler doesn't serialise concurrent requests. Routes that render
  *      CSRF forms (`index`, `lex`, `leg`, `calendar`, `settings`, `styleguide`) skip early
  *      release — see {@see READONLY_KEEP_SESSION_FOR_CSRF}. Any future
- *      read-only route whose controller calls `CsrfToken::field()` MUST be
+ *      read-only route whose controller calls `CsrfToken::field()` (e.g. `magnitu` highlights) MUST be
  *      added to that list; otherwise `session_write_close()` fires before
  *      the handler and the subsequent `session_start()` inside
  *      `CsrfToken::ensure()` reloads `$_SESSION` from disk, silently
@@ -47,6 +47,7 @@ final class Router
         // a CSRF form.
         'settings'   => true,
         'styleguide' => true,
+        'magnitu'    => true,
     ];
 
     /** @var array<string, string> action => "Class::method" */

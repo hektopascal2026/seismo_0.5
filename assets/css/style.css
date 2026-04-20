@@ -801,6 +801,23 @@ h3 {
     color: #000000;
 }
 
+/* Pill when relevance ≥ configured alert threshold (Slice 7a) */
+.magnitu-alert-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 22px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-weight: 800;
+    font-family: inherit;
+    border: 2px solid #000000;
+    background-color: #ffb347;
+    color: #000000;
+    margin-left: 4px;
+}
+
 /* Alert highlighting for high-score entries */
 .entry-card.magnitu-alert {
     border-color: #FF6B6B;

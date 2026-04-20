@@ -157,6 +157,11 @@ $router->register(
     true
 );
 $router->register(
+    'magnitu',
+    \Seismo\Controller\MagnituHighlightsController::class . '::show',
+    true
+);
+$router->register(
     'retention',
     \Seismo\Controller\RetentionController::class . '::show',
     true

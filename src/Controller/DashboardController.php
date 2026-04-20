@@ -12,6 +12,7 @@ namespace Seismo\Controller;
 
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryRepository;
+use Seismo\Repository\SystemConfigRepository;
 use Seismo\Repository\TimelineFilter;
 
 final class DashboardController
@@ -54,6 +55,8 @@ final class DashboardController
         $allItems        = [];
         $timelineFilter  = TimelineFilter::fromQueryArray($_GET);
         $filterPillOptions = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
+        $alertThreshold    = $this->resolveAlertThreshold();
+        $sortByRelevance   = $currentView !== 'favourites' && $this->resolveSortByRelevance();
 
         try {
             $pdo  = getDbConnection();
@@ -62,9 +65,9 @@ final class DashboardController
             if ($currentView === 'favourites') {
                 $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter);
             } elseif ($searchQuery !== '') {
-                $allItems = $repo->searchTimeline($searchQuery, $limit, $offset, $timelineFilter);
+                $allItems = $repo->searchTimeline($searchQuery, $limit, $offset, $timelineFilter, $sortByRelevance);
             } else {
-                $allItems = $repo->getLatestTimeline($limit, $offset, $timelineFilter);
+                $allItems = $repo->getLatestTimeline($limit, $offset, $timelineFilter, $sortByRelevance);
             }
         } catch (\Throwable $e) {
             error_log('Seismo dashboard: ' . $e->getMessage());
@@ -120,10 +123,44 @@ final class DashboardController
         return $n;
     }
 
+    /**
+     * Magnitu "alert" badge threshold (0.0–1.0). Stored in `system_config`;
+     * defaults to 0.75 when unset (matches Magnitu settings form default).
+     */
+    private function resolveAlertThreshold(): float
+    {
+        try {
+            $config = new SystemConfigRepository(getDbConnection());
+            $raw    = $config->get('alert_threshold');
+            if ($raw !== null && $raw !== '' && is_numeric($raw)) {
+                return max(0.0, min(1.0, (float)$raw));
+            }
+        } catch (\Throwable $e) {
+            // fall through
+        }
+
+        return 0.75;
+    }
+
+    /**
+     * When true, merged timeline sorts by relevance_score then entry date
+     * (newest + search views only — not favourites).
+     */
+    private function resolveSortByRelevance(): bool
+    {
+        try {
+            $config = new SystemConfigRepository(getDbConnection());
+
+            return ((string)$config->get('sort_by_relevance')) === '1';
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     private function resolveDefaultLimitFromConfig(): int
     {
         try {
-            $config = new \Seismo\Repository\SystemConfigRepository(getDbConnection());
+            $config = new SystemConfigRepository(getDbConnection());
             $raw    = $config->get(SettingsController::KEY_DASHBOARD_LIMIT);
             if ($raw !== null && $raw !== '' && ctype_digit($raw)) {
                 return max(1, min(EntryRepository::MAX_LIMIT, (int)$raw));

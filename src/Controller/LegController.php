@@ -8,6 +8,8 @@ use Seismo\Config\CalendarConfigStore;
 use Seismo\Http\CsrfToken;
 use Seismo\Plugin\PluginLanguage;
 use Seismo\Repository\CalendarEventRepository;
+use Seismo\Repository\EntryScoreRepository;
+use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\RefreshAllService;
 
 /**
@@ -31,13 +33,24 @@ final class LegController
         $eventTypes = [];
         $eventType = '';
         $showPast = false;
-        $lastBySource = [];
-        $pageError = null;
-        $totalRows = 0;
-        $hiddenPastRows = 0;
+        $lastBySource     = [];
+        $pageError        = null;
+        $totalRows        = 0;
+        $hiddenPastRows   = 0;
+        $legEntryScores   = [];
+        $alertThreshold   = 0.75;
 
         try {
             $pdo = getDbConnection();
+            try {
+                $cfg = new SystemConfigRepository($pdo);
+                $th  = $cfg->get('alert_threshold');
+                if ($th !== null && $th !== '' && is_numeric($th)) {
+                    $alertThreshold = max(0.0, min(1.0, (float)$th));
+                }
+            } catch (\Throwable $e) {
+                // keep default
+            }
             $calendarCfg = (new CalendarConfigStore())->load();
             $enabledSources = array_values(array_filter(
                 CalendarEventRepository::LEG_PAGE_SOURCES,
@@ -77,6 +90,15 @@ final class LegController
                     $totalRows = $repo->countBySources($activeSources, true, $typeFilter);
                     $hiddenPastRows = $totalRows;
                 }
+
+                $pairs = [];
+                foreach ($events as $ev) {
+                    $eid = (int)($ev['id'] ?? 0);
+                    if ($eid > 0) {
+                        $pairs[] = ['calendar_event', $eid];
+                    }
+                }
+                $legEntryScores = (new EntryScoreRepository($pdo))->fetchScoresIndexedByPairs($pairs);
             }
 
             $lastBySource = $repo->getLastFetchedBySources(CalendarEventRepository::LEG_PAGE_SOURCES);
