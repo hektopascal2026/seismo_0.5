@@ -15,8 +15,8 @@ final class LexItemRepository
 {
     public const MAX_LIMIT = 200;
 
-    /** Lex list page sources (EU/CH/DE/FR/Parl MM) — not JUS subsources. */
-    public const LEX_PAGE_SOURCES = ['eu', 'ch', 'de', 'fr', 'parl_mm'];
+    /** Lex list page sources (EU/CH/DE/FR) — not JUS; Parl MM is a `feed_item`. */
+    public const LEX_PAGE_SOURCES = ['eu', 'ch', 'de', 'fr'];
 
     public function __construct(private PDO $pdo)
     {

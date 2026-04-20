@@ -17,7 +17,7 @@ use Seismo\Repository\SystemConfigRepository;
 final class MigrationRunner
 {
     /** Highest schema version shipped by built-in migrations. */
-    public const LATEST_VERSION = Migration006EmailSubscriptionsShowInMagnitu::VERSION;
+    public const LATEST_VERSION = Migration007ParlPressToFeedItems::VERSION;
 
     private SystemConfigRepository $systemConfig;
 
@@ -104,6 +104,7 @@ final class MigrationRunner
             Migration004ExportKey::VERSION     => new Migration004ExportKey(),
             Migration005SystemConfig::VERSION  => new Migration005SystemConfig(),
             Migration006EmailSubscriptionsShowInMagnitu::VERSION => new Migration006EmailSubscriptionsShowInMagnitu(),
+            Migration007ParlPressToFeedItems::VERSION => new Migration007ParlPressToFeedItems(),
         ];
 
         ksort($migrations, SORT_NUMERIC);

@@ -92,7 +92,7 @@ $sourcesQs = 'action=feeds&view=sources';
                 <input type="hidden" name="id" value="<?= $editRow ? (int)$editRow['id'] : '' ?>">
                 <h3 style="margin-bottom:12px;"><?= $editRow ? 'Edit feed' : 'Add feed' ?></h3>
                 <div style="margin-bottom:8px;">
-                    <label>URL <input type="url" name="url" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['url'] ?? '')) ?>" placeholder="https://…"></label>
+                    <label>URL / API endpoint <input type="text" name="url" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['url'] ?? '')) ?>" placeholder="https://… (RSS) or SharePoint list URL for parl_press"></label>
                 </div>
                 <div style="margin-bottom:8px;">
                     <label>Title <input type="text" name="title" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['title'] ?? '')) ?>"></label>
@@ -103,9 +103,16 @@ $sourcesQs = 'action=feeds&view=sources';
                             <?php $st = (string)($editRow['source_type'] ?? 'rss'); ?>
                             <option value="rss" <?= $st === 'rss' ? 'selected' : '' ?>>rss</option>
                             <option value="substack" <?= $st === 'substack' ? 'selected' : '' ?>>substack</option>
+                            <option value="parl_press" <?= $st === 'parl_press' ? 'selected' : '' ?>>parl_press (Bundeshaus Medien)</option>
                         </select>
                     </label>
                 </div>
+                <?php if (($editRow['source_type'] ?? '') === 'parl_press'): ?>
+                <div style="margin-bottom:8px; font-size:12px; color:#555;">
+                    For <strong>parl_press</strong>, the URL is the SharePoint list endpoint. Put JSON in Description, e.g.
+                    <code style="word-break:break-all;">{"lookback_days":90,"limit":50,"language":"de"}</code>
+                </div>
+                <?php endif; ?>
                 <div style="margin-bottom:8px;">
                     <label>Description<br><textarea name="description" rows="2" style="width:100%;"><?= e((string)($editRow['description'] ?? '')) ?></textarea></label>
                 </div>

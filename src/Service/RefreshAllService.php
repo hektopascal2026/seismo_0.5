@@ -214,7 +214,7 @@ final class RefreshAllService
     }
 
     /**
-     * Run a single core fetcher (`core:rss`, `core:scraper`, `core:mail`).
+     * Run a single core fetcher (`core:rss`, `core:parl_press`, `core:scraper`, `core:mail`).
      */
     public function runCoreFetcher(string $coreId, bool $force = true): PluginRunResult
     {

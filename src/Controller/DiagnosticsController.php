@@ -39,9 +39,10 @@ final class DiagnosticsController
         $plugins  = $registry->all();
 
         $coreMeta = [
-            CoreRunner::ID_RSS     => ['label' => 'RSS & Substack', 'min_interval' => 1800, 'entry_type' => 'feed_items'],
-            CoreRunner::ID_SCRAPER => ['label' => 'Scraper pages', 'min_interval' => 3600, 'entry_type' => 'feed_items'],
-            CoreRunner::ID_MAIL    => ['label' => 'Mail (IMAP)', 'min_interval' => 900, 'entry_type' => 'emails'],
+            CoreRunner::ID_RSS         => ['label' => 'RSS & Substack', 'min_interval' => 1800, 'entry_type' => 'feed_items'],
+            CoreRunner::ID_PARL_PRESS  => ['label' => 'Parlament Medien (press)', 'min_interval' => 1800, 'entry_type' => 'feed_items'],
+            CoreRunner::ID_SCRAPER     => ['label' => 'Scraper pages', 'min_interval' => 3600, 'entry_type' => 'feed_items'],
+            CoreRunner::ID_MAIL        => ['label' => 'Mail (IMAP)', 'min_interval' => 900, 'entry_type' => 'emails'],
         ];
 
         $status     = [];
@@ -165,7 +166,7 @@ final class DiagnosticsController
         }
 
         $id = trim((string)($_POST['plugin_id'] ?? ''));
-        $coreIds = [CoreRunner::ID_RSS, CoreRunner::ID_SCRAPER, CoreRunner::ID_MAIL];
+        $coreIds = [CoreRunner::ID_RSS, CoreRunner::ID_PARL_PRESS, CoreRunner::ID_SCRAPER, CoreRunner::ID_MAIL];
         $registry = new PluginRegistry();
         if ($id === '' || (!in_array($id, $coreIds, true) && !$registry->has($id))) {
             $_SESSION['error'] = 'Unknown plugin or core fetcher id.';

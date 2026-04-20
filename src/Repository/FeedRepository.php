@@ -9,7 +9,8 @@ use PDO;
 /**
  * `feeds` table — Slice 8 module admin (Slice 8).
  *
- * The **Feeds** page lists only RSS + Substack sources. Rows that are scraper-backed
+ * The **Feeds** page lists RSS + Substack + `parl_press` (Parlament Medien) sources.
+ * Rows that are scraper-backed
  * (`source_type`, `category`, or a live `scraper_configs` URL match) belong on
  * {@see ScraperConfigRepository} / `?action=scraper` — same rule as
  * {@see EntryRepository::getRssModuleTimeline()}.
@@ -36,7 +37,7 @@ final class FeedRepository
         $f = entryTable('feeds');
         $sc = entryTable('scraper_configs');
         $sql = "SELECT f.* FROM {$f} f
-            WHERE f.source_type IN ('rss', 'substack')
+            WHERE f.source_type IN ('rss', 'substack', 'parl_press')
               AND (IFNULL(f.category, '') <> 'scraper')
               AND NOT EXISTS (
                   SELECT 1 FROM {$sc} sc
@@ -87,9 +88,7 @@ final class FeedRepository
             throw new \InvalidArgumentException('Feed URL and title are required.');
         }
         $sourceType = trim((string)($data['source_type'] ?? 'rss'));
-        if ($sourceType === '') {
-            $sourceType = 'rss';
-        }
+        $sourceType = $this->normaliseSourceType($sourceType);
         $t = entryTable('feeds');
         $sql = "INSERT INTO {$t} (
             url, source_type, title, description, link, category, disabled,
@@ -138,11 +137,8 @@ final class FeedRepository
             throw new \InvalidArgumentException('Feed URL and title are required.');
         }
         $sourceType = array_key_exists('source_type', $data)
-            ? trim((string)$data['source_type'])
-            : (string)($existing['source_type'] ?? 'rss');
-        if ($sourceType === '') {
-            $sourceType = 'rss';
-        }
+            ? $this->normaliseSourceType(trim((string)$data['source_type']))
+            : $this->normaliseSourceType((string)($existing['source_type'] ?? 'rss'));
         $disabled = array_key_exists('disabled', $data)
             ? (!empty($data['disabled']) ? 1 : 0)
             : (int)($existing['disabled'] ?? 0);
@@ -187,5 +183,12 @@ final class FeedRepository
         if (isSatellite()) {
             throw new \RuntimeException('Satellite mode — feed configuration is managed on the mothership only.');
         }
+    }
+
+    private function normaliseSourceType(string $raw): string
+    {
+        $raw = strtolower(trim($raw));
+
+        return in_array($raw, ['rss', 'substack', 'scraper', 'parl_press'], true) ? $raw : 'rss';
     }
 }

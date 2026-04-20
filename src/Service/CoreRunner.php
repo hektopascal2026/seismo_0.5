@@ -6,6 +6,7 @@ namespace Seismo\Service;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Seismo\Core\Fetcher\ParlPressFetchService;
 use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Core\Fetcher\ScraperFetchService;
 use Seismo\Repository\FeedItemRepository;
@@ -18,15 +19,17 @@ use Seismo\Repository\PluginRunLogRepository;
  */
 final class CoreRunner
 {
-    public const ID_RSS     = 'core:rss';
-    public const ID_SCRAPER = 'core:scraper';
-    public const ID_MAIL    = 'core:mail';
+    public const ID_RSS        = 'core:rss';
+    public const ID_PARL_PRESS = 'core:parl_press';
+    public const ID_SCRAPER    = 'core:scraper';
+    public const ID_MAIL       = 'core:mail';
 
     /** @var array<string, int> seconds between successful runs when not forced */
     private const THROTTLE_SECONDS = [
-        self::ID_RSS     => 1800,
-        self::ID_SCRAPER => 3600,
-        self::ID_MAIL    => 900,
+        self::ID_RSS         => 1800,
+        self::ID_PARL_PRESS  => 1800,
+        self::ID_SCRAPER     => 3600,
+        self::ID_MAIL        => 900,
     ];
 
     public function __construct(
@@ -35,6 +38,7 @@ final class CoreRunner
         private SystemConfigRepository $magnituConfig,
         private RssFetchService $rss = new RssFetchService(),
         private ScraperFetchService $scraper = new ScraperFetchService(),
+        private ParlPressFetchService $parlPress = new ParlPressFetchService(),
     ) {
     }
 
@@ -44,9 +48,10 @@ final class CoreRunner
     public function runAll(bool $force): array
     {
         return [
-            self::ID_RSS     => $this->runRss($force),
-            self::ID_SCRAPER => $this->runScraper($force),
-            self::ID_MAIL    => $this->runMail($force),
+            self::ID_RSS         => $this->runRss($force),
+            self::ID_PARL_PRESS  => $this->runParlPress($force),
+            self::ID_SCRAPER     => $this->runScraper($force),
+            self::ID_MAIL        => $this->runMail($force),
         ];
     }
 
@@ -56,10 +61,11 @@ final class CoreRunner
     public function runOne(string $coreId, bool $force): PluginRunResult
     {
         return match ($coreId) {
-            self::ID_RSS     => $this->runRss($force),
-            self::ID_SCRAPER => $this->runScraper($force),
-            self::ID_MAIL    => $this->runMail($force),
-            default          => PluginRunResult::error('Unknown core fetcher id: ' . $coreId),
+            self::ID_RSS        => $this->runRss($force),
+            self::ID_PARL_PRESS => $this->runParlPress($force),
+            self::ID_SCRAPER    => $this->runScraper($force),
+            self::ID_MAIL       => $this->runMail($force),
+            default             => PluginRunResult::error('Unknown core fetcher id: ' . $coreId),
         };
     }
 
@@ -115,6 +121,61 @@ final class CoreRunner
         }
         $duration = max(0, (int)(microtime(true) * 1000) - $start);
         $this->record(self::ID_RSS, $r, $duration);
+
+        return $r;
+    }
+
+    private function runParlPress(bool $force): PluginRunResult
+    {
+        if (isSatellite()) {
+            $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
+            $this->record(self::ID_PARL_PRESS, $r, 0);
+
+            return $r;
+        }
+        if (!$force && $this->isThrottled(self::ID_PARL_PRESS, self::THROTTLE_SECONDS[self::ID_PARL_PRESS])) {
+            return PluginRunResult::throttleSkipped(
+                'Throttled — last successful run is fresher than ' . self::THROTTLE_SECONDS[self::ID_PARL_PRESS] . 's.'
+            );
+        }
+
+        $start = (int)(microtime(true) * 1000);
+        $total = 0;
+        try {
+            $offset = 0;
+            $page   = 50;
+            while (true) {
+                $batch = $this->feeds->listFeedsForParlPressRefresh($page, $offset);
+                if ($batch === []) {
+                    break;
+                }
+                foreach ($batch as $feed) {
+                    $id = (int)($feed['id'] ?? 0);
+                    if ($id <= 0) {
+                        continue;
+                    }
+                    try {
+                        $rows = $this->parlPress->fetchForFeed($feed);
+                        $n = $this->feeds->upsertFeedItems($id, $rows);
+                        $total += $n;
+                        $this->feeds->touchFeedSuccess($id);
+                    } catch (\Throwable $e) {
+                        error_log('Seismo core:parl_press feed ' . $id . ': ' . $e->getMessage());
+                        $this->feeds->touchFeedFailure($id, $e->getMessage());
+                    }
+                }
+                if (count($batch) < $page) {
+                    break;
+                }
+                $offset += $page;
+            }
+            $r = PluginRunResult::ok($total);
+        } catch (\Throwable $e) {
+            error_log('Seismo core:parl_press: ' . $e->getMessage());
+            $r = PluginRunResult::error($e->getMessage());
+        }
+        $duration = max(0, (int)(microtime(true) * 1000) - $start);
+        $this->record(self::ID_PARL_PRESS, $r, $duration);
 
         return $r;
     }

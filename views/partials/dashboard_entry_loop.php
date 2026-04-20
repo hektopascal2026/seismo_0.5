@@ -233,9 +233,6 @@ $feedLoopPrevDayKey = null;
                             } elseif ($lexSource === 'ch') {
                                 $lexSourceEmoji = '🇨🇭';
                                 $lexSourceLabel = 'CH';
-                            } elseif ($lexSource === 'parl_mm') {
-                                $lexSourceEmoji = '🏛';
-                                $lexSourceLabel = 'Parl MM';
                             } elseif ($lexSource === 'fr') {
                                 $lexSourceEmoji = '🇫🇷';
                                 $lexSourceLabel = 'FR';
@@ -275,7 +272,6 @@ $feedLoopPrevDayKey = null;
                             elseif ($lexSource === 'ch_bvger') $lexLinkLabel = 'Urteil →';
                             elseif ($lexSource === 'de') $lexLinkLabel = 'recht.bund.de →';
                             elseif ($lexSource === 'ch') $lexLinkLabel = 'Fedlex →';
-                            elseif ($lexSource === 'parl_mm') $lexLinkLabel = 'parlament.ch →';
                             elseif ($lexSource === 'fr') $lexLinkLabel = 'Légifrance →';
                             else $lexLinkLabel = 'EUR-Lex →';
 
@@ -323,11 +319,9 @@ $feedLoopPrevDayKey = null;
                                     <?php if (!empty($lexDesc) && $lexHasMore): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                     <?php endif; ?>
-                                    <?php if ($lexSource !== 'parl_mm'): ?>
-                                        <span style="font-family: monospace;<?= $isJus ? ' font-size: 12px; font-weight: 600;' : '' ?>"><?= htmlspecialchars($lexCelexDisplay) ?></span>
-                                        <?php if ($lexHasUrl): ?>
-                                        <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= $lexLinkLabel ?></a>
-                                        <?php endif; ?>
+                                    <span style="font-family: monospace;<?= $isJus ? ' font-size: 12px; font-weight: 600;' : '' ?>"><?= htmlspecialchars($lexCelexDisplay) ?></span>
+                                    <?php if ($lexHasUrl): ?>
+                                    <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= $lexLinkLabel ?></a>
                                     <?php endif; ?>
                                 </div>
                                 <div class="entry-meta-right">

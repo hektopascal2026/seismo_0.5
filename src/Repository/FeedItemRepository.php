@@ -39,6 +39,25 @@ final class FeedItemRepository
     }
 
     /**
+     * Swiss Parliament press list (`source_type = parl_press`) — one logical
+     * feed row; refreshed by {@see \Seismo\Service\CoreRunner::ID_PARL_PRESS}.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listFeedsForParlPressRefresh(int $limit, int $offset): array
+    {
+        $limit  = max(1, min($limit, self::MAX_LIMIT));
+        $offset = max(0, $offset);
+        $sql = 'SELECT * FROM ' . entryTable('feeds') . "
+            WHERE disabled = 0
+              AND source_type = 'parl_press'
+            ORDER BY id ASC
+            LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
+
+        return $this->selectOrEmpty($sql);
+    }
+
+    /**
      * Feeds that should be scraped (explicit scraper type or listed in scraper_configs).
      *
      * @return list<array<string, mixed>>

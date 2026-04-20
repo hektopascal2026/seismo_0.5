@@ -30,7 +30,7 @@ final class LexConfigStore
      * values the Lex plugins return.
      */
     private const PLUGIN_BLOCKS = [
-        'eu', 'ch', 'de', 'ch_bger', 'ch_bge', 'ch_bvger', 'parl_mm', 'fr',
+        'eu', 'ch', 'de', 'ch_bger', 'ch_bge', 'ch_bvger', 'fr',
     ];
 
     private const SPECIAL_BANNED_WORDS_KEY = 'lex:jus_banned_words';
@@ -185,14 +185,6 @@ final class LexConfigStore
                 'base_url' => 'https://entscheidsuche.ch',
                 'lookback_days' => 90,
                 'limit' => 100,
-                'notes' => '',
-            ],
-            'parl_mm' => [
-                'enabled' => false,
-                'api_base' => "https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items",
-                'language' => 'de',
-                'lookback_days' => 90,
-                'limit' => 50,
                 'notes' => '',
             ],
             'fr' => [

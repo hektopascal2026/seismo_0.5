@@ -1083,7 +1083,7 @@ final class EntryRepository
         $f  = entryTable('feeds');
         $sc = entryTable('scraper_configs');
         if ($mode === 'rss_substack') {
-            $extra = " AND (f.source_type IN ('rss', 'substack'))
+            $extra = " AND (f.source_type IN ('rss', 'substack', 'parl_press'))
                 AND (IFNULL(f.category, '') <> 'scraper')
                 AND NOT EXISTS (SELECT 1 FROM {$sc} sc WHERE sc.url = f.url AND sc.disabled = 0)";
         } elseif ($mode === 'scraper') {

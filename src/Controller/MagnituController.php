@@ -43,7 +43,6 @@ final class MagnituController
         'ch_bger'  => 'Bundesgericht',
         'ch_bge'   => 'BGE Leitentscheide',
         'ch_bvger' => 'Bundesverwaltungsgericht',
-        'parl_mm'  => 'Parlament CH',
     ];
 
     // ------------------------------------------------------------------

@@ -68,7 +68,8 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
 
         <p class="message" style="background:#f5f5f5;border-color:#ccc;">
             <strong>Seismo 0.5:</strong> Only <strong>Swiss Fedlex</strong> (<code>ch</code>) can be refreshed here.
-            Other sources stay populated by your Seismo 0.4 instance (or manual DB) until multi-source refresh lands in a later slice.
+            Other legislation sources stay populated by your Seismo 0.4 instance (or manual DB) until multi-source Lex refresh lands in a later slice.
+            <strong>Parlament Medien</strong> (press releases) live as <code>feed_items</code> — add or edit the <code>parl_press</code> source on the <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a> page; they appear on the dashboard like other feeds.
         </p>
 
         <?php if ($satellite): ?>
@@ -86,7 +87,6 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         ['key' => 'ch', 'label' => '🇨🇭 Switzerland'],
                         ['key' => 'de', 'label' => '🇩🇪 Germany'],
                         ['key' => 'fr', 'label' => '🇫🇷 France'],
-                        ['key' => 'parl_mm', 'label' => '🏛 Parl MM'],
                     ];
                     foreach ($lexPagePills as $pill):
                         if (!in_array($pill['key'], $enabledLexSources, true)) {
@@ -153,7 +153,6 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         ['key' => 'ch', 'emoji' => '🇨🇭'],
                         ['key' => 'de', 'emoji' => '🇩🇪'],
                         ['key' => 'fr', 'emoji' => '🇫🇷'],
-                        ['key' => 'parl_mm', 'emoji' => '🏛'],
                     ];
                     $refreshParts = [];
                     foreach ($lexRefreshLineMeta as $meta) {
@@ -184,11 +183,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                 <?php foreach ($lexItems as $item): ?>
                     <?php
                         $source = $item['source'] ?? 'eu';
-                        if ($source === 'parl_mm') {
-                            $sourceEmoji = '🏛';
-                            $sourceLabel = 'Parl MM';
-                            $linkLabel = 'parlament.ch →';
-                        } elseif ($source === 'fr') {
+                        if ($source === 'fr') {
                             $sourceEmoji = '🇫🇷';
                             $sourceLabel = 'FR';
                             $linkLabel = 'Légifrance →';
@@ -243,10 +238,8 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                                 <?php if ($lexHasMore): ?>
                                     <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                 <?php endif; ?>
-                                <?php if ($source !== 'parl_mm'): ?>
-                                    <span style="font-family: monospace;"><?= e((string)($item['celex'] ?? '')) ?></span>
-                                    <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
-                                <?php endif; ?>
+                                <span style="font-family: monospace;"><?= e((string)($item['celex'] ?? '')) ?></span>
+                                <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
                             </div>
                             <?php if (!empty($item['document_date'])): ?>
                                 <span class="entry-date"><?= e(date('d.m.Y', strtotime((string)$item['document_date']))) ?></span>

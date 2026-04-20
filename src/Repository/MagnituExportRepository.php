@@ -39,7 +39,7 @@ final class MagnituExportRepository
     }
 
     /**
-     * Feed items (RSS, Substack, scraper — same table, source_type differs).
+     * Feed items (RSS, Substack, scraper, parl_press — same table, source_type differs).
      *
      * @param ?string $since ISO-8601 or `Y-m-d H:i:s`; NULL means "no lower bound".
      * @return array<int, array<string, mixed>>
@@ -138,8 +138,7 @@ final class MagnituExportRepository
 
     /**
      * Lex items — every Lex source is one `lex_items` table with a `source`
-     * column (`eu`, `ch`, `de`, `fr`, `ch_bger`, `ch_bge`, `ch_bvger`,
-     * `parl_mm`).
+     * column (`eu`, `ch`, `de`, `fr`, `ch_bger`, `ch_bge`, `ch_bvger`).
      *
      * @return array<int, array<string, mixed>>
      */
