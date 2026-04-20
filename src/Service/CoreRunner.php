@@ -6,12 +6,14 @@ namespace Seismo\Service;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Seismo\Core\Fetcher\ImapMailFetchService;
 use Seismo\Core\Fetcher\ParlPressFetchService;
 use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Core\Fetcher\ScraperFetchService;
+use Seismo\Repository\EmailIngestRepository;
 use Seismo\Repository\FeedItemRepository;
-use Seismo\Repository\SystemConfigRepository;
 use Seismo\Repository\PluginRunLogRepository;
+use Seismo\Repository\SystemConfigRepository;
 
 /**
  * Core upstreams (RSS, scraper, mail) — not SourceFetcherInterface plugins.
@@ -36,9 +38,11 @@ final class CoreRunner
         private FeedItemRepository $feeds,
         private PluginRunLogRepository $runLog,
         private SystemConfigRepository $magnituConfig,
+        private EmailIngestRepository $emailIngest,
         private RssFetchService $rss = new RssFetchService(),
         private ScraperFetchService $scraper = new ScraperFetchService(),
         private ParlPressFetchService $parlPress = new ParlPressFetchService(),
+        private ImapMailFetchService $imapMail = new ImapMailFetchService(),
     ) {
     }
 
@@ -250,17 +254,80 @@ final class CoreRunner
             );
         }
 
-        // In-process IMAP for core:mail is not implemented yet. Operational path is
-        // the standalone CLI under fetcher/mail/ (cron) writing to unified `emails`.
-        // Do not suggest mail_imap_* keys here until this runner actually fetches.
-        $r = PluginRunResult::skipped(
-            'Mail is fetched by the CLI mail cron into `emails`, not by this button yet. See fetcher/mail/ on the server.'
-        );
-        if ($force) {
-            $this->record(self::ID_MAIL, $r, 0);
+        $start = (int)(microtime(true) * 1000);
+        try {
+            if (!extension_loaded('imap')) {
+                $r = PluginRunResult::skipped(
+                    'PHP imap extension is not enabled — install ext-imap on the server for core:mail.',
+                    $force
+                );
+            } elseif (!$this->mailImapConfigured()) {
+                $r = PluginRunResult::skipped(
+                    'IMAP not configured — set system_config keys mail_imap_mailbox (or mail_imap_host), mail_imap_username, mail_imap_password.',
+                    $force
+                );
+            } else {
+                $cfg  = $this->loadMailImapConfig();
+                $rows = $this->imapMail->fetch($cfg);
+                $n    = $this->emailIngest->upsertImapBatch($rows);
+                if ($n > 0 && $rows !== []) {
+                    try {
+                        $this->imapMail->markSeen($cfg, array_map(
+                            static fn (array $row): int => (int)($row['imap_uid'] ?? 0),
+                            $rows
+                        ));
+                    } catch (\Throwable $e) {
+                        error_log('Seismo core:mail mark seen: ' . $e->getMessage());
+                    }
+                }
+                $r = PluginRunResult::ok($n);
+            }
+        } catch (\Throwable $e) {
+            error_log('Seismo core:mail: ' . $e->getMessage());
+            $r = PluginRunResult::error($e->getMessage());
         }
+        $duration = max(0, (int)(microtime(true) * 1000) - $start);
+        $this->record(self::ID_MAIL, $r, $duration);
 
         return $r;
+    }
+
+    private function mailImapConfigured(): bool
+    {
+        $c = $this->loadMailImapConfig();
+        $user = trim((string)($c['mail_imap_username'] ?? ''));
+        if ($user === '') {
+            return false;
+        }
+        $mb = trim((string)($c['mail_imap_mailbox'] ?? ''));
+        $host = trim((string)($c['mail_imap_host'] ?? ''));
+
+        return $mb !== '' || $host !== '';
+    }
+
+    /**
+     * @return array<string, string|null>
+     */
+    private function loadMailImapConfig(): array
+    {
+        $keys = [
+            'mail_imap_mailbox',
+            'mail_imap_username',
+            'mail_imap_password',
+            'mail_imap_host',
+            'mail_imap_port',
+            'mail_imap_flags',
+            'mail_imap_folder',
+            'mail_max_messages',
+            'mail_search_criteria',
+            'mail_mark_seen',
+        ];
+        $out = [];
+        foreach ($keys as $k) {
+            $out[$k] = $this->magnituConfig->get($k);
+        }
+
+        return $out;
     }
 
     private function isThrottled(string $coreId, int $minSeconds): bool

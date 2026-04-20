@@ -9,6 +9,7 @@ use DateTimeZone;
 use Seismo\Config\CalendarConfigStore;
 use Seismo\Config\LexConfigStore;
 use Seismo\Repository\CalendarEventRepository;
+use Seismo\Repository\EmailIngestRepository;
 use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\LexItemRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -37,7 +38,7 @@ use Seismo\Repository\PluginRunLogRepository;
  * satellite, skipped-because-disabled-in-config). Those are the rows diagnostics
  * displays.
  *
- * Slice 4: {@see CoreRunner} runs first (RSS/Substack, scraper, mail stub),
+ * Slice 4: {@see CoreRunner} runs first (RSS/Substack, scraper, IMAP mail),
  * then registered plugins. Same `runAll()` entry point for web + CLI cron.
  */
 final class RefreshAllService
@@ -239,6 +240,7 @@ final class RefreshAllService
                 new FeedItemRepository($pdo),
                 $runLog,
                 new SystemConfigRepository($pdo),
+                new EmailIngestRepository($pdo),
             ),
         );
     }

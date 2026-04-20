@@ -24,9 +24,14 @@ final class PluginRunResult
         return new self('ok', $count);
     }
 
-    public static function skipped(string $message): self
+    /**
+     * @param bool $persistToPluginRunLog When false, cron/diagnostics will not
+     *        write a `plugin_run_log` row (e.g. IMAP not configured — avoid
+     *        log spam every cron tick).
+     */
+    public static function skipped(string $message, bool $persistToPluginRunLog = true): self
     {
-        return new self('skipped', 0, $message, true);
+        return new self('skipped', 0, $message, $persistToPluginRunLog);
     }
 
     /**

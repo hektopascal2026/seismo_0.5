@@ -42,6 +42,8 @@ final class LexRechtBundPlugin implements SourceFetcherInterface
 
     public function fetch(array $config): array
     {
+        self::ensureSimplePieAvailable();
+
         $feedUrl = trim((string)($config['feed_url'] ?? ''));
         if ($feedUrl === '' || !preg_match('#^https://#i', $feedUrl)) {
             throw new \InvalidArgumentException('DE feed_url must be a non-empty https URL.');
@@ -100,6 +102,35 @@ final class LexRechtBundPlugin implements SourceFetcherInterface
         }
 
         return $rows;
+    }
+
+    /**
+     * Shared hosts sometimes deploy `src/` without a complete `vendor/`, or a
+     * CLI script may load Seismo classes before `bootstrap.php` pulled Composer.
+     * Try the project autoload once, then fail with an operator-actionable message.
+     */
+    private static function ensureSimplePieAvailable(): void
+    {
+        if (class_exists(SimplePie::class, false)) {
+            return;
+        }
+
+        $root = defined('SEISMO_ROOT') ? SEISMO_ROOT : dirname(__DIR__, 3);
+        $autoload = $root . '/vendor/autoload.php';
+        if (is_file($autoload)) {
+            require_once $autoload;
+        }
+
+        if (class_exists(SimplePie::class, true)) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'SimplePie is not installed (class SimplePie\\SimplePie not found). '
+            . 'On the server, run `composer install` in the Seismo install directory and upload the entire `vendor/` '
+            . 'folder next to `bootstrap.php`, including `vendor/simplepie/simplepie/`. '
+            . 'Without it, RSS-based features (DE Lex refresh and core RSS fetch) cannot run.'
+        );
     }
 
     private function itemPublishedUtc(Item $item): ?DateTimeImmutable
