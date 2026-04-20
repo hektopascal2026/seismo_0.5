@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 $accent = seismoBrandAccent();
 $headerTitle = 'Styleguide';
-$headerSubtitle = 'Typography, buttons, cards';
+$headerSubtitle = 'Typography, buttons, filters, tag inputs, cards';
 $activeNav = 'styleguide';
 ?>
 <!DOCTYPE html>
@@ -43,6 +43,102 @@ $activeNav = 'styleguide';
         <div class="message message-error">Error</div>
         <div class="message message-info">Info</div>
 
+        <h2 class="section-title module-section-spaced">Dashboard filter pills</h2>
+        <p class="admin-intro">
+            Timeline filters on <code>?action=index</code>: each row starts with <strong>None</strong> (clears that row only).
+            Other pills toggle on/off (comma-separated <code>fc</code>, <code>fk</code>, <code>lx</code>, <code>etag</code>).
+            <strong>Leg</strong> with <code>leg=1</code> shows Leg / calendar entries only until cleared.
+            Colours: feeds blue, scraper violet, Lex yellow, mail peach, Leg green.
+        </p>
+        <div class="tag-pills-section filter-toolbar">
+            <div class="filter-toolbar__head">
+                <span class="filter-toolbar__label">Filters</span>
+                <a href="#" class="filter-toolbar__clear-all" onclick="return false;">Reset all</a>
+            </div>
+            <div class="filter-toolbar__row">
+                <span class="filter-toolbar__hint">Feed type</span>
+                <span class="filter-pill filter-pill--none filter-pill--active">None</span>
+                <span class="filter-pill filter-pill--feed">RSS</span>
+                <span class="filter-pill filter-pill--feed filter-pill--active">Substack</span>
+                <span class="filter-pill filter-pill--scraper">Scraper</span>
+            </div>
+            <div class="filter-toolbar__row">
+                <span class="filter-toolbar__hint">Feed category</span>
+                <span class="filter-pill filter-pill--none">None</span>
+                <span class="filter-pill filter-pill--feed filter-pill--active">Bund</span>
+                <span class="filter-pill filter-pill--feed">SRF</span>
+                <span class="filter-pill filter-pill--scraper filter-pill--active">scraper</span>
+            </div>
+            <div class="filter-toolbar__row">
+                <span class="filter-toolbar__hint">Lex</span>
+                <span class="filter-pill filter-pill--none filter-pill--active">None</span>
+                <span class="filter-pill filter-pill--lex">ch</span>
+                <span class="filter-pill filter-pill--lex filter-pill--active">eu</span>
+            </div>
+            <div class="filter-toolbar__row">
+                <span class="filter-toolbar__hint">Email tag</span>
+                <span class="filter-pill filter-pill--none">None</span>
+                <span class="filter-pill filter-pill--mail filter-pill--active">Bund</span>
+                <span class="filter-pill filter-pill--mail">Blick Wirtschaft</span>
+            </div>
+            <div class="filter-toolbar__row">
+                <span class="filter-toolbar__hint">Leg</span>
+                <span class="filter-pill filter-pill--none filter-pill--active">None</span>
+                <span class="filter-pill filter-pill--leg">Leg</span>
+            </div>
+        </div>
+        <p class="admin-intro">Classes: <code>filter-pill</code> + <code>filter-pill--none|feed|scraper|lex|mail|leg</code>; active state <code>filter-pill--active</code>. Live markup: <code>views/index.php</code>; rules: <code>assets/css/style.css</code> (filter toolbar + filter-pill).</p>
+
+        <h2 class="section-title module-section-spaced">Tag inputs (Settings)</h2>
+        <p class="admin-intro">
+            Editable tag fields on module settings (feed category, global tag rename, etc.): <strong>Enter</strong> commits (async save + feedback), <strong>Escape</strong> restores the last committed value and clears transient state classes.
+            While saving: gray border and light gray background (<code>.feed-tag-saving</code>). On success: green border and pale green background (<code>.feed-tag-saved</code>), then return to default after a short beat.
+        </p>
+        <div class="admin-form-card" style="max-width:40rem;">
+            <h3 class="section-title" style="margin-top:0;">Examples</h3>
+            <div class="admin-form-field">
+                <p class="admin-intro" style="margin:0 0 6px;"><strong>Per-feed tag</strong></p>
+                <label for="styleguide-tag-static" class="admin-form-field" style="display:block;">Tag</label>
+                <div class="feed-tag-input-wrapper" style="max-width:24rem;">
+                    <input id="styleguide-tag-static" type="text" class="feed-tag-input" value="example-tag" readonly aria-label="Static sample">
+                </div>
+            </div>
+            <div class="admin-form-field">
+                <p class="admin-intro" style="margin:0 0 6px;"><strong>All-tags rename</strong></p>
+                <div class="feed-tag-input-wrapper" style="max-width:24rem;">
+                    <input type="text" class="feed-tag-input" value="tag-name" readonly aria-label="Static sample">
+                </div>
+            </div>
+            <div class="admin-form-field">
+                <p class="admin-intro" style="margin:0 0 6px;"><strong>Save states</strong></p>
+                <div class="admin-form-field" style="margin-bottom:10px;">
+                    <span class="type-sample-small" style="display:block;margin-bottom:4px;">Default</span>
+                    <div class="feed-tag-input-wrapper" style="max-width:24rem;">
+                        <input type="text" class="feed-tag-input" value="normal" readonly aria-label="Default state">
+                    </div>
+                </div>
+                <div class="admin-form-field" style="margin-bottom:10px;">
+                    <span class="type-sample-small" style="display:block;margin-bottom:4px;">Saving</span>
+                    <div class="feed-tag-input-wrapper" style="max-width:24rem;">
+                        <input type="text" class="feed-tag-input feed-tag-saving" value="saving…" readonly aria-label="Saving state">
+                    </div>
+                </div>
+                <div class="admin-form-field">
+                    <span class="type-sample-small" style="display:block;margin-bottom:4px;">Saved</span>
+                    <div class="feed-tag-input-wrapper" style="max-width:24rem;">
+                        <input type="text" class="feed-tag-input feed-tag-saved" value="saved" readonly aria-label="Saved state">
+                    </div>
+                </div>
+            </div>
+            <div class="admin-form-field">
+                <p class="admin-intro" style="margin:0 0 6px;"><strong>Interactive (demo)</strong> — edit text, Enter to simulate save, Escape to revert.</p>
+                <div class="feed-tag-input-wrapper" style="max-width:24rem;">
+                    <input type="text" id="styleguide-tag-demo" class="feed-tag-input" value="demo-tag" autocomplete="off" data-original="demo-tag" aria-label="Demo tag input">
+                </div>
+            </div>
+        </div>
+        <p class="admin-intro">Markup: <code>feed-tag-input-wrapper</code> + <code>feed-tag-input</code>; optional <code>feed-tag-indicator</code> for right-aligned hint text. CSS: <code>assets/css/style.css</code> (section “Tag Inputs (Settings)”). Wire the same classes when adding inline tag editors to <code>views/feeds.php</code> or Settings.</p>
+
         <h2 class="section-title module-section-spaced">Entry card sample</h2>
         <div class="entry-card">
             <div class="entry-header">
@@ -56,5 +152,40 @@ $activeNav = 'styleguide';
 
         <p class="admin-intro module-section-spaced">Shared with Magnitu tooling; keep components aligned when changing <code>assets/css/style.css</code>.</p>
     </div>
+    <script>
+    (function () {
+        var input = document.getElementById('styleguide-tag-demo');
+        if (!input) return;
+        function clearState() {
+            input.classList.remove('feed-tag-saving', 'feed-tag-saved');
+        }
+        function revert() {
+            var o = input.getAttribute('data-original') || '';
+            input.value = o;
+            clearState();
+        }
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                revert();
+                return;
+            }
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            if (input.classList.contains('feed-tag-saving')) return;
+            clearState();
+            input.classList.add('feed-tag-saving');
+            window.setTimeout(function () {
+                input.classList.remove('feed-tag-saving');
+                input.classList.add('feed-tag-saved');
+                var v = input.value.trim();
+                input.setAttribute('data-original', v);
+                window.setTimeout(function () {
+                    input.classList.remove('feed-tag-saved');
+                }, 1400);
+            }, 500);
+        });
+    })();
+    </script>
 </body>
 </html>
