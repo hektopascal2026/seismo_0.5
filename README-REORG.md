@@ -21,6 +21,16 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Migration 008 — `feeds.url` no longer UNIQUE (schema 24)
+
+**Why.** Two **`parl_press`** rows (e.g. Medienmitteilungen + SDA) share the same SharePoint **`…/items`** URL; options differ only in **`description`** JSON. MariaDB rejected the second insert with **1062 Duplicate entry … for key 'url'**.
+
+**What moved.** `src/Migration/Migration008FeedsUrlNonUnique.php` — drops the unique index on **`feeds.url`** (name detected via `SHOW INDEX`, idempotent) and ensures non-unique **`idx_url`** exists. `docs/db-schema.sql` — `url` column no longer declared **`UNIQUE`** for fresh installs. `MigrationRunner::LATEST_VERSION` → **24**.
+
+**Gotchas.** Run **`?action=migrate&key=…`** (or `php migrate.php`) once on the mothership before adding the second Parl row. Deliberately **no** DB-level uniqueness on `(url, source_type)` yet — duplicate RSS URLs remain an admin foot-gun, same as before for non-press feeds.
+
+---
+
 ## parl_press — “Untitled” cards (legacy RSS on SharePoint URL + cron cleanup)
 
 **Why.** If the Parliament **`…/items`** URL was ever refreshed as **`source_type = rss`**, SimplePie treated the JSON like a feed and stored **`Untitled`** for almost every row (see `FeedItemRepository::deleteAlienParlPressFeedItems()`). Real headlines live in **`Title_de`** / **`Title_*`** on the list row, not in that RSS-shaped parse.

@@ -40,7 +40,7 @@
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS feeds (
     id                   INT AUTO_INCREMENT PRIMARY KEY,
-    url                  VARCHAR(500) NOT NULL UNIQUE,
+    url                  VARCHAR(500) NOT NULL,
     source_type          VARCHAR(20)  DEFAULT 'rss',   -- 'rss' | 'substack' | 'scraper' | 'parl_press'
     title                VARCHAR(255) NOT NULL,
     description          TEXT,
