@@ -30,7 +30,9 @@ if (!function_exists('e')) {
 
 $accent = seismoBrandAccent();
 $headerTitle = 'Settings';
-$headerSubtitle = 'Preferences, Magnitu, retention & satellites';
+$headerSubtitle = $satellite
+    ? 'General & Magnitu (satellite)'
+    : 'Preferences, Magnitu, retention & satellites';
 $activeNav = 'settings';
 $dashboardLimitMax = \Seismo\Repository\EntryRepository::MAX_LIMIT;
 
@@ -67,8 +69,8 @@ $tabQs = static function (string $t) use ($basePath): string {
         <nav class="settings-tabs" aria-label="Settings sections">
             <a href="<?= e($tabQs('general')) ?>" class="<?= $tab === 'general' ? 'active' : '' ?>">General</a>
             <a href="<?= e($tabQs('magnitu')) ?>" class="<?= $tab === 'magnitu' ? 'active' : '' ?>">Magnitu</a>
-            <a href="<?= e($tabQs('retention')) ?>" class="<?= $tab === 'retention' ? 'active' : '' ?>">Retention</a>
             <?php if (!$satellite): ?>
+            <a href="<?= e($tabQs('retention')) ?>" class="<?= $tab === 'retention' ? 'active' : '' ?>">Retention</a>
             <a href="<?= e($tabQs('satellite')) ?>" class="<?= $tab === 'satellite' ? 'active' : '' ?>">Satellites</a>
             <?php endif; ?>
         </nav>

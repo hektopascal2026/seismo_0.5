@@ -4,7 +4,12 @@
  *
  * @var string $csrfField
  * @var ?string $dashboardError
- * @var array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $filterPillOptions
+ * @var array{
+ *   feed_categories: list<string>,
+ *   feed_category_labels?: array<string, string>,
+ *   lex_sources: list<string>,
+ *   email_tags: list<string>
+ * } $filterPillOptions
  * @var \Seismo\Repository\TimelineFilter $timelineFilter
  * @var array<int, array<string, mixed>> $allItems
  * @var string $returnQuery
@@ -77,6 +82,8 @@ $mailOn = static function (string $tg) use ($timelineFilter): bool {
 $legOn = !$timelineFilter->excludeCalendar;
 $jusOn = !$timelineFilter->excludeJusLex;
 
+$feedCategoryLabels = $filterPillOptions['feed_category_labels'] ?? [];
+
 $formAction = $basePath . '/index.php';
 ?>
 <!DOCTYPE html>
@@ -145,14 +152,16 @@ $formAction = $basePath . '/index.php';
                     <span class="filter-toolbar__hint">Feed</span>
                     <?php foreach ($filterPillOptions['feed_categories'] as $cat): ?>
                         <?php
-                        $fcClass = ($cat === 'scraper') ? 'filter-pill-text--scraper' : 'filter-pill-text--feed';
-                        $cid    = 'df-feed-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $cat);
+                        $isScraperToken = str_starts_with($cat, 'sc:') || str_starts_with($cat, 'sf:');
+                        $fcClass        = $isScraperToken ? 'filter-pill-text--scraper' : 'filter-pill-text--feed';
+                        $cid            = 'df-feed-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $cat);
+                        $feedLabel      = $feedCategoryLabels[$cat] ?? $cat;
                         ?>
                         <label class="filter-pill-label" for="<?= e($cid) ?>">
                             <input type="checkbox" class="filter-pill-input" id="<?= e($cid) ?>"
                                    name="filters[feed][]" value="<?= e($cat) ?>"
                                 <?= $feedOn($cat) ? ' checked' : '' ?>>
-                            <span class="filter-pill-text <?= e($fcClass) ?>"><?= e($cat) ?></span>
+                            <span class="filter-pill-text <?= e($fcClass) ?>"><?= e($feedLabel) ?></span>
                         </label>
                     <?php endforeach; ?>
                 </div>

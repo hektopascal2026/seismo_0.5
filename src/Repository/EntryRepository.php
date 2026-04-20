@@ -440,11 +440,7 @@ final class EntryRepository
         $extra = $this->feedSqlFilter($filter);
         $sql = '
             SELECT ' . self::SQL_FEED_ITEMS_JOIN_SELECT . ',
-                   f.title       AS feed_title,
-                   f.category    AS feed_category,
-                   f.source_type AS feed_source_type,
-                   f.url         AS feed_url,
-                   f.title       AS feed_name
+                   ' . $this->sqlFeedMetaColumns() . '
             FROM ' . entryTable('feed_items') . ' fi
             JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
             WHERE f.disabled = 0
@@ -692,11 +688,7 @@ final class EntryRepository
         $extra = $this->feedSqlFilter($filter);
         $sql = '
             SELECT ' . self::SQL_FEED_ITEMS_JOIN_SELECT . ',
-                   f.title       AS feed_title,
-                   f.category    AS feed_category,
-                   f.source_type AS feed_source_type,
-                   f.url         AS feed_url,
-                   f.title       AS feed_name
+                   ' . $this->sqlFeedMetaColumns() . '
             FROM ' . entryTable('feed_items') . ' fi
             JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
             WHERE f.disabled = 0
@@ -920,11 +912,7 @@ final class EntryRepository
             $ph = implode(',', array_fill(0, count($chunk), '?'));
             $sql = '
                 SELECT ' . self::SQL_FEED_ITEMS_JOIN_SELECT . ',
-                       f.title       AS feed_title,
-                       f.category    AS feed_category,
-                       f.source_type AS feed_source_type,
-                       f.url         AS feed_url,
-                       f.title       AS feed_name
+                       ' . $this->sqlFeedMetaColumns() . '
                 FROM ' . entryTable('feed_items') . ' fi
                 JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
                 WHERE fi.id IN (' . $ph . ')
@@ -1200,11 +1188,7 @@ final class EntryRepository
 
         $sql = "
             SELECT " . self::SQL_FEED_ITEMS_JOIN_SELECT . ",
-                   f.title       AS feed_title,
-                   f.category    AS feed_category,
-                   f.source_type AS feed_source_type,
-                   f.url         AS feed_url,
-                   f.title       AS feed_name
+                   " . $this->sqlFeedMetaColumns() . "
             FROM {$fi} fi
             JOIN {$f} f ON fi.feed_id = f.id
             WHERE f.disabled = 0
@@ -1293,6 +1277,156 @@ final class EntryRepository
     }
 
     /**
+     * Feed title / category / source columns plus optional `scraper_config_id`
+     * (MIN id for `scraper_configs.url` = `feeds.url`, disabled = 0).
+     */
+    private function sqlFeedMetaColumns(): string
+    {
+        return 'f.title       AS feed_title,
+                   f.category    AS feed_category,
+                   f.source_type AS feed_source_type,
+                   f.url         AS feed_url,
+                   f.title       AS feed_name,
+                   ' . $this->sqlScraperConfigIdExpr() . ' AS scraper_config_id';
+    }
+
+    private function sqlScraperConfigIdExpr(): string
+    {
+        $sc = entryTable('scraper_configs');
+
+        return '(SELECT MIN(scx.id) FROM ' . $sc . ' scx WHERE scx.url = f.url AND IFNULL(scx.disabled, 0) = 0)';
+    }
+
+    /**
+     * @param list<string> $tokens
+     * @return array{
+     *   plain: list<string>,
+     *   sc_ids: list<int>,
+     *   sf_ids: list<int>,
+     *   legacy_scraper_bucket: bool
+     * }
+     */
+    private static function partitionFeedCategoryTokens(array $tokens): array
+    {
+        $plain   = [];
+        $scIds   = [];
+        $sfIds   = [];
+        $legacyS = false;
+        foreach ($tokens as $raw) {
+            if (!is_string($raw)) {
+                continue;
+            }
+            $t = trim($raw);
+            if ($t === '') {
+                continue;
+            }
+            if ($t === 'scraper') {
+                $legacyS = true;
+
+                continue;
+            }
+            if (preg_match('/^sc:(\d+)$/', $t, $m)) {
+                $n = (int)$m[1];
+                if ($n > 0) {
+                    $scIds[] = $n;
+                }
+
+                continue;
+            }
+            if (preg_match('/^sf:(\d+)$/', $t, $m)) {
+                $n = (int)$m[1];
+                if ($n > 0) {
+                    $sfIds[] = $n;
+                }
+
+                continue;
+            }
+            $plain[] = $t;
+        }
+
+        return [
+            'plain'                 => array_values(array_unique($plain)),
+            'sc_ids'                => array_values(array_unique($scIds)),
+            'sf_ids'                => array_values(array_unique($sfIds)),
+            'legacy_scraper_bucket' => $legacyS,
+        ];
+    }
+
+    /**
+     * @param list<string> $included
+     * @return array{sql: string, params: list<mixed>}
+     */
+    private function feedSqlCategoryInclusionClause(array $included): array
+    {
+        $p      = self::partitionFeedCategoryTokens($included);
+        $parts  = [];
+        $params = [];
+        if ($p['plain'] !== []) {
+            $ph     = implode(',', array_fill(0, count($p['plain']), '?'));
+            $parts[] = 'f.category IN (' . $ph . ')';
+            $params  = array_merge($params, $p['plain']);
+        }
+        if ($p['sc_ids'] !== []) {
+            $sc  = entryTable('scraper_configs');
+            $ph  = implode(',', array_fill(0, count($p['sc_ids']), '?'));
+            $parts[] = 'EXISTS (SELECT 1 FROM ' . $sc . ' scb WHERE scb.url = f.url AND IFNULL(scb.disabled, 0) = 0 AND scb.id IN (' . $ph . '))';
+            $params = array_merge($params, $p['sc_ids']);
+        }
+        if ($p['sf_ids'] !== []) {
+            $ph     = implode(',', array_fill(0, count($p['sf_ids']), '?'));
+            $parts[] = 'f.id IN (' . $ph . ')';
+            $params  = array_merge($params, $p['sf_ids']);
+        }
+        if ($p['legacy_scraper_bucket']) {
+            $sc     = entryTable('scraper_configs');
+            $parts[] = "(f.source_type = 'scraper' OR IFNULL(f.category, '') = 'scraper'
+                OR EXISTS (SELECT 1 FROM {$sc} scw WHERE scw.url = f.url AND IFNULL(scw.disabled, 0) = 0))";
+        }
+        if ($parts === []) {
+            return ['sql' => '', 'params' => []];
+        }
+
+        return ['sql' => implode(' OR ', $parts), 'params' => $params];
+    }
+
+    /**
+     * @param list<string> $excluded
+     * @return array{sql: string, params: list<mixed>}
+     */
+    private function feedSqlCategoryExclusionClause(array $excluded): array
+    {
+        $p      = self::partitionFeedCategoryTokens($excluded);
+        $parts  = [];
+        $params = [];
+        if ($p['plain'] !== []) {
+            $ph     = implode(',', array_fill(0, count($p['plain']), '?'));
+            $parts[] = '(f.category IS NULL OR f.category NOT IN (' . $ph . '))';
+            $params  = array_merge($params, $p['plain']);
+        }
+        if ($p['sc_ids'] !== []) {
+            $sc  = entryTable('scraper_configs');
+            $ph  = implode(',', array_fill(0, count($p['sc_ids']), '?'));
+            $parts[] = 'NOT EXISTS (SELECT 1 FROM ' . $sc . ' scb WHERE scb.url = f.url AND IFNULL(scb.disabled, 0) = 0 AND scb.id IN (' . $ph . '))';
+            $params = array_merge($params, $p['sc_ids']);
+        }
+        if ($p['sf_ids'] !== []) {
+            $ph     = implode(',', array_fill(0, count($p['sf_ids']), '?'));
+            $parts[] = 'f.id NOT IN (' . $ph . ')';
+            $params  = array_merge($params, $p['sf_ids']);
+        }
+        if ($p['legacy_scraper_bucket']) {
+            $sc     = entryTable('scraper_configs');
+            $parts[] = 'NOT (f.source_type = \'scraper\' OR IFNULL(f.category, \'\') = \'scraper\'
+                OR EXISTS (SELECT 1 FROM ' . $sc . ' scw WHERE scw.url = f.url AND IFNULL(scw.disabled, 0) = 0))';
+        }
+        if ($parts === []) {
+            return ['sql' => '', 'params' => []];
+        }
+
+        return ['sql' => ' AND (' . implode(' AND ', $parts) . ')', 'params' => $params];
+    }
+
+    /**
      * Extra WHERE clause fragments for `feeds` / `feed_items` when tag filters
      * are active (Slice 4).
      *
@@ -1306,14 +1440,18 @@ final class EntryRepository
         $sql    = [];
         $params = [];
         if ($filter->feedCategories !== []) {
-            $ph       = implode(',', array_fill(0, count($filter->feedCategories), '?'));
-            $sql[]    = ' AND f.category IN (' . $ph . ')';
-            $params   = array_merge($params, $filter->feedCategories);
+            $frag = $this->feedSqlCategoryInclusionClause($filter->feedCategories);
+            if ($frag['sql'] !== '') {
+                $sql[]  = ' AND (' . $frag['sql'] . ')';
+                $params = array_merge($params, $frag['params']);
+            }
         }
         if ($filter->feedCategories === [] && $filter->excludedFeedCategories !== []) {
-            $ph     = implode(',', array_fill(0, count($filter->excludedFeedCategories), '?'));
-            $sql[]  = ' AND (f.category IS NULL OR f.category NOT IN (' . $ph . '))';
-            $params = array_merge($params, $filter->excludedFeedCategories);
+            $frag = $this->feedSqlCategoryExclusionClause($filter->excludedFeedCategories);
+            if ($frag['sql'] !== '') {
+                $sql[]  = $frag['sql'];
+                $params = array_merge($params, $frag['params']);
+            }
         }
         if ($filter->feedSourceKinds !== []) {
             $frag = $this->feedSqlSourceKindOrClause($filter->feedSourceKinds);
@@ -1356,6 +1494,69 @@ final class EntryRepository
         return ['sql' => implode(' OR ', $parts), 'params' => $params];
     }
 
+    /**
+     * @param array<string, mixed> $data Raw feed row merged into `wrapFeedItem()['data']`.
+     * @param list<string>         $included Category strings plus `sc:<id>` / `sf:<feedId>` tokens.
+     */
+    private function feedItemMatchesFeedCategoryInclusions(array $data, array $included): bool
+    {
+        $p = self::partitionFeedCategoryTokens($included);
+        if ($p['plain'] === [] && $p['sc_ids'] === [] && $p['sf_ids'] === [] && !$p['legacy_scraper_bucket']) {
+            return false;
+        }
+        $cat = (string)($data['feed_category'] ?? '');
+        if ($p['plain'] !== [] && $cat !== '' && in_array($cat, $p['plain'], true)) {
+            return true;
+        }
+        $scId = (int)($data['scraper_config_id'] ?? 0);
+        if ($scId > 0 && in_array($scId, $p['sc_ids'], true)) {
+            return true;
+        }
+        $fid = (int)($data['feed_id'] ?? 0);
+        if ($fid > 0 && in_array($fid, $p['sf_ids'], true)) {
+            return true;
+        }
+
+        return $p['legacy_scraper_bucket'] && $this->feedItemIsScraperBucket($data);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @param list<string>         $excluded
+     */
+    private function feedItemExcludedByFeedCategories(array $data, array $excluded): bool
+    {
+        $p = self::partitionFeedCategoryTokens($excluded);
+        if ($p['legacy_scraper_bucket'] && $this->feedItemIsScraperBucket($data)) {
+            return true;
+        }
+        $cat = (string)($data['feed_category'] ?? '');
+        if ($p['plain'] !== [] && $cat !== '' && in_array($cat, $p['plain'], true)) {
+            return true;
+        }
+        $scId = (int)($data['scraper_config_id'] ?? 0);
+        if ($scId > 0 && in_array($scId, $p['sc_ids'], true)) {
+            return true;
+        }
+        $fid = (int)($data['feed_id'] ?? 0);
+
+        return $fid > 0 && in_array($fid, $p['sf_ids'], true);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function feedItemIsScraperBucket(array $data): bool
+    {
+        $st  = (string)($data['feed_source_type'] ?? '');
+        $cat = (string)($data['feed_category'] ?? '');
+        if ($st === 'scraper' || $cat === 'scraper') {
+            return true;
+        }
+
+        return (int)($data['scraper_config_id'] ?? 0) > 0;
+    }
+
     private function itemMatchesTimelineFilter(array $item, TimelineFilter $filter): bool
     {
         $et = (string)($item['entry_type'] ?? '');
@@ -1370,13 +1571,12 @@ final class EntryRepository
         }
 
         if ($filter->feedCategories !== [] && $et === 'feed_item') {
-            if (!in_array((string)($data['feed_category'] ?? ''), $filter->feedCategories, true)) {
+            if (!$this->feedItemMatchesFeedCategoryInclusions($data, $filter->feedCategories)) {
                 return false;
             }
         }
         if ($filter->feedCategories === [] && $filter->excludedFeedCategories !== [] && $et === 'feed_item') {
-            $cat = (string)($data['feed_category'] ?? '');
-            if ($cat !== '' && in_array($cat, $filter->excludedFeedCategories, true)) {
+            if ($this->feedItemExcludedByFeedCategories($data, $filter->excludedFeedCategories)) {
                 return false;
             }
         }
@@ -1423,16 +1623,17 @@ final class EntryRepository
      */
     private function feedItemMatchesSourceKindFilters(array $data, array $kinds): bool
     {
-        $st  = (string)($data['feed_source_type'] ?? '');
-        $cat = (string)($data['feed_category'] ?? '');
+        $st    = (string)($data['feed_source_type'] ?? '');
+        $cat   = (string)($data['feed_category'] ?? '');
+        $cfgId = (int)($data['scraper_config_id'] ?? 0);
         foreach ($kinds as $kind) {
             if ($kind === 'substack' && $st === 'substack') {
                 return true;
             }
-            if ($kind === 'scraper' && ($st === 'scraper' || $cat === 'scraper')) {
+            if ($kind === 'scraper' && ($st === 'scraper' || $cat === 'scraper' || $cfgId > 0)) {
                 return true;
             }
-            if ($kind === 'rss' && $st !== 'substack' && $st !== 'scraper' && $cat !== 'scraper') {
+            if ($kind === 'rss' && $st !== 'substack' && $st !== 'scraper' && $cat !== 'scraper' && $cfgId === 0) {
                 return true;
             }
         }
@@ -1443,8 +1644,13 @@ final class EntryRepository
     /**
      * Distinct values for dashboard tag pills (bounded).
      *
+     * `feed_categories` lists checkbox **values**: normal `feeds.category` strings,
+     * plus `sc:<scraper_config.id>` and `sf:<feeds.id>` for scraper-backed sources
+     * (the literal category `scraper` is never returned — use per-source tokens).
+     *
      * @return array{
      *   feed_categories: list<string>,
+     *   feed_category_labels: array<string, string>,
      *   lex_sources: list<string>,
      *   email_tags: list<string>,
      * }
@@ -1452,16 +1658,98 @@ final class EntryRepository
     public function getFilterPillOptions(): array
     {
         $cats = $this->selectDistinctFeedCategories();
+        $cats = array_values(array_filter($cats, static fn (string $c): bool => $c !== 'scraper'));
         if ($this->hasActiveParlPressFeeds() && !in_array('parl_mm', $cats, true)) {
             $cats[] = 'parl_mm';
             sort($cats);
         }
 
+        $labels = [];
+        foreach ($cats as $c) {
+            $labels[$c] = $c;
+        }
+        $tokens = $cats;
+        foreach ($this->selectScraperConfigFilterEntries() as $row) {
+            $tokens[]            = $row['token'];
+            $labels[$row['token']] = $row['label'];
+        }
+        foreach ($this->selectOrphanScraperFeedEntries() as $row) {
+            $tokens[]            = $row['token'];
+            $labels[$row['token']] = $row['label'];
+        }
+
         return [
-            'feed_categories' => $cats,
-            'lex_sources'     => $this->selectDistinctLexSources(),
-            'email_tags'      => $this->selectDistinctEmailTags(),
+            'feed_categories'      => $tokens,
+            'feed_category_labels' => $labels,
+            'lex_sources'          => $this->selectDistinctLexSources(),
+            'email_tags'           => $this->selectDistinctEmailTags(),
         ];
+    }
+
+    /**
+     * @return list<array{token: string, label: string}>
+     */
+    private function selectScraperConfigFilterEntries(): array
+    {
+        $t   = entryTable('scraper_configs');
+        $sql = 'SELECT id,
+                       TRIM(COALESCE(NULLIF(name, \'\'), CONCAT(\'Scraper \', id))) AS display_label
+                FROM ' . $t . '
+                WHERE IFNULL(disabled, 0) = 0
+                ORDER BY display_label ASC
+                LIMIT 50';
+        $rows = $this->selectOrEmpty($sql);
+        $out  = [];
+        foreach ($rows as $r) {
+            $id = (int)($r['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $label = trim((string)($r['display_label'] ?? ''));
+            if ($label === '') {
+                $label = 'Scraper ' . $id;
+            }
+            $out[] = ['token' => 'sc:' . $id, 'label' => $label];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Scraper-type feeds with no matching `scraper_configs` row (same URL).
+     *
+     * @return list<array{token: string, label: string}>
+     */
+    private function selectOrphanScraperFeedEntries(): array
+    {
+        $f  = entryTable('feeds');
+        $sc = entryTable('scraper_configs');
+        $sql = 'SELECT f.id,
+                       TRIM(COALESCE(NULLIF(f.title, \'\'), CONCAT(\'Feed \', f.id))) AS display_label
+                FROM ' . $f . ' f
+                WHERE f.disabled = 0
+                  AND (f.source_type = \'scraper\' OR IFNULL(f.category, \'\') = \'scraper\')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ' . $sc . ' sc
+                      WHERE sc.url = f.url AND IFNULL(sc.disabled, 0) = 0
+                  )
+                ORDER BY display_label ASC
+                LIMIT 50';
+        $rows = $this->selectOrEmpty($sql);
+        $out  = [];
+        foreach ($rows as $r) {
+            $id = (int)($r['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $label = trim((string)($r['display_label'] ?? ''));
+            if ($label === '') {
+                $label = 'Feed ' . $id;
+            }
+            $out[] = ['token' => 'sf:' . $id, 'label' => $label];
+        }
+
+        return $out;
     }
 
     private function hasActiveParlPressFeeds(): bool

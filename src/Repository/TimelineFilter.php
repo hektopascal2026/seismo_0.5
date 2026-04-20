@@ -8,8 +8,9 @@ namespace Seismo\Repository;
  * Dashboard tag-filter state. Default = show everything (no query params).
  *
  * **Native form (preferred):** `TimelineFilter::fromHttpGet()` reads
- * `filters[feed][]`, `filters[lex][]`, `filters[email][]`, `filters[calendar]=1`
- * (Leg), `filters[jus]=1` (Jus), plus `filter_form=1` when the filter form
+ * `filters[feed][]` (normal `feeds.category` strings plus `sc:<scraper_config.id>`
+ * and `sf:<feeds.id>` scraper tokens), `filters[lex][]`, `filters[email][]`,
+ * `filters[calendar]=1` (Leg), `filters[jus]=1` (Jus), plus `filter_form=1` when the filter form
  * submitted so “all checkboxes off in a row” is not confused with the default
  * “all on” first visit. `none=1` means every dimension off (empty timeline).
  *

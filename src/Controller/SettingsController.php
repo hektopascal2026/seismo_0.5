@@ -41,13 +41,14 @@ final class SettingsController
         if ($tab === 'satellites') {
             $tab = 'satellite';
         }
-        if (!in_array($tab, ['general', 'magnitu', 'retention', 'satellite'], true)) {
-            $tab = 'general';
-        }
 
-        if ($tab === 'satellite' && isSatellite()) {
-            header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
-            exit;
+        if (isSatellite()) {
+            if (!in_array($tab, ['general', 'magnitu'], true)) {
+                header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
+                exit;
+            }
+        } elseif (!in_array($tab, ['general', 'magnitu', 'retention', 'satellite'], true)) {
+            $tab = 'general';
         }
 
         $csrfField = CsrfToken::field();
