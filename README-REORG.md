@@ -13,7 +13,7 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 **Why.** After Slice 9, numbered feature work in this repo arc is complete, but `README.md` still read “mid-consolidation” and `docs/consolidation-plan.md` **Open decisions** still listed email schema unification as if Slice 4 had not shipped.
 
-**What moved.** `README.md` — quick start (PHP/DB, config / `?action=setup`, migrate, health), useful URL table, repository sketch, Magnitu/export pointer, Composer/`vendor` reminder. `docs/consolidation-plan.md` — Slice 10 subsection, **Consolidation arc** capstone (Slice 10 doc-only; no Slice 11 defined here), **Open decisions** email bullet marked **resolved (Slice 4)**.
+**What moved.** `README.md` — first **full product README** (features, requirements, quick start, cron, Magnitu/export summary, layout, testing); **Magnitu** is described as a sibling Python checkout with in-repo contract docs — no placeholder GitHub URL until a canonical public repo is published. `docs/consolidation-plan.md` — Slice 10 subsection, **Consolidation arc** capstone (Slice 10 doc-only; no Slice 11 defined here), **Open decisions** email bullet marked **resolved (Slice 4)**.
 
 **New wiring.** None — documentation only.
 

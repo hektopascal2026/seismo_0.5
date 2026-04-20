@@ -274,7 +274,7 @@ The "last-mile polish" slice. Closes three small ergonomics gaps (dashboard refr
 
 **What.**
 
-- **`README.md`** — Adds a concise **Quick start** (PHP, extensions, config, migrate, health), **Useful URLs**, and a **Repository layout** sketch so a new developer or host operator can orient in one screen. Keeps `README-REORG.md` as the migration log pointer.
+- **`README.md`** — Evolved into the **primary onboarding / product README** (overview, feature matrix, requirements, quick start, cron, Magnitu/export summary, directory map, testing). **`README-REORG.md`** stays the **0.4 → 0.5 migration log**, linked from a short end section — not the narrative centre of `README.md`.
 - **`docs/consolidation-plan.md`** — This subsection + **Consolidation arc** update; **Open decisions** scrub: email schema unification marked resolved (Slice 4); remaining bullets are genuinely open product follow-ups.
 
 **Explicitly out of Slice 10:** new routes, schema, or Magnitu/export contract changes; rewriting `views/about.php`; duplicating slice-by-slice prose from `README-REORG.md` into `README.md`.
