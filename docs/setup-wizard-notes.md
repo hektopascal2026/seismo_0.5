@@ -88,3 +88,10 @@ On an empty database, migration applies `docs/db-schema.sql` and sets `schema_ve
 
 - Wizard lands on retention defaults (`feed_items` 180d, `emails` 180d, `lex_items` unlimited, `calendar_events` unlimited). Shows current row counts and a dry-run preview of what would be deleted. No pruning runs until the user explicitly opts in.
 - Flag that Magnitu-labelled rows are always preserved — important for users who've already started training.
+
+### Slice 9 — setup stub (`?action=setup`) + bootstrap gate
+
+- **Missing `config.local.php`:** For any web request **except** `?action=setup`, `bootstrap.php` still returns **503** with plain text. For `?action=setup` only, bootstrap skips `require` of the missing file and defines placeholder `DB_*` constants so Composer + the `Seismo\*` autoloader can load — **never call `getDbConnection()` in that mode** (empty `DB_NAME` until the wizard writes a real file).
+- **PDO test** happens inside `SetupController::handlePost()` before any write. **Write path:** if the install root is not writable (or `file_put_contents` fails), the UI shows a **copy-and-paste** block; we never suggest `chmod 0777` and never stash secrets under `/tmp`.
+- **Clipboard safety:** the generated PHP must not be passed through `htmlspecialchars` for display inside a `<pre>` — that would corrupt `<?php` for copy/paste. `views/setup.php` assigns the textarea from `json_encode` in a `<script>` block instead.
+- **Auth:** `AuthGate` allows `setup` without a logged-in session **only** while `config.local.php` is absent. Once the file exists, `setup` follows normal session rules (login required when `SEISMO_ADMIN_PASSWORD_HASH` is set).

@@ -46,6 +46,16 @@ $router->register(
     true
 );
 $router->register(
+    'about',
+    \Seismo\Controller\AboutController::class . '::show',
+    true
+);
+$router->register(
+    'setup',
+    \Seismo\Controller\SetupController::class . '::show',
+    true
+);
+$router->register(
     'migrate',
     \Seismo\Controller\MigrateController::class . '::runWeb',
     true
@@ -310,6 +320,9 @@ $action = $__action;
 // REQUEST_METHOD), so overlay the handler only on POST.
 if ($action === 'login' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $router->register('login', \Seismo\Controller\AuthController::class . '::handleLogin', false);
+}
+if ($action === 'setup' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $router->register('setup', \Seismo\Controller\SetupController::class . '::handlePost', false);
 }
 
 // Dormant-by-default auth gate — runs before dispatch. When

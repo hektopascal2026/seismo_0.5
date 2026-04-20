@@ -33,16 +33,34 @@ date_default_timezone_set('UTC');
 // 1. Local credentials
 // ---------------------------------------------------------------------------
 $__seismoLocalConfig = __DIR__ . '/config.local.php';
-if (!file_exists($__seismoLocalConfig)) {
+$__webAction         = isset($_GET['action']) && is_string($_GET['action']) ? $_GET['action'] : '';
+$__setupWithoutFile  = PHP_SAPI !== 'cli'
+    && $__webAction === 'setup'
+    && !is_file($__seismoLocalConfig);
+
+if (!is_file($__seismoLocalConfig)) {
     if (PHP_SAPI === 'cli') {
         fwrite(STDERR, "Missing config.local.php — copy config.local.php.example and fill in your database credentials.\n");
         exit(1);
     }
-    http_response_code(503);
-    die('Missing config.local.php — copy config.local.php.example and fill in your database credentials.');
+    if (!$__setupWithoutFile) {
+        http_response_code(503);
+        header('Content-Type: text/plain; charset=utf-8');
+        die(
+            "Missing config.local.php — copy config.local.php.example and fill in your database credentials.\n\n"
+            . "First-time install: open index.php?action=setup in your browser to generate a starter file and test the database (Slice 9 setup stub).\n"
+        );
+    }
+    // Web `?action=setup` with no local config yet — placeholders only until
+    // SetupController writes a real file. Do not call getDbConnection() in this mode.
+    define('DB_HOST', 'localhost');
+    define('DB_NAME', '');
+    define('DB_USER', '');
+    define('DB_PASS', '');
+} else {
+    require $__seismoLocalConfig;
 }
-require $__seismoLocalConfig;
-unset($__seismoLocalConfig);
+unset($__seismoLocalConfig, $__webAction, $__setupWithoutFile);
 
 // Optional DB port — omit in config.local.php to use the driver default (3306).
 if (!defined('DB_PORT')) {

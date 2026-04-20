@@ -243,7 +243,7 @@ Port 0.4.4's **Module-owned management UI** pattern. Each content module keeps i
 
 **Definition of done:** from a fresh browser session, an admin can land on `?action=feeds`, `?action=scraper`, or `?action=mail`, switch to the management view via the inline toggle, and add / edit / delete a row without leaving that page. Settings page carries **no** source-management links. Repository tests for `EmailSubscriptionRepository` prove domain-first matching (`@example.com` matches `alice@example.com`) and satellite-write refusal.
 
-### Slice 9 — Refresh button, About page, setup-wizard prep, `ai_view` retirement
+### Slice 9 — Refresh button, About page, setup-wizard prep, `ai_view` retirement **(shipped)**
 
 The "last-mile polish" slice. Closes three small ergonomics gaps (dashboard refresh, in-app About, AI-view forwarding note) and puts the **defensive** setup wizard on paper so the first-run experience on shared hosts is honest.
 
@@ -304,7 +304,7 @@ Revisit a templating engine only if real pain emerges (duplicated markup, escapi
 
 - **Per-feed full-text backfill** — when to add "readability" / scraper fetch for thin RSS items (see Fetcher output contract). Product/settings decision once Slice 3 feed settings exist.
 - **Email schema unification** — exact column mapping from `emails` → unified structure. Needs a migration draft before Slice 4.
-- **`ai_view`** — resolved in **Slice 9**: not ported. `views/about.php` points users to the Slice 5 export API (`?action=export_briefing`, `export:api_key`) as the official replacement.
+- **`ai_view`** — **resolved (Slice 9 shipped).** Not ported in 0.5. `views/about.php` documents the official replacement: read-only export API (`?action=export_briefing` / `export_entries`, Bearer key `export:api_key` in `system_config`).
 - **Magnitu Leg API** — when (or whether) to lift the `calendar_event` exclusion. Product decision, not technical.
 
 ## Machine-readable export — forward-compat shape

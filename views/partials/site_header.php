@@ -5,7 +5,7 @@
  * @var string $basePath
  * @var string $headerTitle
  * @var string|null $headerSubtitle
- * @var string $activeNav index|magnitu|feeds|scraper|mail|lex|leg|diagnostics|settings|styleguide
+ * @var string $activeNav index|about|magnitu|feeds|scraper|mail|lex|leg|diagnostics|settings|styleguide
  * @var string $csrfField
  */
 
@@ -32,6 +32,13 @@ $activeNav = $activeNav ?? 'index';
                 <?php endif; ?>
             </div>
             <div class="top-bar-actions">
+                <?php if (!empty($showTimelineRefresh) && $activeNav === 'index'): ?>
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_all" style="display:inline; margin:0 8px 0 0;">
+                        <?= $csrfField ?>
+                        <input type="hidden" name="return_action" value="index">
+                        <button type="submit" class="top-bar-btn" title="Fetch all sources (same as Diagnostics → Refresh all)" style="width:auto; padding:0 10px; font-size:14px;">Refresh</button>
+                    </form>
+                <?php endif; ?>
                 <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
                     <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" style="display:inline; margin:0;">
                         <?= $csrfField ?>
@@ -43,6 +50,7 @@ $activeNav = $activeNav ?? 'index';
 
         <nav id="seismo-nav-drawer" class="nav-drawer" aria-label="Main navigation" aria-hidden="true">
             <a href="<?= e($basePath) ?>/index.php?action=index" class="nav-link<?= $activeNav === 'index' ? ' active' : '' ?>">Timeline</a>
+            <a href="<?= e($basePath) ?>/index.php?action=about" class="nav-link<?= $activeNav === 'about' ? ' active' : '' ?>">About</a>
             <a href="<?= e($basePath) ?>/index.php?action=magnitu" class="nav-link<?= $activeNav === 'magnitu' ? ' active' : '' ?>">Highlights</a>
             <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>
             <a href="<?= e($basePath) ?>/index.php?action=scraper" class="nav-link<?= $activeNav === 'scraper' ? ' active' : '' ?>">Scraper</a>
@@ -50,6 +58,7 @@ $activeNav = $activeNav ?? 'index';
             <a href="<?= e($basePath) ?>/index.php?action=lex" class="nav-link<?= $activeNav === 'lex' ? ' active' : '' ?>">Lex</a>
             <a href="<?= e($basePath) ?>/index.php?action=leg" class="nav-link<?= $activeNav === 'leg' ? ' active' : '' ?>">Leg</a>
             <a href="<?= e($basePath) ?>/index.php?action=diagnostics" class="nav-link<?= $activeNav === 'diagnostics' ? ' active' : '' ?>">Diagnostics</a>
+            <a href="<?= e($basePath) ?>/index.php?action=setup" class="nav-link<?= $activeNav === 'setup' ? ' active' : '' ?>">Setup</a>
             <a href="<?= e($basePath) ?>/index.php?action=settings" class="nav-link<?= $activeNav === 'settings' ? ' active' : '' ?>">Settings</a>
             <a href="<?= e($basePath) ?>/index.php?action=styleguide" class="nav-link<?= $activeNav === 'styleguide' ? ' active' : '' ?>">Styleguide</a>
         </nav>

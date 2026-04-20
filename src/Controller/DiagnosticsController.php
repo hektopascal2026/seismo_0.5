@@ -132,7 +132,7 @@ final class DiagnosticsController
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics refresh_all: ' . $e->getMessage());
             $_SESSION['error'] = 'Refresh all failed: ' . $e->getMessage();
-            $this->redirectToDiagnostics();
+            $this->redirectAfterRefresh();
 
             return;
         }
@@ -156,7 +156,7 @@ final class DiagnosticsController
             count($results) - $okCount - $errCount
         );
 
-        $this->redirectToDiagnostics();
+        $this->redirectAfterRefresh();
     }
 
     public function refreshPlugin(): void
@@ -238,18 +238,41 @@ final class DiagnosticsController
     private function guardPost(): bool
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToDiagnostics();
+            $this->redirectToTarget($this->resolvePostReturnTarget());
 
             return false;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToDiagnostics();
+            $this->redirectToTarget($this->resolvePostReturnTarget());
 
             return false;
         }
 
         return true;
+    }
+
+    /**
+     * After `refresh_all`, honour optional `return_action` from the POST body
+     * (dashboard “Refresh” posts `index`; Diagnostics omits the field).
+     */
+    private function redirectAfterRefresh(): void
+    {
+        $this->redirectToTarget($this->resolvePostReturnTarget());
+    }
+
+    private function resolvePostReturnTarget(): string
+    {
+        $t = trim((string)($_POST['return_action'] ?? ''));
+
+        return $t === 'index' ? 'index' : 'diagnostics';
+    }
+
+    private function redirectToTarget(string $action): void
+    {
+        $a = $action === 'index' ? 'index' : 'diagnostics';
+        header('Location: ' . getBasePath() . '/index.php?action=' . rawurlencode($a), true, 303);
+        exit;
     }
 
     private function redirectToDiagnostics(): void

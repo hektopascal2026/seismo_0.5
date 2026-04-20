@@ -5,7 +5,25 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 - Entries are **newest on top**.
 - Every entry follows the same four-part shape: **Why**, **What moved**, **New wiring**, **Gotchas**.
 - References use **file paths**, not line numbers (they drift).
-- Companion doc for users (in-app about page, `views/about.php`) is left alone until the consolidation is done — see `.cursor/rules/documentation-strategy.mdc`.
+- In-app About (`views/about.php`) ships in **Slice 9** (user-facing product copy). A final prose-only polish pass may still happen at consolidation close per `documentation-strategy.mdc`.
+
+---
+
+## Slice 9 — Dashboard refresh, About, setup stub, `ai_view` retirement
+
+**Why.** Operators needed a one-click refresh from the Timeline, an in-app explanation of sources and exports for non-developers, and an honest first-run path when `config.local.php` cannot be written by PHP. The 0.4 “AI view” must not disappear without a documented replacement.
+
+**What moved.** `views/partials/site_header.php` — Timeline **Refresh** POSTs to `?action=refresh_all` with CSRF + hidden `return_action=index` (only when `$showTimelineRefresh` is set from `DashboardController::show()`). `DiagnosticsController::refreshAll()` / shared POST guard redirect to `index` when that field is present, else Diagnostics. `AboutController` + `views/about.php` + `?action=about` + drawer link. `SetupController` + `views/setup.php` + `?action=setup` (GET read-only handler + POST overlay in `index.php` like `login`). `bootstrap.php` — missing `config.local.php` on **web** `?action=setup` only: define placeholder `DB_*`, skip `require`; other missing-config requests stay **503** with a pointer to `?action=setup`. `AuthGate::check()` — allow `setup` without session login **only** while the local config file is absent. `docs/consolidation-plan.md` — `ai_view` open decision marked resolved. `docs/setup-wizard-notes.md` — Slice 9 operational notes appended.
+
+**New wiring.** `GET ?action=about` → `AboutController::show()`. `GET ?action=setup` → `SetupController::show()`; `POST ?action=setup` → `SetupController::handlePost()` (CSRF, PDO test, `file_put_contents` or copy-paste + Health link). Successful write → **303** to `?action=health`.
+
+**Test URLs.**
+
+- `?action=index` — **Refresh** in the top bar POSTs `refresh_all` with CSRF; expect a success flash on return to the Timeline (same behaviour as Diagnostics “Refresh all”, including satellite skip semantics).
+- `?action=about` — product overview + export API as **0.4 AI view** replacement.
+- `?action=setup` — on a clone with `config.local.php` removed/renamed, form loads; submit valid DB credentials → green connection line, then either file written or copy-paste + **Health** link; never silent failure.
+
+**Gotchas.** The setup stub is **not** the full multi-step wizard (deferred). When session auth is **off**, anyone who can reach `?action=setup` can attempt DB probes or overwrite `config.local.php` — treat as trusted-local only; turn auth on after first boot if the URL is exposed. Do not HTML-escape the generated config body into a `<pre>` for copy — the view uses JSON → `<textarea>` so clipboard bytes stay valid PHP.
 
 ---
 

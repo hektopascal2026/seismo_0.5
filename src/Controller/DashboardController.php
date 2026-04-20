@@ -76,9 +76,10 @@ final class DashboardController
 
         require_once SEISMO_ROOT . '/views/helpers.php';
 
-        $showDaySeparators = true;
-        $showFavourites    = true;
-        $returnQuery       = $this->buildReturnQuery();
+        $showDaySeparators   = true;
+        $showFavourites      = true;
+        $showTimelineRefresh = true;
+        $returnQuery         = $this->buildReturnQuery();
 
         $emptyTimelineHint = 'default';
         if ($dashboardError === null) {
