@@ -320,7 +320,7 @@ Retention run : refresh_cron.php
 | Feeds persistence | `Seismo\Repository\FeedItemRepository` — transactional `upsertFeedItems`, `prune()` stub (180d policy lands with RetentionService). |
 | `RefreshAllService::boot()` | Injects `CoreRunner` + `FeedItemRepository` + shared `PluginRunLogRepository`. |
 | Diagnostics | `views/diagnostics.php` — “Core fetchers” block above plugins; same `plugin_run_log` read model. |
-| Dashboard filters | `Seismo\Repository\TimelineFilter` + GET params `fc`, `fk`, `lx`, `etag`, `nocal`. `EntryRepository` applies SQL filters per family; favourites view filters hydrated rows in PHP. `FavouriteController` whitelist extended for filter params. |
+| Dashboard filters | `Seismo\Repository\TimelineFilter` + GET params `fc`, `fk`, `lx`, `etag`. `EntryRepository` applies SQL filters per family; favourites view filters hydrated rows in PHP. `FavouriteController` whitelist extended for filter params. |
 | Composer | `simplepie/simplepie` (^1.9). |
 
 **Gotchas.**
@@ -333,7 +333,7 @@ Retention run : refresh_cron.php
 
 - `?action=migrate&key=…` — expect schema **19** after deploy.
 - `?action=diagnostics` — Core fetchers block + plugins; Refresh all runs core + plugins.
-- `?action=index&fk=substack&nocal=1` — filter pills + Leg hidden from merged timeline.
+- `?action=index&fk=substack` — feed-type filter pills on the merged timeline (Leg always included).
 - CLI: `php refresh_cron.php` — stdout includes `core:rss` / `core:parl_press` / `core:scraper` / `core:mail` lines.
 
 ---

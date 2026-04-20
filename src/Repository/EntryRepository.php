@@ -110,10 +110,8 @@ final class EntryRepository
         foreach ($this->fetchLexItems($perSource, $f) as $row) {
             $items[] = $this->wrapLexItem($row);
         }
-        if ($f === null || $f->includeCalendar) {
-            foreach ($this->fetchCalendarEvents($perSource) as $row) {
-                $items[] = $this->wrapCalendarEvent($row);
-            }
+        foreach ($this->fetchCalendarEvents($perSource) as $row) {
+            $items[] = $this->wrapCalendarEvent($row);
         }
 
         $this->attachScores($items);
@@ -153,10 +151,8 @@ final class EntryRepository
         foreach ($this->fetchLexItemsSearch($term, $perSource, $f) as $row) {
             $items[] = $this->wrapLexItem($row);
         }
-        if ($f === null || $f->includeCalendar) {
-            foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
-                $items[] = $this->wrapCalendarEvent($row);
-            }
+        foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
+            $items[] = $this->wrapCalendarEvent($row);
         }
 
         $this->attachScores($items);
@@ -379,10 +375,8 @@ final class EntryRepository
         foreach ($this->fetchLexRowsByIds($byType['lex_item']) as $row) {
             $items[] = $this->wrapLexItem($row);
         }
-        if ($filter === null || $filter->includeCalendar) {
-            foreach ($this->fetchCalendarRowsByIds($byType['calendar_event']) as $row) {
-                $items[] = $this->wrapCalendarEvent($row);
-            }
+        foreach ($this->fetchCalendarRowsByIds($byType['calendar_event']) as $row) {
+            $items[] = $this->wrapCalendarEvent($row);
         }
 
         foreach ($items as &$it) {
@@ -1234,9 +1228,6 @@ final class EntryRepository
     {
         $et = (string)($item['entry_type'] ?? '');
 
-        if (!$filter->includeCalendar && $et === 'calendar_event') {
-            return false;
-        }
         $data = $item['data'] ?? [];
         if (!is_array($data)) {
             $data = [];

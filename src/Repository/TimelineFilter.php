@@ -14,7 +14,6 @@ final class TimelineFilter
      * @param list<string> $lexSources Lex `source` values (e.g. ch, eu, fr).
      */
     public function __construct(
-        public readonly bool $includeCalendar = true,
         public readonly ?string $feedCategory = null,
         public readonly ?string $feedSourceKind = null,
         public readonly array $lexSources = [],
@@ -24,8 +23,7 @@ final class TimelineFilter
 
     public function isActive(): bool
     {
-        return !$this->includeCalendar
-            || $this->feedCategory !== null
+        return $this->feedCategory !== null
             || $this->feedSourceKind !== null
             || $this->lexSources !== []
             || $this->emailTag !== null;
@@ -36,8 +34,7 @@ final class TimelineFilter
      */
     public static function fromQueryArray(array $get): self
     {
-        $nocal = isset($get['nocal']) && (string)$get['nocal'] === '1';
-        $fc    = isset($get['fc']) ? trim((string)$get['fc']) : '';
+        $fc = isset($get['fc']) ? trim((string)$get['fc']) : '';
         $fk    = isset($get['fk']) ? trim((string)$get['fk']) : '';
         $lx    = isset($get['lx']) ? trim((string)$get['lx']) : '';
         $etag  = isset($get['etag']) ? trim((string)$get['etag']) : '';
@@ -58,7 +55,6 @@ final class TimelineFilter
         }
 
         return new self(
-            includeCalendar: !$nocal,
             feedCategory: $fc !== '' ? $fc : null,
             feedSourceKind: $fkNorm,
             lexSources: $lexList,

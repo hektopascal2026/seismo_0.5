@@ -123,20 +123,16 @@ $clearSearchQs = http_build_query($clearSearchParams);
                 $fc = isset($_GET['fc']) ? (string)$_GET['fc'] : '';
                 $lx = isset($_GET['lx']) ? (string)$_GET['lx'] : '';
                 $etag = isset($_GET['etag']) ? (string)$_GET['etag'] : '';
-                $nocal = isset($_GET['nocal']) && (string)$_GET['nocal'] === '1';
             ?>
             <div class="tag-pills-section" style="margin-top: 1rem;">
                 <div style="opacity: 0.85; margin-bottom: 0.35rem;">Filters:</div>
                 <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;">
-                    <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'nocal' => null])) ?>" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Clear filters</a>
+                    <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null])) ?>" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Clear filters</a>
                     <span style="opacity: 0.7;">|</span>
                     <span style="opacity: 0.75;">Feed type:</span>
                     <a href="?<?= e($dashboardQs(['fk' => 'rss'])) ?>" class="btn <?= $fk === 'rss' ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">RSS</a>
                     <a href="?<?= e($dashboardQs(['fk' => 'substack'])) ?>" class="btn <?= $fk === 'substack' ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Substack</a>
                     <a href="?<?= e($dashboardQs(['fk' => 'scraper'])) ?>" class="btn <?= $fk === 'scraper' ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Scraper</a>
-                    <span style="opacity: 0.7;">|</span>
-                    <span style="opacity: 0.75;">Leg in timeline:</span>
-                    <a href="?<?= e($dashboardQs(['nocal' => $nocal ? null : '1'])) ?>" class="btn <?= $nocal ? 'btn-secondary' : 'btn-primary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;"><?= $nocal ? 'Off' : 'On' ?></a>
                 </div>
                 <?php if ($filterPillOptions['feed_categories'] !== []): ?>
                 <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.5rem;">
@@ -184,7 +180,7 @@ $clearSearchQs = http_build_query($clearSearchParams);
                     <?php elseif ($emptyTimelineHint === 'search'): ?>
                         <p>No entries match your search. Try different words or <a href="?action=index">clear the query</a>.</p>
                     <?php elseif ($emptyTimelineHint === 'filters'): ?>
-                        <p>No entries match the current filters. <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'nocal' => null])) ?>">Clear filters</a> or widen the selection.</p>
+                        <p>No entries match the current filters. <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null])) ?>">Clear filters</a> or widen the selection.</p>
                     <?php else: ?>
                         <p>No entries yet. Run <code>?action=migrate</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
                     <?php endif; ?>
