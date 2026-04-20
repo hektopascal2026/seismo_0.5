@@ -101,14 +101,17 @@ final class EntryRepository
         $f        = $filter;
 
         $items = [];
-        foreach ($this->fetchFeedItems($perSource, $f) as $row) {
-            $items[] = $this->wrapFeedItem($row);
-        }
-        foreach ($this->fetchEmails($perSource, $f) as $row) {
-            $items[] = $this->wrapEmail($row);
-        }
-        foreach ($this->fetchLexItems($perSource, $f) as $row) {
-            $items[] = $this->wrapLexItem($row);
+        $calOnly = $f !== null && $f->calendarOnly;
+        if (!$calOnly) {
+            foreach ($this->fetchFeedItems($perSource, $f) as $row) {
+                $items[] = $this->wrapFeedItem($row);
+            }
+            foreach ($this->fetchEmails($perSource, $f) as $row) {
+                $items[] = $this->wrapEmail($row);
+            }
+            foreach ($this->fetchLexItems($perSource, $f) as $row) {
+                $items[] = $this->wrapLexItem($row);
+            }
         }
         foreach ($this->fetchCalendarEvents($perSource) as $row) {
             $items[] = $this->wrapCalendarEvent($row);
@@ -142,14 +145,17 @@ final class EntryRepository
         $f    = $filter;
 
         $items = [];
-        foreach ($this->fetchFeedItemsSearch($term, $perSource, $f) as $row) {
-            $items[] = $this->wrapFeedItem($row);
-        }
-        foreach ($this->searchEmailRows($term, $perSource, $f) as $row) {
-            $items[] = $this->wrapEmail($row);
-        }
-        foreach ($this->fetchLexItemsSearch($term, $perSource, $f) as $row) {
-            $items[] = $this->wrapLexItem($row);
+        $calOnly = $f !== null && $f->calendarOnly;
+        if (!$calOnly) {
+            foreach ($this->fetchFeedItemsSearch($term, $perSource, $f) as $row) {
+                $items[] = $this->wrapFeedItem($row);
+            }
+            foreach ($this->searchEmailRows($term, $perSource, $f) as $row) {
+                $items[] = $this->wrapEmail($row);
+            }
+            foreach ($this->fetchLexItemsSearch($term, $perSource, $f) as $row) {
+                $items[] = $this->wrapLexItem($row);
+            }
         }
         foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
             $items[] = $this->wrapCalendarEvent($row);
@@ -455,9 +461,9 @@ final class EntryRepository
      */
     private function fetchEmails(int $limit, ?TimelineFilter $filter = null): array
     {
-        $emailTag = $filter !== null && $filter->emailTag !== null && $filter->emailTag !== ''
-            ? $filter->emailTag
-            : null;
+        $emailTags = $filter !== null && $filter->emailTags !== []
+            ? $filter->emailTags
+            : [];
 
         $dateCols = $this->resolveEmailDateColumns('emails');
         if ($dateCols === []) {
@@ -472,17 +478,29 @@ final class EntryRepository
             $orderBy = 'ORDER BY COALESCE(' . $coalesce . ') DESC';
         }
 
-        if ($emailTag !== null) {
-            $sql = 'SELECT e.*, stf.tag AS sender_tag
-                    FROM ' . entryTable('emails') . ' e
-                    INNER JOIN ' . entryTable('sender_tags') . ' stf
-                      ON stf.from_email = e.from_email
-                     AND stf.tag = ?
-                     AND stf.removed_at IS NULL
-                    ' . $orderBy . '
-                    LIMIT ' . (int)$limit;
+        if ($emailTags !== []) {
+            $st   = entryTable('sender_tags');
+            $ph   = implode(',', array_fill(0, count($emailTags), '?'));
+            $sql  = 'SELECT e.*, (
+                    SELECT st0.tag FROM ' . $st . ' st0
+                    WHERE st0.from_email = e.from_email
+                      AND st0.removed_at IS NULL
+                      AND st0.tag IN (' . $ph . ')
+                    ORDER BY st0.tag ASC
+                    LIMIT 1
+                ) AS sender_tag
+                FROM ' . entryTable('emails') . ' e
+                WHERE EXISTS (
+                    SELECT 1 FROM ' . $st . ' stf
+                    WHERE stf.from_email = e.from_email
+                      AND stf.removed_at IS NULL
+                      AND stf.tag IN (' . $ph . ')
+                )
+                ' . $orderBy . '
+                LIMIT ' . (int)$limit;
+            $params = array_merge($emailTags, $emailTags);
 
-            return $this->selectPreparedOrEmpty($sql, [$emailTag]);
+            return $this->selectPreparedOrEmpty($sql, $params);
         }
 
         $sql = 'SELECT e.*, st.tag AS sender_tag
@@ -677,21 +695,32 @@ final class EntryRepository
         $where = '(' . implode(' OR ', $parts) . ')';
         $orderBy = $this->buildEmailOrderByClause('emails');
 
-        $emailTag = $filter !== null && $filter->emailTag !== null && $filter->emailTag !== ''
-            ? $filter->emailTag
-            : null;
+        $emailTags = $filter !== null && $filter->emailTags !== []
+            ? $filter->emailTags
+            : [];
 
-        if ($emailTag !== null) {
-            $sql = 'SELECT e.*, stf.tag AS sender_tag
-                    FROM ' . entryTable('emails') . ' e
-                    INNER JOIN ' . entryTable('sender_tags') . ' stf
-                      ON stf.from_email = e.from_email
-                     AND stf.tag = ?
-                     AND stf.removed_at IS NULL
-                    WHERE ' . $where . '
-                    ' . $orderBy . '
-                    LIMIT ' . (int)$limit;
-            array_unshift($params, $emailTag);
+        if ($emailTags !== []) {
+            $st  = entryTable('sender_tags');
+            $ph  = implode(',', array_fill(0, count($emailTags), '?'));
+            $sql = 'SELECT e.*, (
+                    SELECT st0.tag FROM ' . $st . ' st0
+                    WHERE st0.from_email = e.from_email
+                      AND st0.removed_at IS NULL
+                      AND st0.tag IN (' . $ph . ')
+                    ORDER BY st0.tag ASC
+                    LIMIT 1
+                ) AS sender_tag
+                FROM ' . entryTable('emails') . ' e
+                WHERE EXISTS (
+                    SELECT 1 FROM ' . $st . ' stf
+                    WHERE stf.from_email = e.from_email
+                      AND stf.removed_at IS NULL
+                      AND stf.tag IN (' . $ph . ')
+                )
+                AND ' . $where . '
+                ' . $orderBy . '
+                LIMIT ' . (int)$limit;
+            $params = array_merge($emailTags, $emailTags, $params);
 
             return $this->selectPreparedOrEmpty($sql, $params);
         }
@@ -1204,56 +1233,73 @@ final class EntryRepository
         }
         $sql    = [];
         $params = [];
-        if ($filter->feedCategory !== null && $filter->feedCategory !== '') {
-            $sql[]    = ' AND f.category = ?';
-            $params[] = $filter->feedCategory;
+        if ($filter->feedCategories !== []) {
+            $ph       = implode(',', array_fill(0, count($filter->feedCategories), '?'));
+            $sql[]    = ' AND f.category IN (' . $ph . ')';
+            $params   = array_merge($params, $filter->feedCategories);
         }
-        if ($filter->feedSourceKind === 'substack') {
-            $sql[] = " AND f.source_type = 'substack'";
-        } elseif ($filter->feedSourceKind === 'scraper') {
-            $sc = entryTable('scraper_configs');
-            $sql[] = " AND (f.source_type = 'scraper' OR f.category = 'scraper'
-                OR EXISTS (SELECT 1 FROM {$sc} sc WHERE sc.url = f.url AND sc.disabled = 0))";
-        } elseif ($filter->feedSourceKind === 'rss') {
-            $sc = entryTable('scraper_configs');
-            $sql[] = " AND f.source_type NOT IN ('substack','scraper')
-                AND (f.category IS NULL OR f.category != 'scraper')
-                AND NOT EXISTS (SELECT 1 FROM {$sc} sc WHERE sc.url = f.url AND sc.disabled = 0)";
+        if ($filter->feedSourceKinds !== []) {
+            $frag = $this->feedSqlSourceKindOrClause($filter->feedSourceKinds);
+            if ($frag['sql'] !== '') {
+                $sql[]  = ' AND (' . $frag['sql'] . ')';
+                $params = array_merge($params, $frag['params']);
+            }
         }
 
         return ['sql' => implode('', $sql), 'params' => $params];
+    }
+
+    /**
+     * OR of rss / substack / scraper predicates (multi-select feed type).
+     *
+     * @param list<string> $kinds
+     * @return array{sql: string, params: list<mixed>}
+     */
+    private function feedSqlSourceKindOrClause(array $kinds): array
+    {
+        $parts  = [];
+        $params = [];
+        $sc     = entryTable('scraper_configs');
+        foreach ($kinds as $kind) {
+            if ($kind === 'substack') {
+                $parts[] = "f.source_type = 'substack'";
+            } elseif ($kind === 'scraper') {
+                $parts[] = "(f.source_type = 'scraper' OR f.category = 'scraper'
+                    OR EXISTS (SELECT 1 FROM {$sc} sc WHERE sc.url = f.url AND sc.disabled = 0))";
+            } elseif ($kind === 'rss') {
+                $parts[] = "(f.source_type NOT IN ('substack','scraper')
+                    AND (f.category IS NULL OR f.category != 'scraper')
+                    AND NOT EXISTS (SELECT 1 FROM {$sc} sc WHERE sc.url = f.url AND sc.disabled = 0))";
+            }
+        }
+        if ($parts === []) {
+            return ['sql' => '', 'params' => []];
+        }
+
+        return ['sql' => implode(' OR ', $parts), 'params' => $params];
     }
 
     private function itemMatchesTimelineFilter(array $item, TimelineFilter $filter): bool
     {
         $et = (string)($item['entry_type'] ?? '');
 
+        if ($filter->calendarOnly && $et !== 'calendar_event') {
+            return false;
+        }
+
         $data = $item['data'] ?? [];
         if (!is_array($data)) {
             $data = [];
         }
 
-        if ($filter->feedCategory !== null && $filter->feedCategory !== '' && $et === 'feed_item') {
-            if ((string)($data['feed_category'] ?? '') !== $filter->feedCategory) {
+        if ($filter->feedCategories !== [] && $et === 'feed_item') {
+            if (!in_array((string)($data['feed_category'] ?? ''), $filter->feedCategories, true)) {
                 return false;
             }
         }
-        if ($filter->feedSourceKind !== null && $et === 'feed_item') {
-            $st  = (string)($data['feed_source_type'] ?? '');
-            $cat = (string)($data['feed_category'] ?? '');
-            if ($filter->feedSourceKind === 'substack' && $st !== 'substack') {
+        if ($filter->feedSourceKinds !== [] && $et === 'feed_item') {
+            if (!$this->feedItemMatchesSourceKindFilters($data, $filter->feedSourceKinds)) {
                 return false;
-            }
-            if ($filter->feedSourceKind === 'scraper') {
-                $isScraper = $st === 'scraper' || $cat === 'scraper';
-                if (!$isScraper) {
-                    return false;
-                }
-            }
-            if ($filter->feedSourceKind === 'rss') {
-                if ($st === 'substack' || $st === 'scraper' || $cat === 'scraper') {
-                    return false;
-                }
             }
         }
         if ($filter->lexSources !== [] && $et === 'lex_item') {
@@ -1262,13 +1308,38 @@ final class EntryRepository
                 return false;
             }
         }
-        if ($filter->emailTag !== null && $filter->emailTag !== '' && $et === 'email') {
-            if ((string)($data['sender_tag'] ?? '') !== $filter->emailTag) {
+        if ($filter->emailTags !== [] && $et === 'email') {
+            if (!in_array((string)($data['sender_tag'] ?? ''), $filter->emailTags, true)) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    /**
+     * Mirrors {@see feedSqlSourceKindOrClause()} for hydrated feed rows (favourites).
+     *
+     * @param array<string, mixed> $data Wrapped feed row (`feed_source_type`, `feed_category`, `feed_url`).
+     * @param list<string>         $kinds
+     */
+    private function feedItemMatchesSourceKindFilters(array $data, array $kinds): bool
+    {
+        $st  = (string)($data['feed_source_type'] ?? '');
+        $cat = (string)($data['feed_category'] ?? '');
+        foreach ($kinds as $kind) {
+            if ($kind === 'substack' && $st === 'substack') {
+                return true;
+            }
+            if ($kind === 'scraper' && ($st === 'scraper' || $cat === 'scraper')) {
+                return true;
+            }
+            if ($kind === 'rss' && $st !== 'substack' && $st !== 'scraper' && $cat !== 'scraper') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

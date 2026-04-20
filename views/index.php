@@ -119,45 +119,103 @@ $clearSearchQs = http_build_query($clearSearchParams);
                 <a href="?<?= e($indexFavouritesQs) ?>" class="btn <?= $currentView === 'favourites' ? 'btn-primary' : 'btn-secondary' ?>">Favourites</a>
             </div>
             <?php
-                $fk = isset($_GET['fk']) ? (string)$_GET['fk'] : '';
-                $fc = isset($_GET['fc']) ? (string)$_GET['fc'] : '';
-                $lx = isset($_GET['lx']) ? (string)$_GET['lx'] : '';
-                $etag = isset($_GET['etag']) ? (string)$_GET['etag'] : '';
+                $fkRaw = isset($_GET['fk']) && !is_array($_GET['fk']) ? trim((string)$_GET['fk']) : '';
+                $fcRaw = isset($_GET['fc']) && !is_array($_GET['fc']) ? trim((string)$_GET['fc']) : '';
+                $lxRaw = isset($_GET['lx']) && !is_array($_GET['lx']) ? trim((string)$_GET['lx']) : '';
+                $etagRaw = isset($_GET['etag']) && !is_array($_GET['etag']) ? trim((string)$_GET['etag']) : '';
+                $legRaw = isset($_GET['leg']) && !is_array($_GET['leg']) ? trim((string)$_GET['leg']) : '';
+
+                $csvHas = static function (string $csv, string $token): bool {
+                    foreach (explode(',', $csv) as $p) {
+                        if (trim($p) === $token) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                };
+                $toggleCsvQs = static function (string $key, string $token) use ($dashboardQs): string {
+                    $raw = isset($_GET[$key]) && !is_array($_GET[$key]) ? trim((string)$_GET[$key]) : '';
+                    $parts = [];
+                    foreach (explode(',', $raw) as $p) {
+                        $p = trim($p);
+                        if ($p !== '') {
+                            $parts[] = $p;
+                        }
+                    }
+                    $idx = array_search($token, $parts, true);
+                    if ($idx !== false) {
+                        unset($parts[$idx]);
+                        $parts = array_values($parts);
+                    } else {
+                        $parts[] = $token;
+                    }
+                    $next = implode(',', $parts);
+
+                    return $dashboardQs([$key => $next !== '' ? $next : null]);
+                };
+                $clearAllFiltersQs = $dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'leg' => null]);
+                $legActive = ($legRaw === '1');
+                $legToggleQs = $dashboardQs(['leg' => $legActive ? null : '1']);
             ?>
             <div class="tag-pills-section filter-toolbar">
-                <div class="filter-toolbar__label">Filters</div>
+                <div class="filter-toolbar__head">
+                    <span class="filter-toolbar__label">Filters</span>
+                    <a href="?<?= e($clearAllFiltersQs) ?>" class="filter-toolbar__clear-all">Reset all</a>
+                </div>
                 <div class="filter-toolbar__row">
-                    <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null])) ?>" class="btn btn-secondary btn-sm">Clear filters</a>
-                    <span class="filter-toolbar__sep">|</span>
-                    <span class="filter-toolbar__hint">Feed type:</span>
-                    <a href="?<?= e($dashboardQs(['fk' => 'rss'])) ?>" class="btn btn-sm <?= $fk === 'rss' ? 'btn-primary' : 'btn-secondary' ?>">RSS</a>
-                    <a href="?<?= e($dashboardQs(['fk' => 'substack'])) ?>" class="btn btn-sm <?= $fk === 'substack' ? 'btn-primary' : 'btn-secondary' ?>">Substack</a>
-                    <a href="?<?= e($dashboardQs(['fk' => 'scraper'])) ?>" class="btn btn-sm <?= $fk === 'scraper' ? 'btn-primary' : 'btn-secondary' ?>">Scraper</a>
+                    <span class="filter-toolbar__hint">Feed type</span>
+                    <a href="?<?= e($dashboardQs(['fk' => null])) ?>"
+                       class="filter-pill filter-pill--none<?= $fkRaw === '' ? ' filter-pill--active' : '' ?>">None</a>
+                    <a href="?<?= e($toggleCsvQs('fk', 'rss')) ?>"
+                       class="filter-pill filter-pill--feed<?= $csvHas($fkRaw, 'rss') ? ' filter-pill--active' : '' ?>">RSS</a>
+                    <a href="?<?= e($toggleCsvQs('fk', 'substack')) ?>"
+                       class="filter-pill filter-pill--feed<?= $csvHas($fkRaw, 'substack') ? ' filter-pill--active' : '' ?>">Substack</a>
+                    <a href="?<?= e($toggleCsvQs('fk', 'scraper')) ?>"
+                       class="filter-pill filter-pill--scraper<?= $csvHas($fkRaw, 'scraper') ? ' filter-pill--active' : '' ?>">Scraper</a>
                 </div>
                 <?php if ($filterPillOptions['feed_categories'] !== []): ?>
                 <div class="filter-toolbar__row">
-                    <span class="filter-toolbar__hint">Feed category:</span>
+                    <span class="filter-toolbar__hint">Feed category</span>
+                    <a href="?<?= e($dashboardQs(['fc' => null])) ?>"
+                       class="filter-pill filter-pill--none<?= $fcRaw === '' ? ' filter-pill--active' : '' ?>">None</a>
                     <?php foreach ($filterPillOptions['feed_categories'] as $cat): ?>
-                        <a href="?<?= e($dashboardQs(['fc' => $cat, 'fk' => null])) ?>" class="btn btn-sm <?= $fc === $cat ? 'btn-primary' : 'btn-secondary' ?>"><?= e($cat) ?></a>
+                        <?php $fcClass = ($cat === 'scraper') ? 'filter-pill--scraper' : 'filter-pill--feed'; ?>
+                        <a href="?<?= e($toggleCsvQs('fc', $cat)) ?>"
+                           class="filter-pill <?= e($fcClass) ?><?= $csvHas($fcRaw, $cat) ? ' filter-pill--active' : '' ?>"><?= e($cat) ?></a>
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
                 <?php if ($filterPillOptions['lex_sources'] !== []): ?>
                 <div class="filter-toolbar__row">
-                    <span class="filter-toolbar__hint">Lex:</span>
+                    <span class="filter-toolbar__hint">Lex</span>
+                    <a href="?<?= e($dashboardQs(['lx' => null])) ?>"
+                       class="filter-pill filter-pill--none<?= $lxRaw === '' ? ' filter-pill--active' : '' ?>">None</a>
                     <?php foreach ($filterPillOptions['lex_sources'] as $src): ?>
-                        <a href="?<?= e($dashboardQs(['lx' => $src])) ?>" class="btn btn-sm <?= $lx === $src ? 'btn-primary' : 'btn-secondary' ?>"><?= e($src) ?></a>
+                        <a href="?<?= e($toggleCsvQs('lx', $src)) ?>"
+                           class="filter-pill filter-pill--lex<?= $csvHas($lxRaw, $src) ? ' filter-pill--active' : '' ?>"><?= e($src) ?></a>
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
                 <?php if ($filterPillOptions['email_tags'] !== []): ?>
                 <div class="filter-toolbar__row">
-                    <span class="filter-toolbar__hint">Email tag:</span>
+                    <span class="filter-toolbar__hint">Email tag</span>
+                    <a href="?<?= e($dashboardQs(['etag' => null])) ?>"
+                       class="filter-pill filter-pill--none<?= $etagRaw === '' ? ' filter-pill--active' : '' ?>">None</a>
                     <?php foreach ($filterPillOptions['email_tags'] as $tg): ?>
-                        <a href="?<?= e($dashboardQs(['etag' => $tg])) ?>" class="btn btn-sm <?= $etag === $tg ? 'btn-primary' : 'btn-secondary' ?>"><?= e($tg) ?></a>
+                        <a href="?<?= e($toggleCsvQs('etag', $tg)) ?>"
+                           class="filter-pill filter-pill--mail<?= $csvHas($etagRaw, $tg) ? ' filter-pill--active' : '' ?>"><?= e($tg) ?></a>
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
+                <div class="filter-toolbar__row">
+                    <span class="filter-toolbar__hint">Leg</span>
+                    <a href="?<?= e($dashboardQs(['leg' => null])) ?>"
+                       class="filter-pill filter-pill--none<?= !$legActive ? ' filter-pill--active' : '' ?>">None</a>
+                    <a href="?<?= e($legToggleQs) ?>"
+                       class="filter-pill filter-pill--leg<?= $legActive ? ' filter-pill--active' : '' ?>"
+                       title="Show only Leg (parliamentary calendar) entries">Leg</a>
+                </div>
             </div>
         </div>
 
@@ -180,7 +238,7 @@ $clearSearchQs = http_build_query($clearSearchParams);
                     <?php elseif ($emptyTimelineHint === 'search'): ?>
                         <p>No entries match your search. Try different words or <a href="?action=index">clear the query</a>.</p>
                     <?php elseif ($emptyTimelineHint === 'filters'): ?>
-                        <p>No entries match the current filters. <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null])) ?>">Clear filters</a> or widen the selection.</p>
+                        <p>No entries match the current filters. <a href="?<?= e($clearAllFiltersQs) ?>">Reset all filters</a> or widen the selection.</p>
                     <?php else: ?>
                         <p>No entries yet. Run <code>?action=migrate</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
                     <?php endif; ?>
