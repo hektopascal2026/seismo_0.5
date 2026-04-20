@@ -81,8 +81,20 @@ declare(strict_types=1);
                 </div>
 
                 <?php if (!empty($magnituConfig['last_sync_at'])): ?>
+                    <?php
+                    // Stored value is UTC (`gmdate` in MagnituController); show in SEISMO_VIEW_TIMEZONE
+                    // so it matches wall-clock time (raw string looked "2h behind" in Zurich during CEST).
+                    $lastSyncRaw = trim((string)$magnituConfig['last_sync_at']);
+                    $lastSyncShown = $lastSyncRaw;
+                    try {
+                        $dtUtc = new \DateTimeImmutable($lastSyncRaw, new \DateTimeZone('UTC'));
+                        $lastSyncShown = seismo_format_utc($dtUtc, 'd.m.Y H:i T') ?? $lastSyncRaw;
+                    } catch (\Throwable) {
+                        // malformed legacy value — show raw
+                    }
+                    ?>
                     <div style="font-size: 12px; margin-top: 12px;">
-                        Last sync: <strong><?= e((string)$magnituConfig['last_sync_at']) ?></strong>
+                        Last sync: <strong><?= e($lastSyncShown) ?></strong>
                         &middot; Recipe version: <strong><?= e((string)($magnituConfig['recipe_version'] ?? '0')) ?></strong>
                     </div>
                 <?php else: ?>
