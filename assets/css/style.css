@@ -1898,6 +1898,15 @@ textarea.search-input.setup-code-preview {
     color: #000000;
 }
 
+.settings-section h3.about-subheading {
+    font-size: 15px;
+    margin: 1.35rem 0 0.4rem;
+    font-weight: 600;
+    color: #000000;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
 .settings-header + .settings-section h2 {
     margin-top: 1.25rem;
 }
@@ -1943,6 +1952,27 @@ textarea.search-input.setup-code-preview {
     padding: 0.65rem 0 0.65rem 1rem;
     border-left: 4px solid var(--seismo-accent, #000);
     background: #fafafa;
+}
+
+/* About page — prose timeline blocks (see views/about.php) */
+.about-timeline {
+    margin: 0.75rem 0 1.5rem;
+}
+
+.about-timeline-entry {
+    margin-bottom: 1rem;
+    padding: 0.75rem 0.85rem 0.75rem 1rem;
+    border-left: 4px solid var(--seismo-accent, #000);
+    background: #fafafa;
+    line-height: 1.55;
+}
+
+.about-timeline-entry:last-child {
+    margin-bottom: 0;
+}
+
+.about-timeline-entry ul {
+    margin: 0.5rem 0 0 1.25rem;
 }
 
 .about-footer {

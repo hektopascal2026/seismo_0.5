@@ -36,7 +36,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
     <style>:root { --seismo-accent: <?= e((string)$accent) ?>; }</style>
     <?php endif; ?>
 </head>
-<body>
+<body class="about-page">
     <div class="container">
         <?php require __DIR__ . '/partials/site_header.php'; ?>
 
@@ -52,15 +52,24 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
         <main class="settings-container">
             <header class="settings-header">
                 <h1>About Seismo</h1>
-                <p class="subtitle">Version <?= e($seismoVersion) ?> &mdash; Legislative and media monitoring tool</p>
+                <p class="subtitle">Legislative and media monitoring tool &mdash; Version <?= e($seismoVersion) ?></p>
             </header>
 
+            <section class="settings-section">
+                <h2>What is Seismo?</h2>
+                <p>Seismo is a self-hosted monitoring dashboard that aggregates information from multiple sources into a single chronological feed. It tracks RSS feeds, email newsletters, Substack publications, legislative changes from the EU, Switzerland, Germany, and France, Swiss parliamentary press releases, Swiss case law, parliamentary calendars, and scraped web pages &mdash; helping you stay informed about policy, regulation, jurisprudence, and media that matter.</p>
+            </section>
+
             <?php if ($satellite): ?>
-            <p class="meta-text">This install runs in <strong>satellite</strong> mode: entry rows are read from a mothership database; scores and Magnitu settings stay local to this instance.</p>
+            <section class="settings-section">
+                <h2>This install</h2>
+                <p>You are on a <strong>satellite</strong> instance: timeline rows are read from a mothership database, while scores and Magnitu settings stay on this machine.</p>
+            </section>
             <?php endif; ?>
 
             <section class="settings-section">
                 <h2>What appears on your timeline</h2>
+                <p>Everything below merges into the same stream; use Feeds, Mail, Scraper, and Leg to tune what arrives.</p>
                 <div class="table-responsive">
                     <table class="styleguide-table">
                         <thead>
@@ -129,16 +138,20 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
             </section>
 
             <section class="settings-section">
-                <h2>Magnitu &amp; Labels</h2>
-                <p><strong>Highlights</strong> lists entries whose Magnitu score is at or above the alert threshold from Settings &rarr; Magnitu. You can sort the main timeline by relevance when that option is enabled.</p>
-                <p>Magnitu uses four coarse labels (simplified):</p>
+                <h2>What is Magnitu?</h2>
+                <p>Magnitu is Seismo&rsquo;s companion scoring engine &mdash; an optional, local Python application that learns which entries matter to you and pushes relevance scores back to Seismo over HTTP.</p>
+                <p>In the app, <strong>Highlights</strong> surfaces entries at or above your alert threshold (Settings &rarr; Magnitu). You can also sort the main timeline by relevance when that option is on.</p>
+
+                <h3 class="about-subheading">How does it score?</h3>
+                <p>Every entry can be scored on a four-level scale:</p>
                 <ul>
-                    <li><strong>Investigation lead</strong> &mdash; worth opening as a possible story.</li>
-                    <li><strong>Important</strong> &mdash; material you should not miss.</li>
-                    <li><strong>Background</strong> &mdash; context worth keeping.</li>
-                    <li><strong>Noise</strong> &mdash; low priority for your profile.</li>
+                    <li><strong>Investigation Lead</strong> &mdash; could be the starting point of an investigative story.</li>
+                    <li><strong>Important</strong> &mdash; a significant development you should be aware of.</li>
+                    <li><strong>Background</strong> &mdash; contextual information, worth archiving.</li>
+                    <li><strong>Noise</strong> &mdash; not relevant to your work.</li>
                 </ul>
-                <p>API actions such as <code>magnitu_entries</code>, <code>magnitu_scores</code>, <code>magnitu_recipe</code>, <code>magnitu_labels</code>, and <code>magnitu_status</code> are documented alongside the Python client in the Magnitu repository (<a href="https://github.com/hektopascal2026/magnitu" target="_blank" rel="noopener">github.com/hektopascal2026/magnitu</a>) and in this repo&rsquo;s <code>.cursor/rules/magnitu-integration.mdc</code> for operators who deploy from Git.</p>
+                <p>Scoring works at two levels. The <strong>deterministic recipe scorer</strong> runs inside Seismo &mdash; keyword weights and title boosting score new entries as soon as they are ingested. The <strong>Magnitu model</strong> is a full ML classifier (transformer embeddings, e.g. XLM-RoBERTa) that trains on your labels and posts richer scores via the API, overriding recipe scores when a model score is available.</p>
+                <p class="meta-text">Machine endpoints (<code>magnitu_entries</code>, <code>magnitu_scores</code>, and related actions) are described in the <a href="https://github.com/hektopascal2026/magnitu" target="_blank" rel="noopener">Magnitu repository</a> for companion-app operators.</p>
             </section>
 
             <section class="settings-section">
@@ -192,25 +205,40 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
             </section>
 
             <section class="settings-section">
-                <h2>Brief history</h2>
-                <p>Seismo grew in small public releases on PHP and MySQL. Many teams still keep a 0.4 install for side-by-side checks.</p>
-                <ul class="about-history">
-                    <li><strong>0.1 &mdash; RSS core (Jan 2026).</strong> SimplePie-based aggregation, unified feed, search, and the yellow-accent seismograph identity.</li>
-                    <li><strong>0.2 &mdash; Mail &amp; Substack (Jan&ndash;Feb 2026).</strong> IMAP cron path, sender tags, Substack via RSS, expandable cards, styleguide &mdash; and an early <em>AI-readable HTML export</em> (ai_view), now superseded by the export API above.</li>
-                    <li><strong>0.3 &mdash; Lex &amp; Magnitu foundation (Feb 2026).</strong> EU CELLAR + Fedlex SPARQL, Lex on the timeline, consolidated refresh, first Magnitu endpoints, Magnitu highlights page.</li>
-                    <li><strong>0.4 &mdash; Full stack (Feb&ndash;Apr 2026).</strong> German and French Lex, Swiss Parliament press (SharePoint), parliamentary calendar, web scraper with link-following, hardened auth, <code>refresh_cron.php</code>, tabbed settings, email subscriptions (domain-first matching, unsubscribe headers), and module-owned Feeds/Mail admin. Swiss case law (BGer / BGE / BVGer via entscheidsuche.ch) shipped for many 0.4 databases &mdash; this 0.5 codebase focuses on the refactored plugin/repository architecture; additional families re-enter the same pattern when scheduled.</li>
-                    <li><strong>0.5 &mdash; Consolidation.</strong> Native PHP 8.2 classes, repositories as the only SQL layer, <code>RefreshAllService</code> shared by web + cron, satellite mode for multi-profile Magnitu, retention service, export keys, first-run <code>?action=setup</code> stub, and the page you are reading &mdash; aligned with the developer README in the repo.</li>
-                </ul>
+                <h2>Version history</h2>
+                <p>Seismo grew in small public releases on PHP and MySQL. The line below is the short story; operators still compare behaviour against a 0.4 install from time to time.</p>
+                <div class="about-timeline">
+                    <div class="about-timeline-entry">
+                        <strong>v0.1 &ndash; v0.3 (Jan &ndash; Feb 2026):</strong> Initial prototypes. RSS, IMAP email fetching, Substack tracking, and the first SPARQL integrations for EU and Swiss legislation.
+                    </div>
+                    <div class="about-timeline-entry">
+                        <strong>v0.4 (Feb 2026):</strong> The &ldquo;full stack&rdquo; update. German and French legislation, Swiss case law (Jus), and the parliamentary API. First Magnitu machine-learning integration and the tabbed settings interface.
+                    </div>
+                    <div class="about-timeline-entry">
+                        <strong>v0.4.3 &ndash; v0.4.4 (Apr 2026):</strong> UX improvements. Email senders became first-class subscriptions with domain-first matching. Source management moved out of global Settings into dedicated module screens (Feeds, Mail, and friends).
+                    </div>
+                    <div class="about-timeline-entry">
+                        <strong>v0.5 (current):</strong> The consolidation update &mdash; a major architectural rebuild.
+                        <ul>
+                            <li>Unified data fetching under one master cron (<code>refresh_cron.php</code>) that mirrors the web &ldquo;refresh all&rdquo; pipeline.</li>
+                            <li>Replaced the procedural core with lightweight controllers, repositories, and fetcher services.</li>
+                            <li>Hardened the surface with CSRF on mutating routes and a dormant session-auth layer you can switch on when you need it.</li>
+                            <li>Retired the experimental HTML &ldquo;AI view&rdquo; in favour of the stable, stateless export API (see above).</li>
+                        </ul>
+                    </div>
+                </div>
             </section>
 
             <section class="settings-section">
-                <h2>Magnitu companion (timeline)</h2>
-                <p>Developed in parallel from 0.4 onward; major public milestones include TF-IDF baselines (v1), transformer distillation (v2), reliability work (v3), and multi-profile / satellite pairing (v4). Details live in the Magnitu repository readme.</p>
+                <h2>Next steps: Seismo satellites</h2>
+                <p>The next major theme is the full rollout of <strong>Seismo satellites</strong>.</p>
+                <p>In a multi-profile setup, each topic profile (for example security or digital policy) can send scores to its own lightweight satellite Seismo instance. The satellite reads entries via cross-database queries from the primary <strong>mothership</strong> database, but keeps its own scoring tables. Different audiences get feeds ranked for their focus, without duplicating heavy ingestion and scraping infrastructure.</p>
+                <p class="meta-text">Magnitu itself continues in parallel; release notes for the Python companion live in its repository.</p>
+            </section>
 
-                <p class="meta-text meta-text--spaced">
-                    Built by <a href="https://hektopascal.org" target="_blank" rel="noopener">hektopascal.org</a>.<br>
-                    Developer migration log: <code>README-REORG.md</code> in the repository. This page is for people using the running site.
-                </p>
+            <section class="settings-section about-footer">
+                <p>Built by <a href="https://hektopascal.org" target="_blank" rel="noopener">hektopascal.org</a>.</p>
+                <p class="meta-text about-meta">Developer-facing migration detail: <code>README-REORG.md</code> in the repository. This page is for people using the running site.</p>
             </section>
         </main>
     </div>
