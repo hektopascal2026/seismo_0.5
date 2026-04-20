@@ -71,6 +71,36 @@ $router->register(
     false
 );
 $router->register(
+    'refresh_lex_eu',
+    \Seismo\Controller\LexController::class . '::refreshLexEu',
+    false
+);
+$router->register(
+    'save_lex_eu',
+    \Seismo\Controller\LexController::class . '::saveLexEu',
+    false
+);
+$router->register(
+    'refresh_recht_bund',
+    \Seismo\Controller\LexController::class . '::refreshRechtBund',
+    false
+);
+$router->register(
+    'save_lex_de',
+    \Seismo\Controller\LexController::class . '::saveLexDe',
+    false
+);
+$router->register(
+    'refresh_legifrance',
+    \Seismo\Controller\LexController::class . '::refreshLegifrance',
+    false
+);
+$router->register(
+    'save_lex_fr',
+    \Seismo\Controller\LexController::class . '::saveLexFr',
+    false
+);
+$router->register(
     'leg',
     \Seismo\Controller\LegController::class . '::show',
     true

@@ -6,7 +6,9 @@ namespace Seismo\Controller;
 
 use Seismo\Config\LexConfigStore;
 use Seismo\Http\CsrfToken;
+use Seismo\Plugin\LexEu\LexEuPlugin;
 use Seismo\Plugin\LexFedlex\LexFedlexPlugin;
+use Seismo\Plugin\LexLegifrance\LexLegifrancePlugin;
 use Seismo\Repository\LexItemRepository;
 use Seismo\Service\RefreshAllService;
 
@@ -59,6 +61,9 @@ final class LexController
         $basePath = getBasePath();
         $satellite = isSatellite();
         $chCfg = is_array($lexCfg['ch'] ?? null) ? $lexCfg['ch'] : [];
+        $euCfg = is_array($lexCfg['eu'] ?? null) ? $lexCfg['eu'] : [];
+        $deCfg = is_array($lexCfg['de'] ?? null) ? $lexCfg['de'] : [];
+        $frCfg = is_array($lexCfg['fr'] ?? null) ? $lexCfg['fr'] : [];
 
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/lex.php';
@@ -117,18 +122,7 @@ final class LexController
         }
 
         $store = new LexConfigStore();
-        $isEnabled = static function (string $field, bool $default = false): bool {
-            if (!array_key_exists($field, $_POST)) {
-                return $default;
-            }
-            $raw = $_POST[$field];
-            if (is_array($raw)) {
-                return $raw !== [];
-            }
-            $value = strtolower(trim((string)$raw));
-
-            return in_array($value, ['1', 'true', 'yes', 'on'], true);
-        };
+        $isEnabled = $this->postEnabledClosure();
 
         try {
             $full = $store->load();
@@ -165,6 +159,223 @@ final class LexController
         }
 
         $this->redirectToLex();
+    }
+
+    public function refreshLexEu(): void
+    {
+        $this->runLexPluginRefresh('lex_eu', 'EUR-Lex');
+    }
+
+    public function refreshRechtBund(): void
+    {
+        $this->runLexPluginRefresh('recht_bund', 'recht.bund.de');
+    }
+
+    public function refreshLegifrance(): void
+    {
+        $this->runLexPluginRefresh('legifrance', 'Légifrance');
+    }
+
+    public function saveLexEu(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectToLex();
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectToLex();
+
+            return;
+        }
+
+        $store = new LexConfigStore();
+        $isEnabled = $this->postEnabledClosure();
+
+        try {
+            $full = $store->load();
+            $eu = is_array($full['eu'] ?? null) ? $full['eu'] : [];
+            $eu['enabled'] = $isEnabled('eu_enabled', (bool)($eu['enabled'] ?? true));
+            $eu['endpoint'] = trim((string)($_POST['eu_endpoint'] ?? $eu['endpoint'] ?? ''));
+            if ($eu['endpoint'] === '') {
+                $eu['endpoint'] = (string)($store->defaultConfig()['eu']['endpoint'] ?? '');
+            }
+            $eu['language'] = LexEuPlugin::normalizeLanguage((string)($_POST['eu_language'] ?? $eu['language'] ?? 'ENG'));
+            $eu['document_class'] = trim((string)($_POST['eu_document_class'] ?? $eu['document_class'] ?? 'cdm:legislation_secondary'));
+            LexEuPlugin::documentClassToIri($eu['document_class']);
+            $eu['lookback_days'] = max(1, (int)($_POST['eu_lookback_days'] ?? $eu['lookback_days'] ?? 90));
+            $eu['limit'] = max(1, min((int)($_POST['eu_limit'] ?? $eu['limit'] ?? 100), 200));
+            $eu['notes'] = trim((string)($_POST['eu_notes'] ?? $eu['notes'] ?? ''));
+
+            $store->savePluginBlock('eu', $eu);
+            $_SESSION['success'] = 'EUR-Lex settings saved.';
+        } catch (\Throwable $e) {
+            error_log('Seismo save_lex_eu: ' . $e->getMessage());
+            $_SESSION['error'] = 'Could not save EUR-Lex settings: ' . $e->getMessage();
+        }
+
+        $this->redirectToLex();
+    }
+
+    public function saveLexDe(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectToLex();
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectToLex();
+
+            return;
+        }
+
+        $store = new LexConfigStore();
+        $isEnabled = $this->postEnabledClosure();
+
+        try {
+            $full = $store->load();
+            $de = is_array($full['de'] ?? null) ? $full['de'] : [];
+            $de['enabled'] = $isEnabled('de_enabled', (bool)($de['enabled'] ?? true));
+            $de['feed_url'] = trim((string)($_POST['de_feed_url'] ?? $de['feed_url'] ?? ''));
+            $de['lookback_days'] = max(1, (int)($_POST['de_lookback_days'] ?? $de['lookback_days'] ?? 90));
+            $de['limit'] = max(1, min((int)($_POST['de_limit'] ?? $de['limit'] ?? 100), 200));
+            $de['notes'] = trim((string)($_POST['de_notes'] ?? $de['notes'] ?? ''));
+
+            $store->savePluginBlock('de', $de);
+            $_SESSION['success'] = 'recht.bund.de settings saved.';
+        } catch (\Throwable $e) {
+            error_log('Seismo save_lex_de: ' . $e->getMessage());
+            $_SESSION['error'] = 'Could not save DE settings.';
+        }
+
+        $this->redirectToLex();
+    }
+
+    public function saveLexFr(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectToLex();
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectToLex();
+
+            return;
+        }
+
+        $store = new LexConfigStore();
+        $isEnabled = $this->postEnabledClosure();
+
+        try {
+            $full = $store->load();
+            $fr = is_array($full['fr'] ?? null) ? $full['fr'] : [];
+            $fr['enabled'] = $isEnabled('fr_enabled', (bool)($fr['enabled'] ?? false));
+            $fr['client_id'] = trim((string)($_POST['fr_client_id'] ?? $fr['client_id'] ?? ''));
+
+            $secretIn = (string)($_POST['fr_client_secret'] ?? '');
+            $trimSecret = trim($secretIn);
+            $looksPlaceholder = $trimSecret === '' || preg_match('/^[•●·\s]+$/u', $trimSecret) === 1;
+            if (!$looksPlaceholder) {
+                $fr['client_secret'] = $secretIn;
+            }
+
+            $fr['oauth_token_url'] = trim((string)($_POST['fr_oauth_token_url'] ?? $fr['oauth_token_url'] ?? ''));
+            if ($fr['oauth_token_url'] === '') {
+                $fr['oauth_token_url'] = (string)($store->defaultConfig()['fr']['oauth_token_url'] ?? '');
+            }
+            $fr['api_base_url'] = trim((string)($_POST['fr_api_base_url'] ?? $fr['api_base_url'] ?? ''));
+            if ($fr['api_base_url'] === '') {
+                $fr['api_base_url'] = (string)($store->defaultConfig()['fr']['api_base_url'] ?? '');
+            }
+
+            $fond = strtoupper(trim((string)($_POST['fr_fond'] ?? $fr['fond'] ?? 'JORF')));
+            if (!in_array($fond, LexLegifrancePlugin::ALLOWED_FONDS, true)) {
+                throw new \InvalidArgumentException('Unsupported Légifrance fond.');
+            }
+            $fr['fond'] = $fond;
+
+            $natRaw = trim((string)($_POST['fr_natures'] ?? ''));
+            if ($natRaw !== '') {
+                $fr['natures'] = array_values(array_filter(array_map(
+                    static fn (string $s): string => strtoupper(trim($s)),
+                    preg_split('/[\s,]+/', $natRaw) ?: []
+                )));
+            } elseif (!isset($fr['natures']) || !is_array($fr['natures'])) {
+                $fr['natures'] = ['LOI', 'ORDONNANCE', 'DECRET'];
+            }
+
+            $fr['lookback_days'] = max(1, (int)($_POST['fr_lookback_days'] ?? $fr['lookback_days'] ?? 90));
+            $fr['limit'] = max(1, min((int)($_POST['fr_limit'] ?? $fr['limit'] ?? 100), 200));
+            $fr['notes'] = trim((string)($_POST['fr_notes'] ?? $fr['notes'] ?? ''));
+
+            $store->savePluginBlock('fr', $fr);
+            $_SESSION['success'] = 'Légifrance settings saved.';
+        } catch (\Throwable $e) {
+            error_log('Seismo save_lex_fr: ' . $e->getMessage());
+            $_SESSION['error'] = 'Could not save Légifrance settings: ' . $e->getMessage();
+        }
+
+        $this->redirectToLex();
+    }
+
+    private function runLexPluginRefresh(string $pluginId, string $label): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectToLex();
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectToLex();
+
+            return;
+        }
+
+        try {
+            $pdo = getDbConnection();
+            $result = RefreshAllService::boot($pdo)->runPlugin($pluginId, true);
+        } catch (\Throwable $e) {
+            error_log('Seismo refresh ' . $pluginId . ': ' . $e->getMessage());
+            $_SESSION['error'] = $label . ' refresh failed: ' . $e->getMessage();
+            $this->redirectToLex();
+
+            return;
+        }
+
+        if ($result->isOk()) {
+            $_SESSION['success'] = $label . ' refresh finished: ' . $result->count . ' row(s) processed.';
+        } elseif ($result->status === 'skipped') {
+            $_SESSION['error'] = $result->message ?? ($label . ' refresh skipped.');
+        } else {
+            $_SESSION['error'] = $label . ' refresh failed: ' . ($result->message ?? 'unknown error');
+        }
+
+        $this->redirectToLex();
+    }
+
+    /**
+     * @return callable(string, bool): bool
+     */
+    private function postEnabledClosure(): callable
+    {
+        return static function (string $field, bool $default = false): bool {
+            if (!array_key_exists($field, $_POST)) {
+                return $default;
+            }
+            $raw = $_POST[$field];
+            if (is_array($raw)) {
+                return $raw !== [];
+            }
+            $value = strtolower(trim((string)$raw));
+
+            return in_array($value, ['1', 'true', 'yes', 'on'], true);
+        };
     }
 
     private function redirectToLex(): void

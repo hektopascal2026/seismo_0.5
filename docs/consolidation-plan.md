@@ -114,8 +114,9 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 ### Slice 4 — Remaining entry sources — **shipped**
 
-- **Core fetchers:** RSS, Substack, Mail (with email schema unification migration), Scraper — each ported as a Core service (not a plugin). Each ships with repository `prune()`.
-- **Plugins:** LexEu, LexLegifrance, RechtBund (as Jus variant), Parl MM, any other third-party adapter — each follows the Slice 2 template.
+- **Core fetchers:** RSS, Substack, Mail (with email schema unification migration), Scraper, and **`core:parl_press`** (Parlament Medien → `feed_items`; not Lex) — each ported as a Core service (not a Lex/Leg plugin). Each ships with repository `prune()` where applicable.
+- **Swiss Parliament press (“Parl MM”) — Core, not Lex:** treated **semantically as a news feed**. Data lands in **`feed_items`** via `feeds.source_type = parl_press` and Core `ParlPressFetchService` / `CoreRunner::core:parl_press`. Optional `feeds.category` (e.g. `parl_mm`) supports filters. **No** `lex_items` row family, **no** Lex plugin, **no** Leg plugin — product decision “Option 2”; see `.cursor/rules/core-plugin-architecture.mdc`.
+- **Lex plugins:** LexEu, LexLegifrance, LexRechtBund (`recht.bund` RSS) — each follows the Slice 2 template (`SourceFetcherInterface` → `lex_items`).
 - Unify email schema under `emails` built from today’s `fetched_emails` structure; provide migration script.
 - **Tag filter pills on the dashboard** (deferred from Slice 1): feed-category pills, email-tag pills, substack-category pills, Lex source pills, scraper-source pills, Leg toggle. Ships here rather than piecemeal so all pills reflect fully ported sources and the unified `sender_tags`/email-tags surface.
 

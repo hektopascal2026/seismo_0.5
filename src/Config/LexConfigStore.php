@@ -115,12 +115,26 @@ final class LexConfigStore
      */
     public function saveChBlock(array $chBlock): void
     {
+        $this->savePluginBlock('ch', $chBlock);
+    }
+
+    /**
+     * Merge a single plugin block into `system_config` (`plugin:<block>`).
+     *
+     * @param array<string, mixed> $partial
+     */
+    public function savePluginBlock(string $block, array $partial): void
+    {
+        if (!in_array($block, self::PLUGIN_BLOCKS, true)) {
+            throw new \InvalidArgumentException('Unknown lex plugin block: ' . $block);
+        }
+        $defaults = $this->defaultConfig();
         $existing = $this->config->getJson(
-            SystemConfigRepository::PLUGIN_PREFIX . 'ch',
-            is_array($this->defaultConfig()['ch'] ?? null) ? $this->defaultConfig()['ch'] : []
+            SystemConfigRepository::PLUGIN_PREFIX . $block,
+            is_array($defaults[$block] ?? null) ? $defaults[$block] : []
         );
-        $merged = array_replace_recursive($existing, $chBlock);
-        $this->config->setJson(SystemConfigRepository::PLUGIN_PREFIX . 'ch', $merged);
+        $merged = array_replace_recursive($existing, $partial);
+        $this->config->setJson(SystemConfigRepository::PLUGIN_PREFIX . $block, $merged);
     }
 
     /**
@@ -191,6 +205,8 @@ final class LexConfigStore
                 'enabled' => false,
                 'client_id' => '',
                 'client_secret' => '',
+                'oauth_token_url' => 'https://oauth.piste.gouv.fr/api/oauth/token',
+                'api_base_url' => 'https://api.piste.gouv.fr/dila/legifrance/lf-engine-app',
                 'fond' => 'JORF',
                 'natures' => ['LOI', 'ORDONNANCE', 'DECRET'],
                 'lookback_days' => 90,

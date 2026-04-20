@@ -9,6 +9,66 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Parlament Medien (“Parl MM”) — feeds family, not Lex (**Option 2**)
+
+**Why.** Parlament.ch press releases are **news-shaped** (timeline, announcements), not statutory legal text. Collapsing them into `lex_items` mixed product semantics and complicated Magnitu / dashboard filters.
+
+**Decision.** **Option 2 (locked):** Parliament Medien data lives in **`feed_items`**, driven by a **`feeds` row** with `source_type = parl_press` (SharePoint list URL + optional JSON in `description`). Core **`ParlPressFetchService`** + **`CoreRunner::core:parl_press`** handle refresh — **not** a Lex plugin, **not** Leg, **no** new database family. Optional **`feeds.category`** (e.g. `parl_mm`) distinguishes sources for filter pills. Legacy `lex_items` rows with `source = parl_mm` are migrated away by **`Migration007ParlPressToFeedItems`**.
+
+**What moved (reference).** `src/Core/Fetcher/ParlPressFetchService.php`, `src/Service/CoreRunner.php` (`ID_PARL_PRESS`), `src/Migration/Migration007ParlPressToFeedItems.php`, `views/feeds.php` + `views/lex.php` copy pointing admins to Feeds.
+
+**Gotchas.** Do not register a `ParlMmPlugin` under `PluginRegistry`. Do not add `parl_mm` to `lex_items` for new ingest — that path is retired.
+
+---
+
+## Lex — EU, DE, and FR legislation plugins (EUR-Lex, recht.bund, Légifrance)
+
+**Why.** Slice 2 established the plugin pattern with Swiss Fedlex only. EU EUR-Lex (SPARQL), German BGBl (`recht.bund.de` RSS), and French JORF (PISTE OAuth + Légifrance `lf-engine-app` `/search`) were still 0.4-only or missing from the mothership refresh path. This slice completes multi-source Lex **fetch + save** on the Lex page and registers the plugins on the same `RefreshAllService` / `plugin_run_log` rail as Fedlex and ParlCh.
+
+**What moved.**
+
+| Area | 0.5 |
+|---|---|
+| Plugins | `Seismo\Plugin\LexEu\LexEuPlugin` (`lex_eu`, config key `eu`) — Publications Office SPARQL; CELEX literals filtered; CDM class curie allowlisted; language codes allowlisted. `Seismo\Plugin\LexRechtBund\LexRechtBundPlugin` (`recht_bund`, key `de`) — SimplePie RSS, stable `de_rss_<sha256>` keys, `www.recht.bund.de` link guard. `Seismo\Plugin\LexLegifrance\LexLegifrancePlugin` (`legifrance`, key `fr`) — OAuth client credentials + paginated `/search`, JORF-oriented filters (`DATE_SIGNATURE`, `NATURE`); HTTP via **ext-curl**. |
+| Registry | `Seismo\Service\PluginRegistry` — instantiates `lex_eu`, `recht_bund`, `legifrance` after `fedlex`, before `parl_ch`. |
+| Repository | `Seismo\Repository\LexItemRepository::upsertBatch()` — INSERT/UPDATE now includes optional **`description`** (nullable). Fedlex rows pass `description: null`. |
+| Config store | `Seismo\Config\LexConfigStore::savePluginBlock()` — generic merge/write for any `PLUGIN_BLOCKS` key; `saveChBlock()` delegates to it. Default `fr` block gains `oauth_token_url` + `api_base_url` (PISTE prod defaults). |
+| Controller | `Seismo\Controller\LexController` — `show()` passes `$euCfg`, `$deCfg`, `$frCfg`; POST handlers `refreshLexEu`, `refreshRechtBund`, `refreshLegifrance`, `saveLexEu`, `saveLexDe`, `saveLexFr` (CSRF); shared `runLexPluginRefresh()` / `postEnabledClosure()`. FR **client_secret**: empty or placeholder-only POST leaves the stored secret unchanged. |
+| Routes | `index.php` — `refresh_lex_eu`, `save_lex_eu`, `refresh_recht_bund`, `save_lex_de`, `refresh_legifrance`, `save_lex_fr` (all mutating POST, `readOnly=false`). |
+| View | `views/lex.php` — refresh button row for all four Lex writers, settings forms for EU / CH / DE / FR; copy updated (no longer “Fedlex only”). |
+| Magnitu export labels | `Seismo\Controller\MagnituController::LEX_SOURCE_LABELS` — adds `eu` → `EUR-Lex` (existing `de` / `fr` kept). |
+
+**New wiring.**
+
+```
+Lex page GET ?action=lex  → LexController::show()
+                              → LexConfigStore::load() + LexItemRepository reads (entryTable-wrapped)
+
+POST ?action=refresh_lex_eu | refresh_fedlex | refresh_recht_bund | refresh_legifrance
+  → LexController → RefreshAllService::boot()->runPlugin(<id>, force=true)
+  → plugin fetch() → LexItemRepository::upsertBatch()   (throws on satellite)
+
+POST ?action=save_lex_eu | save_lex_ch | save_lex_de | save_lex_fr
+  → LexController → LexConfigStore::savePluginBlock() / saveChBlock()
+```
+
+**Gotchas.**
+
+- **No new migration** — `lex_items.description` already exists in `docs/db-schema.sql`; this slice only starts writing it from plugins that populate it (e.g. DE RSS body / FR summaries).
+- **Légifrance requires ext-curl** at runtime; the plugin throws a clear message if `curl_init` is missing.
+- **PISTE / API URLs** are editable on the FR form (sandbox vs prod); wrong host/token combo fails at OAuth or `/search` with the upstream error surfaced in logs / flash.
+- **Gemini spot-check:** PASS (architectural review) before treating this vertical as closed.
+
+**Test URLs.**
+
+- `?action=lex` — EU/DE/FR forms render; refresh buttons present when not in satellite mode.
+- After saving EU credentials defaults, **Refresh EUR-Lex** — flash reports row count; list shows `source=eu` when the EU pill is enabled.
+- **Refresh recht.bund** — requires a valid `https://www.recht.bund.de/...` RSS URL in `plugin:de`.
+- **Refresh Légifrance** — requires real PISTE `client_id` / `client_secret` and CGU subscription; leave secret blank on save to retain the previous secret.
+- `?action=diagnostics` — `lex_eu`, `recht_bund`, `legifrance` appear in the plugin table with throttle metadata from `getMinIntervalSeconds()`.
+
+---
+
 ## Slice 7 — Magnitu settings tab (admin UI for the Magnitu contract)
 
 **Why.** Slice 5 ported the Bearer-authenticated Magnitu HTTP surface (`MagnituController` + `BearerAuth`), but the 0.4 **Settings → Magnitu** admin tab never came along. A fresh 0.5 install had no `api_key` in `system_config`, so `BearerAuth::guardMagnitu()` rejected every Magnitu request with 401 and there was no URL-only way for an admin to provision or rotate the key. Slice 7 closes the gap by porting the 0.4 tab wholesale.
@@ -230,7 +290,7 @@ Retention run : refresh_cron.php
 | Area | 0.5 |
 |---|---|
 | Dual email tables | `Migration003EmailsUnified` (schema **v19**) merges `fetched_emails` into `emails` (BIGINT ids, IMAP/body columns). `DROP` `fetched_emails` after merge. `getEmailTableName()` in `bootstrap.php` returns `emails`. |
-| Core refresh | `Seismo\Service\CoreRunner` runs `core:rss`, `core:scraper`, `core:mail` before plugins. Throttle matches plugin semantics (stdout-only when throttled; `plugin_run_log` stores outcomes except noise). **`core:mail` is a stub** (no in-process IMAP yet); mail ingestion is the **CLI** under `fetcher/mail/` writing to unified `emails`. Diagnostics “Refresh” records a skipped row only when `$force` (web), not on cron — avoids log spam. |
+| Core refresh | `Seismo\Service\CoreRunner` runs `core:rss`, **`core:parl_press`** (Parlament Medien → `feed_items`), `core:scraper`, `core:mail`, then plugins. Throttle matches plugin semantics (stdout-only when throttled; `plugin_run_log` stores outcomes except noise). **`core:mail` is a stub** (no in-process IMAP yet); mail ingestion is the **CLI** under `fetcher/mail/` writing to unified `emails`. Diagnostics “Refresh” records a skipped row only when `$force` (web), not on cron — avoids log spam. |
 | RSS | `Seismo\Core\Fetcher\RssFetchService` (SimplePie 1.9). Normalises title/link/body per consolidation-plan fetcher contract. |
 | Scraper | `Seismo\Core\Fetcher\ScraperFetchService` + `FeedItemRepository::listFeedsForScraperRefresh()` (feeds with `source_type=scraper` or URL in `scraper_configs`). |
 | Feeds persistence | `Seismo\Repository\FeedItemRepository` — transactional `upsertFeedItems`, `prune()` stub (180d policy lands with RetentionService). |
@@ -241,7 +301,7 @@ Retention run : refresh_cron.php
 
 **Gotchas.**
 
-- **Plugin deferrals (user decision D4):** LexEu / LexLegifrance / Jus / Parl MM plugins were **not** added in this slice — registry unchanged beyond Slice 3.
+- **Supersedes D4 deferrals:** LexEu / LexLegifrance / LexRechtBund shipped in a later reorg entry (**not** in the original Slice 4 PR). **Parl MM is not a Lex plugin** — it is **`core:parl_press`** → `feed_items` (see topmost **Parlament Medien — Option 2** entry).
 - **`core:mail` rows:** Always **skipped** with a message pointing at the CLI mail fetcher — until in-process IMAP is implemented, do not expect `mail_imap_*` in `magnitu_config` to change behaviour. **`plugin_run_log`:** skipped row is written on **forced** runs (Refresh all / per-core Refresh on diagnostics), not on CLI cron (`$force = false`), so cron does not append a useless row every tick.
 - **Retention:** `FeedItemRepository::prune()` is callable; `RetentionService` (Slice 5a) will invoke family prunes — no automatic feed/email prune in this slice’s cron beyond plugin runs.
 
@@ -250,7 +310,7 @@ Retention run : refresh_cron.php
 - `?action=migrate&key=…` — expect schema **19** after deploy.
 - `?action=diagnostics` — Core fetchers block + plugins; Refresh all runs core + plugins.
 - `?action=index&fk=substack&nocal=1` — filter pills + Leg hidden from merged timeline.
-- CLI: `php refresh_cron.php` — stdout includes `core:rss` / `core:scraper` / `core:mail` lines.
+- CLI: `php refresh_cron.php` — stdout includes `core:rss` / `core:parl_press` / `core:scraper` / `core:mail` lines.
 
 ---
 

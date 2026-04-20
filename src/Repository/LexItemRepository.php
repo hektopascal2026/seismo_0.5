@@ -107,10 +107,13 @@ final class LexItemRepository
         }
 
         $table = entryTable('lex_items');
-        $sql = 'INSERT INTO ' . $table . ' (celex, title, document_date, document_type, eurlex_url, work_uri, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+        $sql = 'INSERT INTO ' . $table . ' (
+                celex, title, description, document_date, document_type,
+                eurlex_url, work_uri, source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 title = VALUES(title),
+                description = VALUES(description),
                 document_date = VALUES(document_date),
                 document_type = VALUES(document_type),
                 eurlex_url = VALUES(eurlex_url),
@@ -122,9 +125,16 @@ final class LexItemRepository
         try {
             $stmt = $this->pdo->prepare($sql);
             foreach ($rows as $row) {
+                $desc = $row['description'] ?? null;
+                if ($desc !== null && $desc !== '') {
+                    $desc = (string)$desc;
+                } else {
+                    $desc = null;
+                }
                 $stmt->execute([
                     (string)$row['celex'],
                     (string)($row['title'] ?? ''),
+                    $desc,
                     $this->normalizeDate($row['document_date'] ?? null),
                     (string)($row['document_type'] ?? ''),
                     (string)($row['eurlex_url'] ?? ''),

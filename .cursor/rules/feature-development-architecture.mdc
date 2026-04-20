@@ -71,6 +71,7 @@ If `CsrfToken::field()` is rendered on a GET page, add the action to `Router::RE
 |------|----------------|
 | Third-party API that breaks occasionally | **New plugin** under `src/Plugin/<Name>/` + one line in `PluginRegistry` (no filesystem scanning). |
 | RSS, mail, scraper (core-owned) | **Core** fetcher/service + existing family repo; follow `RefreshAllService` / `CoreRunner` patterns. |
+| Swiss Parliament Medien / “Parl MM” press lists | **Core** `ParlPressFetchService` (`core:parl_press`) → **`feed_items`** via `feeds.source_type = parl_press`. **Not** Lex, **not** Leg, **no** new table — see `core-plugin-architecture.mdc`. |
 | New “family” of stored entries | Extend the **appropriate family table** (`lex_items`, `calendar_events`, …) via repository `upsertBatch` + plugin DTOs — **no** per-plugin tables unless a slice explicitly adds a sidecar table (see `core-plugin-architecture.mdc`). |
 
 ## Magnitu v3 and machine exports

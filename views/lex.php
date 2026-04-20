@@ -11,6 +11,9 @@
  * @var string $basePath
  * @var bool $satellite
  * @var array<string, mixed> $chCfg
+ * @var array<string, mixed> $euCfg
+ * @var array<string, mixed> $deCfg
+ * @var array<string, mixed> $frCfg
  * @var string $csrfField Hidden CSRF inputs (LexController)
  */
 
@@ -21,6 +24,11 @@ if (!function_exists('seismo_format_lex_refresh_utc')) {
 }
 
 $accent = seismoBrandAccent();
+$frNaturesStr = '';
+if (!empty($frCfg['natures']) && is_array($frCfg['natures'])) {
+    $frNaturesStr = implode(', ', array_map('strval', $frCfg['natures']));
+}
+
 $chResourceTypesStr = '';
 if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
     $ids = [];
@@ -67,9 +75,8 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
         <?php endif; ?>
 
         <p class="message" style="background:#f5f5f5;border-color:#ccc;">
-            <strong>Seismo 0.5:</strong> Only <strong>Swiss Fedlex</strong> (<code>ch</code>) can be refreshed here.
-            Other legislation sources stay populated by your Seismo 0.4 instance (or manual DB) until multi-source Lex refresh lands in a later slice.
-            <strong>Parlament Medien</strong> (press releases) live as <code>feed_items</code> — add or edit the <code>parl_press</code> source on the <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a> page; they appear on the dashboard like other feeds.
+            <strong>Lex refresh:</strong> EU (<code>lex_eu</code>), Swiss Fedlex (<code>fedlex</code>), Germany (<code>recht_bund</code>), and France (<code>legifrance</code>) run from this page or from <a href="<?= e($basePath) ?>/index.php?action=diagnostics">Diagnostics</a> / cron (<code>Refresh all</code>).
+            <strong>Parlament Medien</strong> (press) are <code>feed_items</code> — configure <code>parl_press</code> on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.
         </p>
 
         <?php if ($satellite): ?>
@@ -105,10 +112,60 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
 
         <?php if (!$satellite): ?>
         <div class="latest-entries-section" style="margin-bottom: 24px;">
-            <h2 class="section-title">Refresh Swiss Fedlex</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_fedlex" style="display:inline;">
+            <h2 class="section-title">Refresh legislation sources</h2>
+            <p style="margin:0 0 10px;color:#555;">Each button runs one plugin (same as Diagnostics → per-plugin refresh).</p>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_eu" style="display:inline;">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-primary">Refresh EUR-Lex (EU)</button>
+                </form>
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_fedlex" style="display:inline;">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-primary">Refresh Fedlex (CH)</button>
+                </form>
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_recht_bund" style="display:inline;">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-primary">Refresh recht.bund (DE)</button>
+                </form>
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_legifrance" style="display:inline;">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-primary">Refresh Légifrance (FR)</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="latest-entries-section" style="margin-bottom: 24px;">
+            <h2 class="section-title">EUR-Lex (EU) settings</h2>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_eu" style="max-width:640px;">
                 <?= $csrfField ?>
-                <button type="submit" class="btn btn-primary">Refresh Fedlex (CH)</button>
+                <div style="margin-bottom:12px;">
+                    <label><input type="checkbox" name="eu_enabled" value="1" <?= !empty($euCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>SPARQL endpoint (https only)<br>
+                    <input type="url" name="eu_endpoint" value="<?= e((string)($euCfg['endpoint'] ?? '')) ?>" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Language code (EU authority, e.g. ENG, DEU, FRA)<br>
+                    <input type="text" name="eu_language" value="<?= e((string)($euCfg['language'] ?? 'ENG')) ?>" maxlength="8" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Document class (CDM curie, e.g. <code>cdm:legislation_secondary</code>)<br>
+                    <input type="text" name="eu_document_class" value="<?= e((string)($euCfg['document_class'] ?? 'cdm:legislation_secondary')) ?>" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Lookback days<br>
+                    <input type="number" name="eu_lookback_days" value="<?= (int)($euCfg['lookback_days'] ?? 90) ?>" min="1" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Row limit (max 200)<br>
+                    <input type="number" name="eu_limit" value="<?= (int)($euCfg['limit'] ?? 100) ?>" min="1" max="200" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Notes<br>
+                    <textarea name="eu_notes" rows="2" style="width:100%;"><?= e((string)($euCfg['notes'] ?? '')) ?></textarea></label>
+                </div>
+                <button type="submit" class="btn btn-secondary">Save EU settings</button>
             </form>
         </div>
 
@@ -142,6 +199,81 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                 <button type="submit" class="btn btn-secondary">Save Fedlex settings</button>
             </form>
         </div>
+
+        <div class="latest-entries-section" style="margin-bottom: 24px;">
+            <h2 class="section-title">recht.bund.de (DE) settings</h2>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_de" style="max-width:640px;">
+                <?= $csrfField ?>
+                <div style="margin-bottom:12px;">
+                    <label><input type="checkbox" name="de_enabled" value="1" <?= !empty($deCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>RSS feed URL (https, <code>www.recht.bund.de</code>)<br>
+                    <input type="url" name="de_feed_url" value="<?= e((string)($deCfg['feed_url'] ?? '')) ?>" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Lookback days<br>
+                    <input type="number" name="de_lookback_days" value="<?= (int)($deCfg['lookback_days'] ?? 90) ?>" min="1" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Row limit (max 200)<br>
+                    <input type="number" name="de_limit" value="<?= (int)($deCfg['limit'] ?? 100) ?>" min="1" max="200" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Notes<br>
+                    <textarea name="de_notes" rows="2" style="width:100%;"><?= e((string)($deCfg['notes'] ?? '')) ?></textarea></label>
+                </div>
+                <button type="submit" class="btn btn-secondary">Save DE settings</button>
+            </form>
+        </div>
+
+        <div class="latest-entries-section" style="margin-bottom: 24px;">
+            <h2 class="section-title">Légifrance (FR) — PISTE API</h2>
+            <p style="margin:0 0 10px;color:#555;">Create an application on <a href="https://piste.gouv.fr/" target="_blank" rel="noopener">PISTE</a>, subscribe to the Légifrance API, then paste OAuth client credentials below. Leave the secret field blank to keep the stored secret.</p>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_fr" style="max-width:640px;">
+                <?= $csrfField ?>
+                <div style="margin-bottom:12px;">
+                    <label><input type="checkbox" name="fr_enabled" value="1" <?= !empty($frCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>OAuth client id<br>
+                    <input type="text" name="fr_client_id" value="<?= e((string)($frCfg['client_id'] ?? '')) ?>" autocomplete="off" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>OAuth client secret<br>
+                    <input type="password" name="fr_client_secret" value="" autocomplete="new-password" placeholder="(unchanged if empty)" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Token URL<br>
+                    <input type="url" name="fr_oauth_token_url" value="<?= e((string)($frCfg['oauth_token_url'] ?? 'https://oauth.piste.gouv.fr/api/oauth/token')) ?>" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>API base (no trailing /search)<br>
+                    <input type="url" name="fr_api_base_url" value="<?= e((string)($frCfg['api_base_url'] ?? 'https://api.piste.gouv.fr/dila/legifrance/lf-engine-app')) ?>" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Fond (e.g. JORF)<br>
+                    <input type="text" name="fr_fond" value="<?= e((string)($frCfg['fond'] ?? 'JORF')) ?>" maxlength="32" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Natures (comma-separated, JORF facet)<br>
+                    <input type="text" name="fr_natures" value="<?= e($frNaturesStr) ?>" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Lookback days<br>
+                    <input type="number" name="fr_lookback_days" value="<?= (int)($frCfg['lookback_days'] ?? 90) ?>" min="1" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Row limit (max 200)<br>
+                    <input type="number" name="fr_limit" value="<?= (int)($frCfg['limit'] ?? 100) ?>" min="1" max="200" style="width:100%;"></label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>Notes<br>
+                    <textarea name="fr_notes" rows="2" style="width:100%;"><?= e((string)($frCfg['notes'] ?? '')) ?></textarea></label>
+                </div>
+                <button type="submit" class="btn btn-secondary">Save FR settings</button>
+            </form>
+        </div>
         <?php endif; ?>
 
         <div class="latest-entries-section">
@@ -173,7 +305,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
 
             <?php if ($lexItems === []): ?>
                 <div class="empty-state">
-                    <p>No legislation in this filter yet. Enable sources via the CH settings form above, or trigger a Fedlex refresh.</p>
+                    <p>No legislation in this filter yet. Enable a source in the settings forms above, or run a refresh.</p>
                 </div>
             <?php else: ?>
                 <?php

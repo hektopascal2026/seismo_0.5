@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Seismo\Service;
 
+use Seismo\Plugin\LexEu\LexEuPlugin;
 use Seismo\Plugin\LexFedlex\LexFedlexPlugin;
+use Seismo\Plugin\LexLegifrance\LexLegifrancePlugin;
+use Seismo\Plugin\LexRechtBund\LexRechtBundPlugin;
 use Seismo\Plugin\ParlCh\ParlChPlugin;
 
 /**
@@ -21,8 +24,11 @@ final class PluginRegistry
     public function __construct()
     {
         $this->plugins = [
-            'fedlex'  => new LexFedlexPlugin(),
-            'parl_ch' => new ParlChPlugin(),
+            'fedlex'      => new LexFedlexPlugin(),
+            'lex_eu'      => new LexEuPlugin(),
+            'recht_bund'  => new LexRechtBundPlugin(),
+            'legifrance'  => new LexLegifrancePlugin(),
+            'parl_ch'     => new ParlChPlugin(),
         ];
     }
 

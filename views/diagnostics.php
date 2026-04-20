@@ -92,7 +92,7 @@ $statusBg = static function (?array $row): string {
         <?php if ($coreStatus !== []): ?>
         <div class="latest-entries-section" style="margin-bottom: 24px;">
             <h2 class="section-title">Core fetchers (<?= count($coreStatus) ?>)</h2>
-            <p style="margin: 0 0 12px; color: #555;">RSS, scraper, and mail runs share <code>plugin_run_log</code> under synthetic ids (<code>core:*</code>). They run automatically with “Refresh all now” and CLI cron.</p>
+            <p style="margin: 0 0 12px; color: #555;">RSS (incl. Substack), Parliament press (<code>core:parl_press</code>), scraper, and mail runs share <code>plugin_run_log</code> under synthetic ids (<code>core:*</code>). They run automatically with “Refresh all now” and CLI cron.</p>
             <?php foreach ($coreStatus as $id => $s): ?>
                 <?php
                     $bg = $statusBg($s['last']);

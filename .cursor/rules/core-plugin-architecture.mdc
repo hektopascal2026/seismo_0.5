@@ -17,7 +17,7 @@ Isolation is achieved by a runtime boundary (`try/catch` in `RefreshAllService`)
 ```
 src/
 ├── Core/
-│   ├── Fetcher/        RSS, Mail, Scraper — our input pipelines
+│   ├── Fetcher/        RSS, Mail, Scraper, Parl press (`parl_press`) — our input pipelines
 │   ├── Scoring/        Recipe engine (ex-config.php)
 │   └── ...
 ├── Plugin/             All third-party adapters live here, one folder per adapter
@@ -72,10 +72,12 @@ Plugins do **not** own their own tables. They write (via the runner) to the exis
 
 | Family | Table | Plugins today |
 |---|---|---|
-| Legal text | `lex_items` | LexFedlex, LexEu, LexLegifrance, (future: RechtBund, Jus, etc.) |
+| Legal text | `lex_items` | LexFedlex, LexEu, LexLegifrance, LexRechtBund |
 | Parliamentary business (Leg) | `calendar_events` | ParlCh, (future: EU council, cantonal, …) |
-| RSS / Substack | `feed_items` | Core (not a plugin) |
+| RSS / Substack / **Parlament Medien (press)** | `feed_items` | **Core only** — RSS/Substack/scraper **`ParlPressFetchService`** for `feeds.source_type = parl_press` (not a plugin; not Lex). |
 | Email | `emails` (unified in Slice 4) | Core |
+
+**Parl MM (Bundeshaus Medien) — explicit product rule:** Parliament press is **news-shaped**, not legislation. It **never** uses `lex_items`, `LexController`, or a `SourceFetcherInterface` Lex adapter. Configure it as a **`feeds` row** with `source_type = parl_press` (SharePoint list URL); items persist as normal **`feed_items`** joined to that feed. Use `feeds.category` (e.g. `parl_mm`) if you want a stable dashboard filter pill label — **no new DB family**.
 
 Keys: `(source, external_id)`. Plugin-specific fields → `metadata JSON`. A plugin that truly doesn't fit any family proposes a **new family**, not a per-plugin table.
 

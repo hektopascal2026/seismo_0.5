@@ -37,6 +37,7 @@ use Seismo\Repository\MagnituLabelRepository;
 final class MagnituController
 {
     private const LEX_SOURCE_LABELS = [
+        'eu'       => 'EUR-Lex',
         'ch'       => 'Fedlex',
         'de'       => 'recht.bund.de',
         'fr'       => 'Légifrance',

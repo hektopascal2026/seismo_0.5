@@ -132,6 +132,7 @@ final class LexFedlexPlugin implements SourceFetcherInterface
             $rows[] = [
                 'celex' => $eliId,
                 'title' => $title,
+                'description' => null,
                 'document_date' => $dateDoc,
                 'document_type' => $docType,
                 'eurlex_url' => $fedlexUrl,
