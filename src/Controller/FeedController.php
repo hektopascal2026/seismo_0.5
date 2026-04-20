@@ -40,7 +40,7 @@ final class FeedController
             $allItems = $entryRepo->getRssModuleTimeline(self::LIST_LIMIT, 0);
 
             $feedRepo = new FeedRepository($pdo);
-            $feedsList = $feedRepo->listAll(FeedRepository::MAX_LIMIT, 0);
+            $feedsList = $feedRepo->listRssSubstackModuleSources(FeedRepository::MAX_LIMIT, 0);
             if ($editId > 0) {
                 $editRow = $feedRepo->findById($editId);
             }

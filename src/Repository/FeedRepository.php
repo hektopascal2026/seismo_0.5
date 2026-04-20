@@ -7,7 +7,12 @@ namespace Seismo\Repository;
 use PDO;
 
 /**
- * `feeds` table — RSS / Substack / scraper source definitions (Slice 8).
+ * `feeds` table — Slice 8 module admin (Slice 8).
+ *
+ * The **Feeds** page lists only RSS + Substack sources. Rows that are scraper-backed
+ * (`source_type`, `category`, or a live `scraper_configs` URL match) belong on
+ * {@see ScraperConfigRepository} / `?action=scraper` — same rule as
+ * {@see EntryRepository::getRssModuleTimeline()}.
  *
  * All SQL uses {@see entryTable()}. Mutating methods refuse satellite mode.
  */
@@ -20,14 +25,25 @@ final class FeedRepository
     }
 
     /**
+     * Feeds-module source list: RSS + Substack only (excludes scraper-linked rows).
+     *
      * @return list<array<string, mixed>>
      */
-    public function listAll(int $limit, int $offset): array
+    public function listRssSubstackModuleSources(int $limit, int $offset): array
     {
         $limit  = max(1, min($limit, self::MAX_LIMIT));
         $offset = max(0, $offset);
-        $t      = entryTable('feeds');
-        $sql    = "SELECT * FROM {$t} ORDER BY id ASC LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
+        $f = entryTable('feeds');
+        $sc = entryTable('scraper_configs');
+        $sql = "SELECT f.* FROM {$f} f
+            WHERE f.source_type IN ('rss', 'substack')
+              AND (IFNULL(f.category, '') <> 'scraper')
+              AND NOT EXISTS (
+                  SELECT 1 FROM {$sc} sc
+                  WHERE sc.url = f.url AND sc.disabled = 0
+              )
+            ORDER BY f.id ASC
+            LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
 
         $stmt = $this->pdo->query($sql);
 
