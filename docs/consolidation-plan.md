@@ -50,7 +50,7 @@ When Core fetchers feed `RefreshAllService`, normalise **before** the repository
 ### Guardrails to keep in Cursor rules
 
 1. **Move off global procedural handlers.** `handleLexPage()` → `LexController::show()`; DB reads → `LexRepository`; HTTP → `LexFetcherService`.
-2. **`entryTable()` is sacred.** Any query touching `feed_items`, `feeds`, `scraper_configs`, `emails` (unified), `sender_tags`, `email_subscriptions`, `lex_items`, `calendar_events` (Leg) **must** go through it. `entry_scores`, `magnitu_config`, `magnitu_labels` are always local.
+2. `**entryTable()` is sacred.** Any query touching `feed_items`, `feeds`, `scraper_configs`, `emails` (unified), `sender_tags`, `email_subscriptions`, `lex_items`, `calendar_events` (Leg) **must** go through it. `entry_scores`, `magnitu_config`, `magnitu_labels` are always local.
 3. **Decouple fetch from persist.** Fetchers return data; Repositories do `INSERT ... ON DUPLICATE KEY UPDATE`.
 4. **Slim `config.php`.** Scoring belongs in a `ScoringService`. DDL belongs in a CLI migration, not on every request.
 5. **Unify email schema.** Retire the older `emails` shape in favour of the `fetched_emails` structure (proper IMAP UID handling). Ship a one-time migration with a dry-run and clear backup guidance.
@@ -76,12 +76,12 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - No writes yet. Satellite mode should work against a mothership DB without scraping.
 - **Definition of done:** feed renders on both mothership and satellite; all card types look identical to 0.4; no query returns more than 200 rows regardless of URL params; no `htmlspecialchars` call in repository code.
 - **Explicitly deferred from this slice** (reassigned to named slices after an unilateral drop in the first Slice 1 attempt — see `slice-scope-fidelity.mdc`):
- - Search box (`?q=...`) → **Slice 1.5**. Read-only; no reason to wait for Slice 4.
- - Favourites-view toggle (`?view=favourites`) → **Slice 1.5**. Read-only filter against `entry_favourites`.
- - Tag filter pills (feed / email / substack categories, Lex pills, scraper pills, Leg pill) → **Slice 4**. Pills depend on fully ported entry sources + the sender_tags unification that Slice 4 already touches; doing them piecewise now would ship partial filters that break as each source ports.
- - Per-card star buttons (render) → **Slice 1.5**; POST to `?action=toggle_favourite` → **Slice 3**. Render-only stars that 500 on click are worse UX than none, so they ship together with the toggle route.
- - Top-bar "Refresh all" button and `?action=refresh_all` → **Slice 3** (unified refresh pipeline).
- - Navigation drawer with links to other pages → **Slice 6** (admin/settings polish), unless navigability pain surfaces sooner as Slices 2–4 land pages that need to be reachable from the dashboard.
+- Search box (`?q=...`) → **Slice 1.5**. Read-only; no reason to wait for Slice 4.
+- Favourites-view toggle (`?view=favourites`) → **Slice 1.5**. Read-only filter against `entry_favourites`.
+- Tag filter pills (feed / email / substack categories, Lex pills, scraper pills, Leg pill) → **Slice 4**. Pills depend on fully ported entry sources + the sender_tags unification that Slice 4 already touches; doing them piecewise now would ship partial filters that break as each source ports.
+- Per-card star buttons (render) → **Slice 1.5**; POST to `?action=toggle_favourite` → **Slice 3**. Render-only stars that 500 on click are worse UX than none, so they ship together with the toggle route.
+- Top-bar "Refresh all" button and `?action=refresh_all` → **Slice 3** (unified refresh pipeline).
+- Navigation drawer with links to other pages → **Slice 6** (admin/settings polish), unless navigability pain surfaces sooner as Slices 2–4 land pages that need to be reachable from the dashboard.
 
 ### Slice 1.5 — Dashboard filters (read-only) — **shipped (1.5b)**
 
@@ -132,8 +132,8 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 **Scope-fidelity notes for Slice 5 (per `slice-scope-fidelity.mdc`):**
 
 - **0.4 subscription-based email hiding is NOT ported.** v0.4's Magnitu responses filtered out emails whose sender address had `show_in_magnitu = 0` in `email_subscriptions`. v0.5 exposes all `emails` rows via `MagnituExportRepository::listEmailsSince()` regardless of subscription visibility. Re-adding the filter is a deliberate product decision (sender-level opt-out for the Magnitu pipeline) — track explicitly in a future slice if confirmed; do not smuggle it in without a plan entry.
-- **`magnitu_status.version` contract drift.** 0.4 returned a monolithic `version` string baked from the running codebase. v0.5's `MagnituController::status()` returns `{"schema_version": <int>, "recipe_version": <int>}` instead, which is what 0.4's `sync.py` actually consumes. If the mothership tooling still reads `.version` as a single string, the consumer must be updated in the same push. Documented here so the next reviewer doesn't mistake it for an oversight.
-- **`ScoringService::rescoreAll()` runs synchronously from the `magnitu_recipe` POST handler.** Up to ~2,000 rescores (500 per family × 4 families) fit inside a shared-host PHP timeout today; beyond that it needs to move to a cron worker. Filed as Slice 5b follow-up below rather than a warning to re-raise every review.
+- `**magnitu_status.version` contract drift.** 0.4 returned a monolithic `version` string baked from the running codebase. v0.5's `MagnituController::status()` returns `{"schema_version": <int>, "recipe_version": <int>}` instead, which is what 0.4's `sync.py` actually consumes. If the mothership tooling still reads `.version` as a single string, the consumer must be updated in the same push. Documented here so the next reviewer doesn't mistake it for an oversight.
+- `**ScoringService::rescoreAll()` runs synchronously from the `magnitu_recipe` POST handler.** Up to ~2,000 rescores (500 per family × 4 families) fit inside a shared-host PHP timeout today; beyond that it needs to move to a cron worker. Filed as Slice 5b follow-up below rather than a warning to re-raise every review.
 - **Fetch/persist boundary fixed post-review.** The initial Slice 5 submission had `ScoringService` issuing its own `SELECT` queries against entry-source tables (first Gemini review flagged this as a **FAIL**). Fixed in-session by moving every unscored-row lookup into `EntryScoreRepository` as `getUnscoredFeedItems() / getUnscoredLexItems() / getUnscoredEmails() / getUnscoredCalendarEvents()`, each honouring `entryTable()` + a repo-local `MAX_UNSCORED_LIMIT = 500`. `ScoringService` no longer takes a `PDO` — it depends only on `EntryScoreRepository` and orchestrates `RecipeScorer::score()` → `upsertRecipeScore()`. Second Gemini review: PASS.
 
 ### Slice 5b — Async recipe rescoring (deferred follow-up)
@@ -155,9 +155,9 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - **JSON sidecars are renamed, not deleted.** Migration 005 renames `lex_config.json` → `lex_config.json.migrated-v21` (same for calendar) so the admin keeps an on-disk sample to diff against the folded rows. Deletion is left to the admin; not speculative.
 - **Retention UI (state at 5a ship):** standalone `?action=retention` page, linked from Diagnostics. **Slice 6** folds this into `?action=settings&tab=retention`; GET `?action=retention` redirects there.
 - **Preview / actual consistency is enforced by construction.** Every family repo routes both `prune()` and `dryRunPrune()` through a private `buildPruneWhere()` that pulls the keep-fragment from `RetentionPredicates::forEntryType()`. The two queries cannot diverge modulo rows inserted between the two calls.
-- **`MagnituConfigRepository` is deleted outright, not kept as a deprecated shim.** Every callsite in 0.5 has been renamed to `SystemConfigRepository`. The brief deploy-gap fallback from `system_config` to `magnitu_config` in `SystemConfigRepository::get()/set()` existed until **Slice 6**, which removed it — only `system_config` is used now (schema ≥ 21).
-- **`jus_banned_words` is stored under `lex:jus_banned_words`, not `plugin:jus_banned_words`.** It is a shared filter list, not a plugin block — routing it differently keeps `SystemConfigRepository::getAllPluginBlocks()` honest.
-- **`EmailRepository` is a new retention-only repo.** Reads still go through `EntryRepository` / `MagnituExportRepository`; `EmailRepository` owns `prune()` and `dryRunPrune()` only. Resist folding all email SQL here without a consumer asking — "one SQL owner per concern" is load-bearing.
+- `**MagnituConfigRepository` is deleted outright, not kept as a deprecated shim.** Every callsite in 0.5 has been renamed to `SystemConfigRepository`. The brief deploy-gap fallback from `system_config` to `magnitu_config` in `SystemConfigRepository::get()/set()` existed until **Slice 6**, which removed it — only `system_config` is used now (schema ≥ 21).
+- `**jus_banned_words` is stored under `lex:jus_banned_words`, not `plugin:jus_banned_words`.** It is a shared filter list, not a plugin block — routing it differently keeps `SystemConfigRepository::getAllPluginBlocks()` honest.
+- `**EmailRepository` is a new retention-only repo.** Reads still go through `EntryRepository` / `MagnituExportRepository`; `EmailRepository` owns `prune()` and `dryRunPrune()` only. Resist folding all email SQL here without a consumer asking — "one SQL owner per concern" is load-bearing.
 
 ### Slice 6 — Admin / settings polish — **shipped**
 
@@ -165,28 +165,28 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - **Retention URL.** GET `?action=retention` redirects to `?action=settings&tab=retention`; POST handlers unchanged. Standalone `views/retention.php` removed.
 - **Navigation drawer** (`views/partials/site_header.php`) on dashboard, Lex, Leg, Diagnostics, Settings, Styleguide — links use `getBasePath()`. No separate Feeds/Mail/About routes in 0.5 yet.
 - **View timezone** — `SEISMO_VIEW_TIMEZONE` (default `Europe/Zurich`); `seismo_view_timezone()`; day headings + `seismo_format_utc()` use it.
-- **`SystemConfigRepository`** — legacy `magnitu_config` fallback **removed** (requires `system_config` / schema ≥ 21). `MigrationRunner::getCurrentVersion()` probes `magnitu_config` one last time and throws a clear RuntimeException if a pre-v21 schema is detected, so a deploy that skips Slice 5a fails loudly instead of re-running migrations against a populated database.
+- `**SystemConfigRepository`** — legacy `magnitu_config` fallback **removed** (requires `system_config` / schema ≥ 21). `MigrationRunner::getCurrentVersion()` probes `magnitu_config` one last time and throws a clear RuntimeException if a pre-v21 schema is detected, so a deploy that skips Slice 5a fails loudly instead of re-running migrations against a populated database.
 - **Diagnostics** — last **8** runs per core/plugin from `plugin_run_log` in a single batch query (`PluginRunLogRepository::recentForPlugins()` — one round-trip via per-id `UNION ALL` legs); renders through `views/partials/plugin_recent_runs.php`.
 - **Filter pills** — ~60s session cache for the three `SELECT DISTINCT` queries lives in `DashboardController` (not the repository, to keep `EntryRepository` SQL-only). Falls through to the raw repo call when the session isn't active.
-- **`?action=styleguide`** — minimal design reference page.
+- `**?action=styleguide`** — minimal design reference page.
 - **Definition of done — met.** Gemini spot-check PASS (2026) plus follow-up remediation: filter-pill cache moved out of the repository, diagnostics batch query, `MigrationRunner` legacy-schema guard, `?action=retention` dropped from the readonly-session list (pure redirect since this slice), diagnostics `<details>` block extracted to a partial, `RetentionService::DEFAULT_POLICIES` adopted as SSoT for `$families` in `SettingsController`.
 
 **Deferred / optional (not Slice 6):**
 
 - **Dashboard search:** optional FULLTEXT / `MATCH … AGAINST` when corpus grows — still in play.
 - **Retention UI:** family toggles, per-family overrides, “last pruned on DATE” readout — not built.
-- **`ai_view`** — no 0.5 code to retire; revisit if a route appears.
+- `**ai_view`** — no 0.5 code to retire; revisit if a route appears.
 
 ### Slice 7 — Magnitu settings tab (admin UI for the Magnitu contract) — **shipped**
 
 Port of 0.4's `Settings → Magnitu` tab. Slice 5 shipped the HTTP contract but left the admin surface unported, so a fresh 0.5 instance had no browser-only path to provision the `api_key` that `BearerAuth::guardMagnitu()` reads. Slice 7 closes that gap.
 
-- **`MagnituAdminController`** (new) — session-auth + CSRF, strictly separate from `MagnituController` (which is Bearer-only). Three POST handlers:
+- `**MagnituAdminController`** (new) — session-auth + CSRF, strictly separate from `MagnituController` (which is Bearer-only). Three POST handlers:
   - `?action=settings_save_magnitu` — writes `alert_threshold` (clamped 0.0–1.0) and `sort_by_relevance` to `system_config`.
   - `?action=settings_regenerate_magnitu_key` — mints `bin2hex(random_bytes(16))` and upserts `system_config.api_key`.
   - `?action=settings_clear_magnitu_scores` — `EntryScoreRepository::clearAll()` + reset `recipe_json` / `recipe_version` / `last_sync_at` rows. The "Danger Zone" action.
-- **`views/partials/settings_magnitu.php`** — five sections matching 0.4's layout: API key row (click-to-copy + Regenerate), Seismo API URL row (click-to-copy), 3-tile score counts + last-sync line + optional Connected Model block, Scoring Settings form (alert_threshold + sort_by_relevance), Danger Zone.
-- **`SettingsController::show()`** — accepts `tab=magnitu`; loads the nine-key `$magnituConfig` slice of `system_config`, the score-source-split `$magnituScoreStats` from `EntryScoreRepository::getScoreCounts()`, and a derived `$seismoApiUrl` (`scheme://host` + `getBasePath()` + `/index.php`, honouring `HTTP_X_FORWARDED_PROTO` for shared hosts like hektopascal).
+- `**views/partials/settings_magnitu.php**` — five sections matching 0.4's layout: API key row (click-to-copy + Regenerate), Seismo API URL row (click-to-copy), 3-tile score counts + last-sync line + optional Connected Model block, Scoring Settings form (alert_threshold + sort_by_relevance), Danger Zone.
+- `**SettingsController::show()**` — accepts `tab=magnitu`; loads the nine-key `$magnituConfig` slice of `system_config`, the score-source-split `$magnituScoreStats` from `EntryScoreRepository::getScoreCounts()`, and a derived `$seismoApiUrl` (`scheme://host` + `getBasePath()` + `/index.php`, honouring `HTTP_X_FORWARDED_PROTO` for shared hosts like hektopascal).
 - **Routes** (`index.php`) — three POSTs registered with `readOnly=false`; GET tab is served by the existing `settings` route, so `READONLY_KEEP_SESSION_FOR_CSRF` already covers it.
 - **Docs + rule** — `magnitu-integration.mdc` updated: "has not been ported yet" banner replaced with the shipped-slice chronology; the Key Tables entry for `system_config` now names Slice 7 / `MagnituAdminController`; `model_meta` config keys added to the keys list.
 
@@ -207,8 +207,8 @@ Port of 0.4's `Settings → Magnitu` tab. Slice 5 shipped the HTTP contract but 
 
 Closes the Slice 7 follow-ups. Slice 7 persists `alert_threshold` and `sort_by_relevance` but no consumer reads them yet, so the admin is tuning dials nothing is attached to. Slice 7a attaches the wires.
 
-- **`alert_threshold` consumer.** `DashboardController` reads `alert_threshold` from `SystemConfigRepository` (single call, cached for the request). `EntryRepository` joins `entry_scores.relevance_score` into the timeline rows it already returns (still raw, still bounded). `views/partials/dashboard_entry_loop.php` renders an "alert" badge on cards where `relevance_score >= alert_threshold`. Same badge rendered on Leg cards in `views/leg.php`. No new SQL outside the repository.
-- **`sort_by_relevance` consumer.** New default sort mode for the main timeline: when `sort_by_relevance = 1`, `EntryRepository::getTimeline()` orders by `relevance_score DESC, COALESCE(published_date, created_at) DESC`; otherwise unchanged. **Default is date-first** — relevance-first is opt-in via the Magnitu settings tab. No per-request `?sort=` parameter (keeps cacheability simple, avoids a URL surface we'd have to support forever).
+- `**alert_threshold` consumer.** `DashboardController` reads `alert_threshold` from `SystemConfigRepository` (single call, cached for the request). `EntryRepository` joins `entry_scores.relevance_score` into the timeline rows it already returns (still raw, still bounded). `views/partials/dashboard_entry_loop.php` renders an "alert" badge on cards where `relevance_score >= alert_threshold`. Same badge rendered on Leg cards in `views/leg.php`. No new SQL outside the repository.
+- `**sort_by_relevance` consumer.** New default sort mode for the main timeline: when `sort_by_relevance = 1`, `EntryRepository::getTimeline()` orders by `relevance_score DESC, COALESCE(published_date, created_at) DESC`; otherwise unchanged. **Default is date-first** — relevance-first is opt-in via the Magnitu settings tab. No per-request `?sort=` parameter (keeps cacheability simple, avoids a URL surface we'd have to support forever).
 - **Port `views/magnitu.php`.** Standalone "Magnitu highlights" page at `?action=magnitu` — entries with a Magnitu score ≥ `alert_threshold`, newest first. Reuses `dashboard_entry_loop.php` (card consistency is non-negotiable). Linked from the nav drawer. Session-auth guarded like the rest of the UI.
 - **Out of scope:** a settings toggle for "hide recipe-only scores on the highlights page" (product decision, not an architectural one); any change to the Magnitu API response shape (Slice 5 contract stays frozen).
 - **Definition of done:** setting `alert_threshold = 0.7` + saving immediately surfaces an "alert" badge on qualifying cards on the next dashboard load; flipping `sort_by_relevance` reorders the timeline without a per-request URL param; `?action=magnitu` renders the highlights feed; no query exceeds the `MAX_LIMIT` cap; no HTML-escaping in the repository layer.
@@ -221,11 +221,11 @@ Port 0.4.4's **Module-owned management UI** pattern. Each content module keeps i
 
 **Three modules, same pattern:**
 
-- **`?action=feeds`** — existing RSS / Substack items view gains an **Items | Feeds** toggle (`?action=feeds&view=sources`). New `FeedRepository` (SQL only, `entryTable('feeds')`) owns list/upsert/delete of feed rows. Controller orchestrates; view reuses dashboard card styling for consistency.
-- **`?action=scraper`** — scraped-items view gains an **Items | Sources** toggle. New `ScraperConfigRepository` (SQL only, `entryTable('scraper_configs')`). Same shape as Feeds.
-- **`?action=mail`** — email timeline gains an **Items | Subscriptions** toggle. New **`EmailSubscriptionRepository`** (SQL only, `entryTable('email_subscriptions')`) with domain-first matching (`@example.com`), per-sender override, one-click unsubscribe action, and `show_in_magnitu` toggle exposed on the row.
+- `**?action=feeds`** — existing RSS / Substack items view gains an **Items | Feeds** toggle (`?action=feeds&view=sources`). New `FeedRepository` (SQL only, `entryTable('feeds')`) owns list/upsert/delete of feed rows. Controller orchestrates; view reuses dashboard card styling for consistency.
+- `**?action=scraper`** — scraped-items view gains an **Items | Sources** toggle. New `ScraperConfigRepository` (SQL only, `entryTable('scraper_configs')`). Same shape as Feeds.
+- `**?action=mail`** — email timeline gains an **Items | Subscriptions** toggle. New `**EmailSubscriptionRepository`** (SQL only, `entryTable('email_subscriptions')`) with domain-first matching (`@example.com`), per-sender override, one-click unsubscribe action, and `show_in_magnitu` toggle exposed on the row.
 
-**Load-bearing — do NOT target `sender_tags`.** `sender_tags` is the legacy (pre-0.4.3) data model. The first-class table for mail admin is **`email_subscriptions`** (domain-first, `show_in_magnitu` flag, one-click unsubscribe). The dashboard filter pills continue reading `sender_tags` for backwards-compat; migrating pill rendering to `email_subscriptions` is **explicitly out of scope** — separate slice if confirmed. Building the new UI around `sender_tags` writes code for a deprecated model.
+**Load-bearing — do NOT target `sender_tags`.** `sender_tags` is the legacy (pre-0.4.3) data model. The first-class table for mail admin is `**email_subscriptions`** (domain-first, `show_in_magnitu` flag, one-click unsubscribe). The dashboard filter pills continue reading `sender_tags` for backwards-compat; migrating pill rendering to `email_subscriptions` is **explicitly out of scope** — separate slice if confirmed. Building the new UI around `sender_tags` writes code for a deprecated model.
 
 **Cross-cutting:**
 
@@ -274,72 +274,7 @@ The "last-mile polish" slice. Closes three small ergonomics gaps (dashboard refr
 
 **Definition of done:** dashboard has a working Refresh button (CSRF-guarded, redirects back); `?action=about` renders a human-readable product description that names the export API as the AI-view successor; a dry run of the wizard-stub on a host with `is_writable(__DIR__) === false` produces the copy-paste screen and never silently fails; `docs/setup-wizard-notes.md` gains at least one entry from live testing.
 
-### Slice 10 — Scoring engine polish (post-consolidation)
-
-The 0.5 consolidation ends with Slice 9. Slice 10 is the first **algorithmic** slice after the architectural arc closes. It lands two deterministic improvements to `RecipeScorer` without touching the Magnitu feature space.
-
-**Load-bearing constraint — do not drift from Magnitu.** Per `src/Core/Scoring/RecipeScorer.php` docblock, the tokenisation + keyword feature space is shared with Magnitu's `distiller.py`. Slice 10 adds two **post-processing** factors applied *after* the softmax / class-weight sum. The feature space is unchanged, the recipe JSON schema is unchanged, `sync.py` / `distiller.py` need no updates. Document the divergence in `magnitu-integration.mdc` so the next time someone compares scores side-by-side they know why Seismo's fallback diverges from a Magnitu model trained on the same recipe.
-
-**1. Text-length normalization.** Long articles currently dominate pure keyword-count scoring (500-word politics piece beats a 100-word security tip every time, regardless of keyword density). Divide the accumulated class scores by `log(1 + token_count)` (or an equivalent gentle damping). Pure function of `token_count` already computed in `RecipeScorer::score()`; zero new state.
-
-**2. Time decay.** Multiply the final `relevance_score` by `exp(-age_days / half_life_days)` so the dashboard de-prioritises stale items without deleting them. `age_days = (now - published_date)` in days, floored at 0. `published_date` is already in scope when the scorer is invoked; if not, the caller (`ScoringService`) passes it in.
-
-**3. Tunables in `system_config`, not in the recipe.**
-
-- `scoring:text_length_damping` — `none` | `log` (default `log`).
-- `scoring:time_decay_half_life_days` — integer. Default `30`. `0` disables decay.
-- Reason: these are Seismo-fallback tunables. The **recipe** is the Magnitu contract. Keeping them in `system_config` under a `scoring:` prefix means Magnitu doesn't see (and therefore can't accidentally depend on) Seismo-side post-processing.
-
-**4. Calibration surface on the Magnitu admin tab.** Add a "Preview" block that runs `ScoringService::previewRescore()` (new method, reuses `EntryScoreRepository::getUnscoredFeedItems()` patterns) against the first 200 feed items with the **current** vs **proposed** settings and reports: `label_flips: {investigation_lead: N, important: N, background: N, noise: N}`. Read-only, no DB writes. Lets the admin dial in half-life and damping before hitting "Save + rescore all".
-
-**5. Trigger rescore on save.** Same pattern as the existing `magnitu_recipe` POST handler: bump `recipe_version` (so Magnitu's `sync.py` re-pulls from its side) and call `ScoringService::rescoreAll()`. If corpus size ever forces this async, graduate per Slice 5b; not speculative.
-
-**Explicitly out of Slice 10:**
-
-- Changing the recipe JSON format, tokenisation, bigram construction, or softmax.
-- Any change to `distiller.py`. (A note in `magnitu-integration.mdc` — not a code change.)
-- Source-type weights on decay half-life (e.g. Lex entries decay slower than RSS). Hard-coded uniform half-life for v1; per-source halves live in a future slice if the preview surface shows the uniform decay is too blunt.
-- A scores histogram / analytics view. Diagnostics gets the `label_flips` preview; a full distribution dashboard is its own slice.
-
-**Definition of done:** `RecipeScorer::score()` accepts optional `$tokenCount` and `$publishedDate` params and applies length damping + time decay when the corresponding `system_config` values are set; Magnitu settings tab has a working Preview that reports label-flip counts against current data; saving new scoring tunables triggers a full rescore; a bare-recipe deployment with both tunables at defaults produces a visibly calmer "stale-item bias" on the dashboard without breaking the Magnitu contract (recipe JSON, `sync.py`, `distiller.py` all untouched).
-
-### Slice 11 — Dynamic n-gram phrase matching in `RecipeScorer`
-
-Lift `RecipeScorer` from bigram-only (0.4 port) to arbitrary-length phrase matching via a sliding window of size `max_n`. This is a precision sharpener for the **deterministic** side of the scoring stack — the Python ML model remains the generaliser; recipe stays the cheap, auditable, exact-match path. Phrased correctly: long phrases make the recipe engine a *sharper* knife, not a new capability class.
-
-**Coordination status (confirmed with Magnitu maintainer, 2026-04):** the Magnitu JSON wire format already accepts arbitrary-length phrase keys. `legal_signal_patterns` in `distiller.py` serializes whatever phrase length the user supplies. Magnitu's own ML pipeline (`pipeline.py` TF-IDF `ngram_range`, `distiller.py` `_compose_ngrams`, `explainer.py` `_extract_recipe_tokens`) is still capped at 3-grams, but that's for *discovered* phrases, not user-supplied ones. **Seismo can ship Slice 11 standalone**; the Magnitu-side follow-up (lifting their discovery cap to 4 or 5) is tracked separately and gated behind Magnitu's own config knob.
-
-**The load-bearing constraint — tokenization parity.** Per Magnitu's reviewer: the real hazard is not n-gram depth, it's that `RecipeScorer`'s PHP tokenizer must produce the *identical* token sequence to Magnitu's Python tokenizer for the same input, because recipe phrase keys are pre-tokenized substrings. Magnitu's tokenizer is `re.findall(r"\b[a-zA-Z0-9\u00C0-\u024F]{2,}\b", lower(text))`. Current Seismo tokenizer in `RecipeScorer::score()` is `preg_split('/[^a-zA-ZäöüàéèêïôùûçÄÖÜÀÉÈÊÏÔÙÛÇß0-9]+/u', …)` — **explicitly diverges** on (a) min token length (Python drops 1-char tokens, PHP doesn't), (b) unicode range (PHP allowlist is narrower than Latin-Extended `\u00C0-\u024F`), (c) regex mode (find-all vs split-on-non-word). A 5-gram key like `"gesetz über die künstliche intelligenz"` will silently not match if either side tokenizes `"über"` differently or drops `"die"` as too short on one side and not the other. **Parity fix is a required prerequisite, not a nice-to-have.**
-
-**1. Tokenizer parity.** Rewrite `RecipeScorer`'s tokenizer to mirror Magnitu's Python regex exactly: `preg_match_all('/\b[a-zA-Z0-9\x{00C0}-\x{024F}]{2,}\b/u', $lowered, $matches)`. Add a golden-set parity test (`tests/ScoringTokenizerParityTest.php` or similar) with ~20 inputs covering German umlauts, French diacritics, numbers, CJK fall-through, short-word boundaries — each asserting the PHP token list matches a fixture produced by the Magnitu regex. The fixture ships committed; regenerating it is a documented one-liner against Magnitu's `_tokenize_text`. A parity break becomes a failing test, not a silent scoring drift.
-
-**2. Explicit `max_ngram` in recipe metadata.** Add an optional root-level `"max_ngram": N` field to the recipe JSON. `RecipeScorer` reads it once per batch and uses it as the sliding-window size. **Absence → 3**, matching Magnitu's current discovery cap (`distiller.py` `_compose_ngrams(max_n=3)`, `pipeline.py` `ngram_range=(1, 3)`, `explainer.py` `_extract_recipe_tokens`). Rationale for taking the win on the absence-default: Magnitu has been emitting trigram keys into every recipe it produces since forever — they've been dead weight on the Seismo side because 0.4's scorer only generated bigrams. Absence → 3 means those trigram keys start firing on Slice 11 deploy with zero admin action; the recipe content isn't changing, the scorer is finally reading what's already there. The scanner-fallback (`max(str_word_count($k))` across all keyword keys) is used only for **validation**: if the observed max phrase length exceeds the declared (or defaulted) `max_ngram`, throw — refuse to silently truncate the admin's intent. Magnitu's reviewer suggested the same field so both services stay in lockstep.
-
-**Deploy-time behaviour note (not a bug — a guided forcing function).** Existing recipes that contain user-supplied 4+ gram phrases via `legal_signal_patterns` will start throwing at load time on first Slice 11 deploy, because absence defaults to 3 and the scanner-validation sees the longer key. The fix is one line: the admin (or Magnitu's next recipe emission) sets `"max_ngram": 5` (or whatever) explicitly. The throw is the feature — it makes the scorer's capability surface visible rather than letting a 5-gram key sit in a recipe the admin thinks is active but that silently no-ops. Document in the Slice 11 upload notes.
-
-**3. Sliding-window scoring.** Replace the unigrams+bigrams list construction with a single O(tokens × max_ngram) sliding window that hash-tests each window against `$keywords` via `isset()`. Pseudocode:
-```
-for ($n = 1; $n <= $maxN; $n++) {
-    for ($i = 0; $i + $n <= count($tokens); $i++) {
-        $phrase = implode(' ', array_slice($tokens, $i, $n));
-        if (isset($keywords[$phrase])) { /* accumulate class scores */ }
-    }
-}
-```
-Memory stays flat — no n-gram list materialization. A 20k-token PDF with `max_ngram = 5` is ~100k isset lookups, which is cheap PHP.
-
-**4. Hard cap at `max_ngram = 6`.** Refuse recipes with a declared or observed `max_ngram > 6` with a clear RuntimeException at load time. Rationale: (a) phrases beyond 6 words are almost always an admin paste-accident (whole sentences); (b) Magnitu's reviewer flagged `recipe_max_phrase_abs` clipping as a parallel concern — a matching cap on our side keeps the two aligned; (c) if a real use case for 7+ word phrases emerges, lifting the cap is a one-line change + a new golden fixture, not an architectural decision.
-
-**5. Documentation pointer.** Add one paragraph to `.cursor/rules/magnitu-integration.mdc` naming `max_ngram` as part of the recipe JSON contract, with the "Seismo currently fires; Magnitu ML discovery still capped at 3 pending their follow-up" asymmetry called out. The goal is that a reviewer reading the rule six months from now understands why recipes can contain 5-grams that only the PHP side matches.
-
-**Explicitly out of Slice 11:**
-
-- **Magnitu-side `ngram_range` bump.** That's a Magnitu repo PR — three sites in `pipeline.py`, `_compose_ngrams` in `distiller.py`, `_extract_recipe_tokens` in `explainer.py`, plus `recipe_max_phrase_abs` re-tuning. Tracked in `magnitu-integration.mdc` as a follow-up; Slice 11 ships without it.
-- **Stopword filtering.** Would break parity with Magnitu's tokenizer in exactly the way the constraint above forbids. Don't.
-- **Phrase weight scaling by `n` (e.g. "longer phrases count more").** Interacts with Slice 10's length damping in ways I can't pre-reason cleanly. If it's wanted, its own slice after label-flip data from the Slice 10 preview tells us whether long phrases are already producing calmer scores without extra scaling.
-- **A recipe-editor UI.** The only admin surface touched in Slice 11 is the existing Magnitu settings tab. Adding / editing long phrases still happens via `magnitu_recipe` POST (from Magnitu's side) or via direct recipe-JSON editing. A web-based recipe editor is a later product decision.
-
-**Definition of done:** (a) the golden-set tokenizer parity test passes — PHP and Python produce identical token sequences across the fixture; (b) a recipe containing `"max_ngram": 5` and a real 5-gram phrase fires on the Seismo side against a document that contains the phrase, with the 5-gram appearing in `entry_scores.explanation.top_features`; (c) a recipe with an observed phrase of length 4 but declared `max_ngram: 3` throws at load time; (d) declaring `max_ngram: 7` throws; (e) on a regression corpus of ~500 entries, any `relevance_score` that changes between 0.4 and Slice 11 is traceable to a trigram key in the recipe that actually appears in the entry's text — no "mystery drift", every delta is explainable by a token-present / token-absent flip in the matched-features list; (f) `magnitu-integration.mdc` names the new field and the Seismo-fires-long-phrases / Magnitu-ML-discovers-up-to-3-grams asymmetry.
+**Consolidation arc.** Slices **7a → 8 → 9** are the remaining numbered work for 0.5. No further numbered slices are planned for recipe-scoring polish in this document; sophisticated scoring belongs in **Magnitu** (the ML companion). The PHP `RecipeScorer` stays the cheap deterministic fallback — good enough to sort the dashboard until Magnitu overwrites scores.
 
 ## Portability checklist (applies to every slice)
 
@@ -399,3 +334,8 @@ Recorded here so they don't get re-litigated:
 - **Dashboard filter pills:** ~~`EntryRepository::getFilterPillOptions()` runs three `SELECT DISTINCT` queries per request~~ — **Slice 6** adds a ~60s session cache for the merged options array. Cache lives in `DashboardController::getFilterPillOptionsCached()`; the repository method is still pure-SQL.
 - **Scraper / feed_items sort churn:** `FeedItemRepository::upsertFeedItems()` keeps the existing `published_date` when `content_hash` is unchanged so scraper re-runs do not float stale pages to the top of the dashboard.
 - **Diagnostics parity:** Core fetchers have per-id “Refresh now” on `?action=diagnostics` (same POST as plugins). A “Test fetch (no save)” path for RSS/scraper/mail is still deferred — not part of the `SourceFetcherInterface` test shape.
+
+## Open Decisions / Future Polish
+
+- **Title Boosting (Fallback Scorer):** Currently, title and content are concatenated before scoring. Future enhancement: tokenize separately and apply a `scoring:title_weight` multiplier (e.g., 2.0) to title matches.
+- **Exact Phrase Matching:** If the recipe engine ever needs to match multi-word phrases, do not build a cross-language n-gram tokenizer. Use native PHP `stripos()` or a simple word-boundary regex (`\b(phrase)\b`) as a cheap, stateless escape hatch.
