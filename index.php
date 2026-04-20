@@ -9,8 +9,9 @@
  *
  * Satellite installs (`SEISMO_SATELLITE_MODE`) load a minimal route table from
  * `routes_satellite.inc.php` — timeline, highlights, settings (general +
- * Magnitu), Magnitu API, auth, health, migrate. The mothership uses
- * `routes_mothership.inc.php` for the full surface.
+ * Magnitu), Magnitu API, POST `refresh_remote` (proxy to mothership refresh),
+ * auth, health, migrate. The mothership uses `routes_mothership.inc.php` for
+ * the full surface.
  */
 
 declare(strict_types=1);

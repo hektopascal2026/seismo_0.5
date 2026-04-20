@@ -1,8 +1,9 @@
 <?php
 /**
  * Satellite-only route table — timeline, highlights, settings (general + Magnitu),
- * Magnitu Bearer API, auth, health, migrate. No feeds, Lex/Leg admin, diagnostics,
- * retention, exports, or mothership-only surfaces.
+ * Magnitu Bearer API, remote “refresh mothership” POST, auth, health, migrate.
+ * No feeds, Lex/Leg admin, diagnostics UI, retention, exports, or other
+ * mothership-only surfaces.
  *
  * @var \Seismo\Http\Router $router
  */
@@ -28,6 +29,11 @@ $router->register(
     'migrate',
     \Seismo\Controller\MigrateController::class . '::runWeb',
     true
+);
+$router->register(
+    'refresh_remote',
+    \Seismo\Controller\DashboardController::class . '::refreshRemote',
+    false
 );
 $router->register(
     'toggle_favourite',

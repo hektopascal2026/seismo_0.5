@@ -33,11 +33,15 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                 <?php endif; ?>
             </div>
             <div class="top-bar-actions">
-                <?php if (!empty($showTimelineRefresh) && $activeNav === 'index'): ?>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_all" class="admin-inline-form top-bar-form-gap">
+                <?php
+                    $timelineRefreshAct = $timelineRefreshAction ?? 'refresh_all';
+                    $timelineRefreshRet = $timelineRefreshReturnAction ?? 'index';
+                    ?>
+                <?php if (!empty($showTimelineRefresh) && ($activeNav === 'index' || $activeNav === 'filter')): ?>
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap">
                         <?= $csrfField ?>
-                        <input type="hidden" name="return_action" value="index">
-                        <button type="submit" class="top-bar-btn top-bar-btn--text" title="Fetch all sources (same as Diagnostics → Refresh all)">Refresh</button>
+                        <input type="hidden" name="return_action" value="<?= e($timelineRefreshRet) ?>">
+                        <button type="submit" class="top-bar-btn top-bar-btn--text" title="<?= isSatellite() ? 'Fetch all sources on the mothership (remote refresh)' : 'Fetch all sources (same as Diagnostics → Refresh all)' ?>">Refresh</button>
                     </form>
                 <?php endif; ?>
                 <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>

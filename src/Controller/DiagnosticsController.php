@@ -364,12 +364,20 @@ final class DiagnosticsController
     {
         $t = trim((string)($_POST['return_action'] ?? ''));
 
-        return $t === 'index' ? 'index' : 'diagnostics';
+        if ($t === 'index') {
+            return 'index';
+        }
+        if ($t === 'filter') {
+            return 'filter';
+        }
+
+        return 'diagnostics';
     }
 
     private function redirectToTarget(string $action): void
     {
-        $a = $action === 'index' ? 'index' : 'diagnostics';
+        $targets = ['index', 'filter', 'diagnostics'];
+        $a       = in_array($action, $targets, true) ? $action : 'diagnostics';
         header('Location: ' . getBasePath() . '/index.php?action=' . rawurlencode($a), true, 303);
         exit;
     }
