@@ -444,6 +444,9 @@ final class EntryRepository
      */
     private function fetchFeedItems(int $limit, ?TimelineFilter $filter = null): array
     {
+        if ($filter !== null && $filter->excludeAllFeedItems) {
+            return [];
+        }
         $extra = $this->feedSqlFilter($filter);
         $sql = '
             SELECT ' . self::SQL_FEED_ITEMS_JOIN_SELECT . ',
@@ -466,6 +469,9 @@ final class EntryRepository
      */
     private function fetchEmails(int $limit, ?TimelineFilter $filter = null): array
     {
+        if ($filter !== null && $filter->excludeAllEmails) {
+            return [];
+        }
         $emailTags = $filter !== null && $filter->emailTags !== []
             ? $filter->emailTags
             : [];
@@ -549,6 +555,9 @@ final class EntryRepository
      */
     private function fetchLexItems(int $limit, ?TimelineFilter $filter = null): array
     {
+        if ($filter !== null && $filter->excludeAllLexItems) {
+            return [];
+        }
         $clauses = [];
         $params  = [];
         if ($filter !== null && $filter->lexSources !== []) {
@@ -692,6 +701,9 @@ final class EntryRepository
      */
     private function fetchFeedItemsSearch(string $term, int $limit, ?TimelineFilter $filter = null): array
     {
+        if ($filter !== null && $filter->excludeAllFeedItems) {
+            return [];
+        }
         $extra = $this->feedSqlFilter($filter);
         $sql = '
             SELECT ' . self::SQL_FEED_ITEMS_JOIN_SELECT . ',
@@ -720,6 +732,9 @@ final class EntryRepository
     {
         $cols = $this->resolveEmailSearchColumns('emails');
         if ($cols === []) {
+            return [];
+        }
+        if ($filter !== null && $filter->excludeAllEmails) {
             return [];
         }
         $parts = [];
@@ -867,6 +882,9 @@ final class EntryRepository
      */
     private function fetchLexItemsSearch(string $term, int $limit, ?TimelineFilter $filter = null): array
     {
+        if ($filter !== null && $filter->excludeAllLexItems) {
+            return [];
+        }
         $params   = [$term, $term];
         $lexWhere = '';
         if ($filter !== null && $filter->lexSources !== []) {
@@ -1574,6 +1592,16 @@ final class EntryRepository
         }
 
         if ($filter->excludeCalendar && $et === 'calendar_event') {
+            return false;
+        }
+
+        if ($filter->excludeAllFeedItems && $et === 'feed_item') {
+            return false;
+        }
+        if ($filter->excludeAllEmails && $et === 'email') {
+            return false;
+        }
+        if ($filter->excludeAllLexItems && $et === 'lex_item') {
             return false;
         }
 

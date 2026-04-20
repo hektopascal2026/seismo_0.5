@@ -14,6 +14,8 @@ namespace Seismo\Repository;
  * `filters[calendar]=1` (Leg), plus `filter_form=1` when the filter form
  * submitted so “all checkboxes off in a row” is not confused with the default
  * “all on” first visit. `none=1` means every dimension off (empty timeline).
+ * When a dimension is fully off, `excludeAll*` flags short-circuit SQL so
+ * untagged emails and NULL-category feeds cannot leak through exclusion lists.
  *
  * **Legacy per-pill OFF lists:** `efc` / `elx` / `eet` are comma-separated tokens
  * that are turned **off** (excluded from SQL). `ecal=1` / `ejus=1` hide Leg / Jus.
@@ -39,6 +41,9 @@ final class TimelineFilter
      * @param list<string> $excludedFeedCategories Dashboard: these feed categories are OFF.
      * @param list<string> $excludedLexSources     Dashboard: these Lex sources are OFF.
      * @param list<string> $excludedEmailTags      Dashboard: these sender tags are OFF.
+     * @param bool         $excludeAllFeedItems    Native/none: no feed rows (fixes NULL-category leak).
+     * @param bool         $excludeAllEmails       Native/none: no email rows (fixes untagged leak).
+     * @param bool         $excludeAllLexItems     Native/none: no lex rows (fixes unknown-source leak).
      */
     public function __construct(
         public readonly array $feedCategories = [],
@@ -50,6 +55,9 @@ final class TimelineFilter
         public readonly array $excludedEmailTags = [],
         public readonly bool $excludeCalendar = false,
         public readonly bool $excludeJusLex = false,
+        public readonly bool $excludeAllFeedItems = false,
+        public readonly bool $excludeAllEmails = false,
+        public readonly bool $excludeAllLexItems = false,
     ) {
     }
 
@@ -66,7 +74,10 @@ final class TimelineFilter
             || $this->excludedLexSources !== []
             || $this->excludedEmailTags !== []
             || $this->excludeCalendar
-            || $this->excludeJusLex;
+            || $this->excludeJusLex
+            || $this->excludeAllFeedItems
+            || $this->excludeAllEmails
+            || $this->excludeAllLexItems;
     }
 
     /**
@@ -79,6 +90,9 @@ final class TimelineFilter
             && $this->excludedEmailTags === []
             && !$this->excludeCalendar
             && !$this->excludeJusLex
+            && !$this->excludeAllFeedItems
+            && !$this->excludeAllEmails
+            && !$this->excludeAllLexItems
             && $this->feedCategories === []
             && $this->feedSourceKinds === []
             && $this->lexSources === []
@@ -184,6 +198,9 @@ final class TimelineFilter
             excludedEmailTags: array_values($pillOpts['email_tags'] ?? []),
             excludeCalendar: true,
             excludeJusLex: true,
+            excludeAllFeedItems: true,
+            excludeAllEmails: true,
+            excludeAllLexItems: true,
         );
     }
 
@@ -219,12 +236,19 @@ final class TimelineFilter
         $calRaw = $filters['calendar'] ?? null;
         $calOn  = is_scalar($calRaw) && trim((string)$calRaw) === '1';
 
+        $excludeAllFeedItems = $feedAll !== [] && $inFeeds === [];
+        $excludeAllEmails    = $emAll !== [] && $inEm === [];
+        $excludeAllLexItems  = $lexAll !== [] && $inLex === [];
+
         return new self(
             excludedFeedCategories: array_values(array_diff($feedAll, $inFeeds)),
             excludedLexSources: array_values(array_diff($lexAll, $inLex)),
             excludedEmailTags: array_values(array_diff($emAll, $inEm)),
             excludeCalendar: !$calOn,
             excludeJusLex: false,
+            excludeAllFeedItems: $excludeAllFeedItems,
+            excludeAllEmails: $excludeAllEmails,
+            excludeAllLexItems: $excludeAllLexItems,
         );
     }
 
