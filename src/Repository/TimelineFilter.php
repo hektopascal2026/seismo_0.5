@@ -7,15 +7,21 @@ namespace Seismo\Repository;
 /**
  * Dashboard tag-filter state. Default = show everything (no query params).
  *
- * **Exclusion model (index UI):** pills start “on”; turning a pill off appends
- * to `efc` / `elx` / `eet` (comma lists). `ecal=1` hides Leg / `calendar_event`
- * rows; `ejus=1` hides Swiss case-law Lex sources (`ch_bger`, `ch_bge`, `ch_bvger`).
+ * **Per-pill OFF lists:** `efc` / `elx` / `eet` are comma-separated tokens that
+ * are turned **off** (excluded from SQL). Empty list = every pill in that row
+ * is **on**. Pills are independent: toggling one only changes its list.
  *
- * **Selection:** `sel=none` shows an intentionally empty timeline (no DB merge).
+ * **Leg / Jus:** `ecal=1` hides calendar rows; `ejus=1` hides Jus Lex sources.
+ *
+ * **Selection All (UI):** clears all exclusions + legacy params.
+ * **Selection None (UI):** sets `efc`/`elx`/`eet` to every known pill option,
+ * plus `ecal=1` and `ejus=1`, so the timeline is empty until the user turns
+ * pills back on.
  *
  * **Legacy inclusion** (`fc`, `fk`, `lx`, `etag`) is still parsed for old links.
  *
- * Keep in sync with {@see DashboardController} and {@see FavouriteController::RETURN_QUERY_ALLOW}.
+ * Keep in sync with {@see DashboardController} and {@see FavouriteController::RETURN_QUERY_ALLOW}
+ * (dashboard filter query keys only).
  */
 final class TimelineFilter
 {
@@ -29,12 +35,11 @@ final class TimelineFilter
      * @param list<string> $feedSourceKinds      Legacy: rss|substack|scraper OR.
      * @param list<string> $lexSources           Legacy: Lex `source` IN (…).
      * @param list<string> $emailTags            Legacy: sender tag IN (…).
-     * @param list<string> $excludedFeedCategories Dashboard: exclude these feed categories.
-     * @param list<string> $excludedLexSources     Dashboard: exclude these Lex `source` values.
-     * @param list<string> $excludedEmailTags      Dashboard: exclude these sender tags.
+     * @param list<string> $excludedFeedCategories Dashboard: these feed categories are OFF.
+     * @param list<string> $excludedLexSources     Dashboard: these Lex sources are OFF.
+     * @param list<string> $excludedEmailTags      Dashboard: these sender tags are OFF.
      */
     public function __construct(
-        public readonly bool $selectionNone = false,
         public readonly array $feedCategories = [],
         public readonly array $feedSourceKinds = [],
         public readonly array $lexSources = [],
@@ -47,10 +52,12 @@ final class TimelineFilter
     ) {
     }
 
+    /**
+     * Any filter that narrows the timeline (exclusions, Leg/Jus off, legacy).
+     */
     public function isActive(): bool
     {
-        return $this->selectionNone
-            || $this->feedCategories !== []
+        return $this->feedCategories !== []
             || $this->feedSourceKinds !== []
             || $this->lexSources !== []
             || $this->emailTags !== []
@@ -59,6 +66,69 @@ final class TimelineFilter
             || $this->excludedEmailTags !== []
             || $this->excludeCalendar
             || $this->excludeJusLex;
+    }
+
+    /**
+     * Default dashboard pill state: no exclusions, Leg + Jus on, no legacy.
+     */
+    public function dashboardPillsAllOn(): bool
+    {
+        return $this->excludedFeedCategories === []
+            && $this->excludedLexSources === []
+            && $this->excludedEmailTags === []
+            && !$this->excludeCalendar
+            && !$this->excludeJusLex
+            && $this->feedCategories === []
+            && $this->feedSourceKinds === []
+            && $this->lexSources === []
+            && $this->emailTags === [];
+    }
+
+    /**
+     * True when exclusions match “everything off” for the current pill option sets.
+     *
+     * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $pillOpts
+     */
+    public function dashboardPillsAllOff(array $pillOpts): bool
+    {
+        if (!$this->excludeCalendar || !$this->excludeJusLex) {
+            return false;
+        }
+        if (!$this->legacyFiltersEmpty()) {
+            return false;
+        }
+        $feeds = $pillOpts['feed_categories'] ?? [];
+        $lex   = $pillOpts['lex_sources'] ?? [];
+        $em    = $pillOpts['email_tags'] ?? [];
+
+        return self::sameStringSet($feeds, $this->excludedFeedCategories)
+            && self::sameStringSet($lex, $this->excludedLexSources)
+            && self::sameStringSet($em, $this->excludedEmailTags);
+    }
+
+    private function legacyFiltersEmpty(): bool
+    {
+        return $this->feedCategories === []
+            && $this->feedSourceKinds === []
+            && $this->lexSources === []
+            && $this->emailTags === [];
+    }
+
+    /**
+     * @param list<string> $a
+     * @param list<string> $b
+     */
+    private static function sameStringSet(array $a, array $b): bool
+    {
+        if (count($a) !== count($b)) {
+            return false;
+        }
+        $a = array_values(array_unique($a));
+        $b = array_values(array_unique($b));
+        sort($a);
+        sort($b);
+
+        return $a === $b;
     }
 
     /**
@@ -85,8 +155,6 @@ final class TimelineFilter
      */
     public static function fromQueryArray(array $get): self
     {
-        $sel = isset($get['sel']) ? strtolower(trim((string)$get['sel'])) : '';
-
         $fcList   = self::parseListParam($get['fc'] ?? null);
         $fkList   = self::normalizeFkList(self::parseListParam($get['fk'] ?? null));
         $lxList   = self::parseListParam($get['lx'] ?? null);
@@ -100,7 +168,6 @@ final class TimelineFilter
         $ejusRaw = isset($get['ejus']) ? trim((string)$get['ejus']) : '';
 
         return new self(
-            selectionNone: ($sel === 'none'),
             feedCategories: $fcList,
             feedSourceKinds: $fkList,
             lexSources: $lxList,

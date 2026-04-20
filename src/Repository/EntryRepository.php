@@ -1356,10 +1356,6 @@ final class EntryRepository
     {
         $et = (string)($item['entry_type'] ?? '');
 
-        if ($filter->selectionNone) {
-            return false;
-        }
-
         $data = $item['data'] ?? [];
         if (!is_array($data)) {
             $data = [];

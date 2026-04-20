@@ -8,8 +8,10 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Seismo\Config\CalendarConfigStore;
 use Seismo\Config\LexConfigStore;
+use Seismo\Core\Scoring\ScoringService;
 use Seismo\Repository\CalendarEventRepository;
 use Seismo\Repository\EmailIngestRepository;
+use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\LexItemRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -40,6 +42,10 @@ use Seismo\Repository\PluginRunLogRepository;
  *
  * Slice 4: {@see CoreRunner} runs first (RSS/Substack, scraper, IMAP mail),
  * then registered plugins. Same `runAll()` entry point for web + CLI cron.
+ *
+ * After ingest, {@see recipeRescoreAfterIngest()} runs the deterministic recipe
+ * scorer ({@see ScoringService}) so new rows get `entry_scores` without waiting
+ * for a Magnitu `magnitu_recipe` POST.
  */
 final class RefreshAllService
 {
@@ -51,6 +57,8 @@ final class RefreshAllService
         private readonly LexConfigStore $lexConfig,
         private readonly CalendarConfigStore $calendarConfig,
         private readonly CoreRunner $coreRunner,
+        private readonly SystemConfigRepository $systemConfig,
+        private readonly EntryScoreRepository $entryScores,
     ) {
     }
 
@@ -66,6 +74,8 @@ final class RefreshAllService
         foreach ($this->registry->all() as $id => $plugin) {
             $results[$id] = $this->runOne($plugin, $force);
         }
+
+        $this->recipeRescoreAfterIngest();
 
         return $results;
     }
@@ -83,7 +93,10 @@ final class RefreshAllService
             return PluginRunResult::error('Plugin "' . $id . '" is not registered.');
         }
 
-        return $this->runOne($plugin, $force);
+        $result = $this->runOne($plugin, $force);
+        $this->recipeRescoreAfterIngest();
+
+        return $result;
     }
 
     /**
@@ -219,7 +232,32 @@ final class RefreshAllService
      */
     public function runCoreFetcher(string $coreId, bool $force = true): PluginRunResult
     {
-        return $this->coreRunner->runOne($coreId, $force);
+        $result = $this->coreRunner->runOne($coreId, $force);
+        $this->recipeRescoreAfterIngest();
+
+        return $result;
+    }
+
+    /**
+     * Best-effort recipe scoring for rows without a Magnitu score. Does not
+     * affect plugin exit codes or flash messages when it fails.
+     */
+    private function recipeRescoreAfterIngest(): void
+    {
+        try {
+            $raw = $this->systemConfig->get('recipe_json');
+            if ($raw === null || $raw === '') {
+                return;
+            }
+            $recipe = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($recipe)) {
+                return;
+            }
+            $scorer = new ScoringService($this->entryScores);
+            $scorer->rescoreAll($recipe);
+        } catch (\Throwable $e) {
+            error_log('Seismo recipe rescore after refresh: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -227,7 +265,8 @@ final class RefreshAllService
      */
     public static function boot(\PDO $pdo): self
     {
-        $runLog = new PluginRunLogRepository($pdo);
+        $runLog       = new PluginRunLogRepository($pdo);
+        $systemConfig = new SystemConfigRepository($pdo);
 
         return new self(
             new PluginRegistry(),
@@ -239,9 +278,11 @@ final class RefreshAllService
             new CoreRunner(
                 new FeedItemRepository($pdo),
                 $runLog,
-                new SystemConfigRepository($pdo),
+                $systemConfig,
                 new EmailIngestRepository($pdo),
             ),
+            $systemConfig,
+            new EntryScoreRepository($pdo),
         );
     }
 }

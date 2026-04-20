@@ -15,7 +15,7 @@ declare(strict_types=1);
 /** @var string $returnQuery */
 /** @var ?string $dashboardError */
 /** @var string $currentView 'newest'|'favourites' */
-/** @var string $emptyTimelineHint 'default'|'favourites'|'search'|'filters'|'selection_none' */
+/** @var string $emptyTimelineHint 'default'|'favourites'|'search'|'filters' */
 /** @var string $csrfField CSRF hidden input HTML from DashboardController::show() */
 /** @var array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $filterPillOptions */
 /** @var \Seismo\Repository\TimelineFilter $timelineFilter */
@@ -54,25 +54,6 @@ $dashboardQs = static function (array $overrides) use ($searchQuery, $currentVie
     return http_build_query($p);
 };
 
-$clearAllFiltersQs = $dashboardQs([
-    'sel' => null, 'efc' => null, 'elx' => null, 'eet' => null, 'ecal' => null, 'ejus' => null,
-    'fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'leg' => null,
-]);
-$selNoneQs = $dashboardQs([
-    'sel'   => 'none',
-    'efc'   => null,
-    'elx'   => null,
-    'eet'   => null,
-    'ecal'  => null,
-    'ejus'  => null,
-    'fc'    => null,
-    'fk'    => null,
-    'lx'    => null,
-    'etag'  => null,
-    'leg'   => null,
-]);
-$selAllQs = $clearAllFiltersQs;
-
 $indexLinkParams = ['action' => 'index'];
 if ($searchQuery !== '') {
     $indexLinkParams['q'] = $searchQuery;
@@ -91,7 +72,29 @@ if ($currentView === 'favourites') {
 }
 $clearSearchQs = http_build_query($clearSearchParams);
 
-$selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) === 'none';
+$clearAllFiltersQs = $dashboardQs([
+    'efc' => null, 'elx' => null, 'eet' => null, 'ecal' => null, 'ejus' => null,
+    'fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'leg' => null, 'sel' => null,
+]);
+$noneEfc = implode(',', $filterPillOptions['feed_categories']);
+$noneElx = implode(',', $filterPillOptions['lex_sources']);
+$noneEet = implode(',', $filterPillOptions['email_tags']);
+$selNoneQs = $dashboardQs([
+    'efc'  => $noneEfc !== '' ? $noneEfc : null,
+    'elx'  => $noneElx !== '' ? $noneElx : null,
+    'eet'  => $noneEet !== '' ? $noneEet : null,
+    'ecal' => '1',
+    'ejus' => '1',
+    'fc'   => null,
+    'fk'   => null,
+    'lx'   => null,
+    'etag' => null,
+    'leg'  => null,
+    'sel'  => null,
+]);
+$selAllQs = $clearAllFiltersQs;
+$selectionAllActive  = $timelineFilter->dashboardPillsAllOn();
+$selectionNoneActive = $timelineFilter->dashboardPillsAllOff($filterPillOptions);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -142,17 +145,14 @@ $selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) =
                 </div>
                 <div class="view-toggle-group">
                     <span class="view-toggle-label">Selection:</span>
-                    <a href="?<?= e($selAllQs) ?>" class="btn <?= !$selectionNone ? 'btn-primary' : 'btn-secondary' ?>">All</a>
-                    <a href="?<?= e($selNoneQs) ?>" class="btn <?= $selectionNone ? 'btn-primary' : 'btn-secondary' ?>">None</a>
+                    <a href="?<?= e($selAllQs) ?>" class="btn <?= $selectionAllActive ? 'btn-primary' : 'btn-secondary' ?>">All</a>
+                    <a href="?<?= e($selNoneQs) ?>" class="btn <?= $selectionNoneActive ? 'btn-primary' : 'btn-secondary' ?>">None</a>
                 </div>
             </div>
             <?php
                 $efcRaw = isset($_GET['efc']) && !is_array($_GET['efc']) ? trim((string)$_GET['efc']) : '';
                 $elxRaw = isset($_GET['elx']) && !is_array($_GET['elx']) ? trim((string)$_GET['elx']) : '';
                 $eetRaw = isset($_GET['eet']) && !is_array($_GET['eet']) ? trim((string)$_GET['eet']) : '';
-                $fcRaw = isset($_GET['fc']) && !is_array($_GET['fc']) ? trim((string)$_GET['fc']) : '';
-                $lxRaw = isset($_GET['lx']) && !is_array($_GET['lx']) ? trim((string)$_GET['lx']) : '';
-                $etagRaw = isset($_GET['etag']) && !is_array($_GET['etag']) ? trim((string)$_GET['etag']) : '';
                 $ecalRaw = isset($_GET['ecal']) && !is_array($_GET['ecal']) ? trim((string)$_GET['ecal']) : '';
                 $ejusRaw = isset($_GET['ejus']) && !is_array($_GET['ejus']) ? trim((string)$_GET['ejus']) : '';
 
@@ -165,7 +165,7 @@ $selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) =
 
                     return false;
                 };
-                /** Toggle token in a comma exclusion list (`efc`, `elx`, `eet`). */
+                /** Toggle one token in `efc` / `elx` / `eet` only (does not touch other dimensions). */
                 $toggleExclusionQs = static function (string $key, string $token) use ($dashboardQs): string {
                     $raw = isset($_GET[$key]) && !is_array($_GET[$key]) ? trim((string)$_GET[$key]) : '';
                     $parts = [];
@@ -185,98 +185,20 @@ $selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) =
                     $next = implode(',', $parts);
 
                     return $dashboardQs([
-                        $key  => $next !== '' ? $next : null,
-                        'sel' => null,
+                        $key => $next !== '' ? $next : null,
+                        'fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'leg' => null, 'sel' => null,
                     ]);
-                };
-                /** Inclusion list `fc`: pick only this category after Selection None, or toggle when `fc` already set. */
-                $toggleFeedCategoryQs = static function (string $cat) use ($dashboardQs, $selectionNone, $fcRaw, $toggleExclusionQs): string {
-                    if ($selectionNone) {
-                        return $dashboardQs(['sel' => null, 'efc' => null, 'fc' => $cat]);
-                    }
-                    if ($fcRaw !== '') {
-                        $parts = [];
-                        foreach (explode(',', $fcRaw) as $p) {
-                            $p = trim($p);
-                            if ($p !== '') {
-                                $parts[] = $p;
-                            }
-                        }
-                        $idx = array_search($cat, $parts, true);
-                        if ($idx !== false) {
-                            unset($parts[$idx]);
-                            $parts = array_values($parts);
-                        } else {
-                            $parts[] = $cat;
-                        }
-                        $next = implode(',', $parts);
-
-                        return $dashboardQs(['fc' => $next !== '' ? $next : null, 'efc' => null, 'sel' => null]);
-                    }
-
-                    return $toggleExclusionQs('efc', $cat);
-                };
-                $toggleLexSourceQs = static function (string $src) use ($dashboardQs, $selectionNone, $lxRaw, $toggleExclusionQs): string {
-                    if ($selectionNone) {
-                        return $dashboardQs(['sel' => null, 'elx' => null, 'lx' => $src]);
-                    }
-                    if ($lxRaw !== '') {
-                        $parts = [];
-                        foreach (explode(',', $lxRaw) as $p) {
-                            $p = trim($p);
-                            if ($p !== '') {
-                                $parts[] = $p;
-                            }
-                        }
-                        $idx = array_search($src, $parts, true);
-                        if ($idx !== false) {
-                            unset($parts[$idx]);
-                            $parts = array_values($parts);
-                        } else {
-                            $parts[] = $src;
-                        }
-                        $next = implode(',', $parts);
-
-                        return $dashboardQs(['lx' => $next !== '' ? $next : null, 'elx' => null, 'sel' => null]);
-                    }
-
-                    return $toggleExclusionQs('elx', $src);
-                };
-                $toggleEmailTagQs = static function (string $tg) use ($dashboardQs, $selectionNone, $etagRaw, $toggleExclusionQs): string {
-                    if ($selectionNone) {
-                        return $dashboardQs(['sel' => null, 'eet' => null, 'etag' => $tg]);
-                    }
-                    if ($etagRaw !== '') {
-                        $parts = [];
-                        foreach (explode(',', $etagRaw) as $p) {
-                            $p = trim($p);
-                            if ($p !== '') {
-                                $parts[] = $p;
-                            }
-                        }
-                        $idx = array_search($tg, $parts, true);
-                        if ($idx !== false) {
-                            unset($parts[$idx]);
-                            $parts = array_values($parts);
-                        } else {
-                            $parts[] = $tg;
-                        }
-                        $next = implode(',', $parts);
-
-                        return $dashboardQs(['etag' => $next !== '' ? $next : null, 'eet' => null, 'sel' => null]);
-                    }
-
-                    return $toggleExclusionQs('eet', $tg);
                 };
                 $excludeCal = ($ecalRaw === '1');
                 $excludeJus = ($ejusRaw === '1');
-                if ($selectionNone) {
-                    $legToggleQs = $dashboardQs(['sel' => null, 'ecal' => null, 'ejus' => '1']);
-                    $jusToggleQs = $dashboardQs(['sel' => null, 'ecal' => '1', 'ejus' => null]);
-                } else {
-                    $legToggleQs = $dashboardQs(['ecal' => $excludeCal ? null : '1', 'sel' => null]);
-                    $jusToggleQs = $dashboardQs(['ejus' => $excludeJus ? null : '1', 'sel' => null]);
-                }
+                $legToggleQs = $dashboardQs([
+                    'ecal' => $excludeCal ? null : '1',
+                    'fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'leg' => null, 'sel' => null,
+                ]);
+                $jusToggleQs = $dashboardQs([
+                    'ejus' => $excludeJus ? null : '1',
+                    'fc' => null, 'fk' => null, 'lx' => null, 'etag' => null, 'leg' => null, 'sel' => null,
+                ]);
             ?>
             <div class="tag-pills-section filter-toolbar">
                 <div class="filter-toolbar__head">
@@ -289,9 +211,9 @@ $selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) =
                     <?php foreach ($filterPillOptions['feed_categories'] as $cat): ?>
                         <?php
                             $fcClass = ($cat === 'scraper') ? 'filter-pill--scraper' : 'filter-pill--feed';
-                            $fcOn    = $fcRaw !== '' ? $csvHas($fcRaw, $cat) : !$csvHas($efcRaw, $cat);
+                            $fcOn    = !$csvHas($efcRaw, $cat);
                         ?>
-                        <a href="?<?= e($toggleFeedCategoryQs($cat)) ?>"
+                        <a href="?<?= e($toggleExclusionQs('efc', $cat)) ?>"
                            class="filter-pill <?= e($fcClass) ?><?= $fcOn ? ' filter-pill--active' : '' ?>"><?= e($cat) ?></a>
                     <?php endforeach; ?>
                 </div>
@@ -300,8 +222,8 @@ $selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) =
                 <div class="filter-toolbar__row">
                     <span class="filter-toolbar__hint">Lex</span>
                     <?php foreach ($filterPillOptions['lex_sources'] as $src): ?>
-                        <?php $lxOn = $lxRaw !== '' ? $csvHas($lxRaw, $src) : !$csvHas($elxRaw, $src); ?>
-                        <a href="?<?= e($toggleLexSourceQs($src)) ?>"
+                        <?php $lxOn = !$csvHas($elxRaw, $src); ?>
+                        <a href="?<?= e($toggleExclusionQs('elx', $src)) ?>"
                            class="filter-pill filter-pill--lex<?= $lxOn ? ' filter-pill--active' : '' ?>"><?= e($src) ?></a>
                     <?php endforeach; ?>
                 </div>
@@ -310,8 +232,8 @@ $selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) =
                 <div class="filter-toolbar__row">
                     <span class="filter-toolbar__hint">Email tag</span>
                     <?php foreach ($filterPillOptions['email_tags'] as $tg): ?>
-                        <?php $etOn = $etagRaw !== '' ? $csvHas($etagRaw, $tg) : !$csvHas($eetRaw, $tg); ?>
-                        <a href="?<?= e($toggleEmailTagQs($tg)) ?>"
+                        <?php $etOn = !$csvHas($eetRaw, $tg); ?>
+                        <a href="?<?= e($toggleExclusionQs('eet', $tg)) ?>"
                            class="filter-pill filter-pill--mail<?= $etOn ? ' filter-pill--active' : '' ?>"><?= e($tg) ?></a>
                     <?php endforeach; ?>
                 </div>
@@ -346,10 +268,8 @@ $selectionNone = isset($_GET['sel']) && strtolower(trim((string)$_GET['sel'])) =
                         <p>No favourites yet. Star entries with the ☆ button on each card, or switch back to <a href="?<?= e($indexNewestQs) ?>">Newest</a>.</p>
                     <?php elseif ($emptyTimelineHint === 'search'): ?>
                         <p>No entries match your search. Try different words or <a href="?action=index">clear the query</a>.</p>
-                    <?php elseif ($emptyTimelineHint === 'selection_none'): ?>
-                        <p>Selection is <strong>None</strong> — the timeline is intentionally empty. Switch to <a href="?<?= e($selAllQs) ?>">All</a> to show entries again.</p>
                     <?php elseif ($emptyTimelineHint === 'filters'): ?>
-                        <p>No entries match the current filters. <a href="?<?= e($clearAllFiltersQs) ?>">Reset all filters</a> or widen the selection.</p>
+                        <p>No entries match the current filters. Use <a href="?<?= e($selAllQs) ?>">All</a> to turn every pill on, or <a href="?<?= e($clearAllFiltersQs) ?>">reset filters</a> and adjust pills individually.</p>
                     <?php else: ?>
                         <p>No entries yet. Run <code>?action=migrate</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
                     <?php endif; ?>
