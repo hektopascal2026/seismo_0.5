@@ -68,6 +68,8 @@ $feedLoopPrevDayKey = null;
                     <?php if ($itemWrapper['type'] === 'feed' || $itemWrapper['type'] === 'substack'): ?>
                         <?php $item = $itemWrapper['data']; ?>
                         <?php
+                            $feedSourceType = (string)($item['feed_source_type'] ?? '');
+                            $isParlPressFeed = ($feedSourceType === 'parl_press');
                             $itemUrl = seismo_feed_item_resolved_link($item);
                             // Prefer stripped HTML body; then stripped description (teaser); then title
                             // so "title only" RSS rows still show something in the card body.
@@ -86,7 +88,15 @@ $feedLoopPrevDayKey = null;
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
-                                <?php if (!empty($item['feed_category']) && $item['feed_category'] !== 'unsortiert'): ?>
+                                <?php if ($isParlPressFeed): ?>
+                                    <?php
+                                        $parlCommission = seismo_parl_press_commission_from_guid((string)($item['guid'] ?? ''));
+                                    ?>
+                                    <span class="entry-tag" style="background-color: #f5f562; border-color: #000000;">🏛 Parl MM</span>
+                                    <?php if ($parlCommission !== ''): ?>
+                                        <span class="entry-tag" style="background-color: #f5f5f5;"><?= htmlspecialchars($parlCommission) ?></span>
+                                    <?php endif; ?>
+                                <?php elseif (!empty($item['feed_category']) && $item['feed_category'] !== 'unsortiert'): ?>
                                     <span class="entry-tag" style="<?= $feedTagColor ?>"><?= htmlspecialchars($item['feed_category']) ?></span>
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>

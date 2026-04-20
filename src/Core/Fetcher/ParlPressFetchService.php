@@ -57,8 +57,14 @@ final class ParlPressFetchService
 
         $langField    = 'Title_' . $lang;
         $contentField = 'Content_' . $lang;
-
-        $select  = 'Title,' . $langField . ',' . $contentField . ',FileRef,Created,ArticleStartDate,ContentType/Name';
+        // Request every localized title column so we can fall back when the
+        // preferred language is empty or still the SharePoint placeholder
+        // "Untitled" (0.4 stored Title_* in lex_items.title — same upstream).
+        $titleCols = ['Title'];
+        foreach (self::LANGUAGES as $l) {
+            $titleCols[] = 'Title_' . $l;
+        }
+        $select  = implode(',', $titleCols) . ',' . $contentField . ',FileRef,Created,ArticleStartDate,ContentType/Name';
         $filter  = "Created ge datetime'{$sinceUtc}'";
         $orderBy = 'Created desc';
 
@@ -97,10 +103,7 @@ final class ParlPressFetchService
                 continue;
             }
 
-            $title = trim((string)($item[$langField] ?? $slug));
-            if ($title === '') {
-                $title = $slug;
-            }
+            $title = $this->resolveParlPressTitle($item, $lang, $slug);
 
             $fileRef = trim((string)($item['FileRef'] ?? ''));
             $pageUrl = 'https://www.parlament.ch' . $fileRef;
@@ -126,13 +129,16 @@ final class ParlPressFetchService
             $guid = 'parl_mm:' . $slug;
             $guid = mb_substr($guid, 0, 500);
 
+            $commission = self::commissionFromSlug($slug);
+
             $out[] = [
                 'guid'             => $guid,
                 'title'            => mb_substr($title, 0, 500),
                 'link'             => mb_substr($pageUrl, 0, 500),
                 'description'      => $plain,
                 'content'          => $plain !== '' ? $plain : $title,
-                'author'           => (string)$contentType,
+                // Human-facing second pill on the dashboard (0.4: lex document_type).
+                'author'           => $commission !== '' ? $commission : (string)$contentType,
                 'published_date'   => $pub,
                 'content_hash'     => '',
             ];
@@ -160,6 +166,61 @@ final class ParlPressFetchService
         $l = strtolower(trim($raw));
 
         return in_array($l, self::LANGUAGES, true) ? $l : 'de';
+    }
+
+    /**
+     * @param array<string, mixed> $item SharePoint list row (verbose JSON).
+     */
+    private function resolveParlPressTitle(array $item, string $preferredLang, string $slug): string
+    {
+        $try = [];
+        foreach (array_merge([$preferredLang], self::LANGUAGES) as $l) {
+            $k = 'Title_' . $l;
+            if (!in_array($k, $try, true)) {
+                $try[] = $k;
+            }
+        }
+        foreach ($try as $field) {
+            $t = trim((string)($item[$field] ?? ''));
+            if ($t === '' || self::isMeaninglessParlPressTitle($t)) {
+                continue;
+            }
+
+            return $t;
+        }
+        $slugTrim = trim($slug);
+
+        return $slugTrim !== '' && !self::isMeaninglessParlPressTitle($slugTrim) ? $slugTrim : $slug;
+    }
+
+    private static function isMeaninglessParlPressTitle(string $t): bool
+    {
+        $n = mb_strtolower(trim($t));
+
+        return $n === 'untitled' || $n === '(untitled)' || $n === '(no title)';
+    }
+
+    /**
+     * Commission abbreviation from press slug (ported from 0.4
+     * {@see parseParlMmCommission} in lex_jus.php).
+     */
+    public static function commissionFromSlug(string $slug): string
+    {
+        $slug = trim($slug);
+        if ($slug === '') {
+            return '';
+        }
+        if (preg_match('/^mm-([a-z]+)-([nsr])-\d{4}/i', $slug, $m)) {
+            return strtoupper($m[1]) . '-' . strtoupper($m[2]);
+        }
+        if (preg_match('/^mm-([a-z]+)-\d{4}/i', $slug, $m)) {
+            return strtoupper($m[1]);
+        }
+        if (str_starts_with($slug, 'info-')) {
+            return 'Info';
+        }
+
+        return 'Medienmitteilung';
     }
 
     private function isNavigableHttpUrl(string $url): bool

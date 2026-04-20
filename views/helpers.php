@@ -57,6 +57,23 @@ if (!function_exists('seismo_magnitu_day_heading')) {
     }
 }
 
+if (!function_exists('seismo_parl_press_commission_from_guid')) {
+    /**
+     * Second pill label for parlament.ch press rows (0.4: lex document_type).
+     * Parses `parl_mm:{slug}` guids from {@see \Seismo\Core\Fetcher\ParlPressFetchService}.
+     */
+    function seismo_parl_press_commission_from_guid(?string $guid): string
+    {
+        $guid = trim((string)$guid);
+        if ($guid === '') {
+            return '';
+        }
+        $slug = preg_match('#^parl_mm:(.+)$#i', $guid, $m) ? $m[1] : $guid;
+
+        return \Seismo\Core\Fetcher\ParlPressFetchService::commissionFromSlug($slug);
+    }
+}
+
 if (!function_exists('seismo_feed_item_resolved_link')) {
     /**
      * Resolve a feed_items row to a usable article URL.
