@@ -36,6 +36,9 @@ final class FavouriteController
     private const RETURN_ACTION_ALLOW = [
         'index',
         'magnitu',
+        'feeds',
+        'scraper',
+        'mail',
     ];
 
     public function toggle(): void

@@ -1012,6 +1012,138 @@ final class EntryRepository
         unset($item);
     }
 
+    // ------------------------------------------------------------------
+    // Slice 8 — module pages (Feeds / Scraper / Mail) single-family timelines.
+    // ------------------------------------------------------------------
+
+    /**
+     * RSS + Substack `feed_items` only (excludes scraper-linked feeds).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getRssModuleTimeline(int $limit, int $offset): array
+    {
+        return $this->buildModuleFeedTimeline('rss_substack', $limit, $offset);
+    }
+
+    /**
+     * Scraper-backed feed items (matches dashboard “Scraper” filter semantics).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getScraperModuleTimeline(int $limit, int $offset): array
+    {
+        return $this->buildModuleFeedTimeline('scraper', $limit, $offset);
+    }
+
+    /**
+     * Newest emails only (same row shape as the merged dashboard).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getEmailModuleTimeline(int $limit, int $offset): array
+    {
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+        $rows   = $this->fetchEmailsPaged($limit, $offset);
+        $items  = [];
+        foreach ($rows as $row) {
+            $items[] = $this->wrapEmail($row);
+        }
+        $this->attachScores($items);
+        $this->attachFavourites($items);
+
+        return $items;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildModuleFeedTimeline(string $mode, int $limit, int $offset): array
+    {
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+        $rows   = $this->fetchFeedItemsForModule($mode, $limit, $offset);
+        $items  = [];
+        foreach ($rows as $row) {
+            $items[] = $this->wrapFeedItem($row);
+        }
+        $this->attachScores($items);
+        $this->attachFavourites($items);
+
+        return $items;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchFeedItemsForModule(string $mode, int $limit, int $offset): array
+    {
+        $fi = entryTable('feed_items');
+        $f  = entryTable('feeds');
+        $sc = entryTable('scraper_configs');
+        if ($mode === 'rss_substack') {
+            $extra = " AND (f.source_type IN ('rss', 'substack'))
+                AND (IFNULL(f.category, '') <> 'scraper')
+                AND NOT EXISTS (SELECT 1 FROM {$sc} sc WHERE sc.url = f.url AND sc.disabled = 0)";
+        } elseif ($mode === 'scraper') {
+            $extra = " AND (
+                f.source_type = 'scraper'
+                OR IFNULL(f.category, '') = 'scraper'
+                OR EXISTS (SELECT 1 FROM {$sc} sc2 WHERE sc2.url = f.url AND sc2.disabled = 0)
+            )";
+        } else {
+            return [];
+        }
+
+        $sql = "
+            SELECT fi.*,
+                   f.title       AS feed_title,
+                   f.category    AS feed_category,
+                   f.source_type AS feed_source_type,
+                   f.url         AS feed_url,
+                   f.title       AS feed_name
+            FROM {$fi} fi
+            JOIN {$f} f ON fi.feed_id = f.id
+            WHERE f.disabled = 0
+              AND fi.hidden = 0
+              {$extra}
+            ORDER BY fi.published_date DESC, fi.cached_at DESC
+            LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
+
+        return $this->selectOrEmpty($sql);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchEmailsPaged(int $limit, int $offset): array
+    {
+        $table = getEmailTableName();
+        $emailT = entryTable($table);
+        $dateCols = $this->resolveEmailDateColumns($table);
+        if ($dateCols === []) {
+            $orderBy = 'ORDER BY e.id DESC';
+        } elseif (count($dateCols) === 1) {
+            $orderBy = 'ORDER BY e.`' . $dateCols[0] . '` DESC';
+        } else {
+            $coalesce = implode(
+                ', ',
+                array_map(static fn (string $c) => '`e`.`' . $c . '`', $dateCols)
+            );
+            $orderBy = 'ORDER BY COALESCE(' . $coalesce . ') DESC';
+        }
+        $st = entryTable('sender_tags');
+        $sql = 'SELECT e.*, st.tag AS sender_tag
+                FROM ' . $emailT . ' e
+                LEFT JOIN ' . $st . ' st
+                  ON st.from_email = e.from_email AND st.removed_at IS NULL
+                ' . $orderBy . '
+                LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
+
+        return $this->selectOrEmpty($sql);
+    }
+
     /**
      * Pull (entry_type, entry_id) pairs out of the wrapped timeline, skipping
      * rows with missing/invalid keys. Deduped so repeats (unlikely, but

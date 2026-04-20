@@ -5,7 +5,7 @@
  * @var string $basePath
  * @var string $headerTitle
  * @var string|null $headerSubtitle
- * @var string $activeNav index|magnitu|lex|leg|diagnostics|settings|styleguide
+ * @var string $activeNav index|magnitu|feeds|scraper|mail|lex|leg|diagnostics|settings|styleguide
  * @var string $csrfField
  */
 
@@ -44,6 +44,9 @@ $activeNav = $activeNav ?? 'index';
         <nav id="seismo-nav-drawer" class="nav-drawer" aria-label="Main navigation" aria-hidden="true">
             <a href="<?= e($basePath) ?>/index.php?action=index" class="nav-link<?= $activeNav === 'index' ? ' active' : '' ?>">Timeline</a>
             <a href="<?= e($basePath) ?>/index.php?action=magnitu" class="nav-link<?= $activeNav === 'magnitu' ? ' active' : '' ?>">Highlights</a>
+            <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>
+            <a href="<?= e($basePath) ?>/index.php?action=scraper" class="nav-link<?= $activeNav === 'scraper' ? ' active' : '' ?>">Scraper</a>
+            <a href="<?= e($basePath) ?>/index.php?action=mail" class="nav-link<?= $activeNav === 'mail' ? ' active' : '' ?>">Mail</a>
             <a href="<?= e($basePath) ?>/index.php?action=lex" class="nav-link<?= $activeNav === 'lex' ? ' active' : '' ?>">Lex</a>
             <a href="<?= e($basePath) ?>/index.php?action=leg" class="nav-link<?= $activeNav === 'leg' ? ' active' : '' ?>">Leg</a>
             <a href="<?= e($basePath) ?>/index.php?action=diagnostics" class="nav-link<?= $activeNav === 'diagnostics' ? ' active' : '' ?>">Diagnostics</a>

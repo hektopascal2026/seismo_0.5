@@ -156,6 +156,57 @@ $router->register(
     \Seismo\Controller\StyleguideController::class . '::show',
     true
 );
+// Slice 8 — module-owned source admin (Feeds / Scraper / Mail).
+$router->register(
+    'feeds',
+    \Seismo\Controller\FeedController::class . '::show',
+    true
+);
+$router->register(
+    'feed_save',
+    \Seismo\Controller\FeedController::class . '::save',
+    false
+);
+$router->register(
+    'feed_delete',
+    \Seismo\Controller\FeedController::class . '::delete',
+    false
+);
+$router->register(
+    'scraper',
+    \Seismo\Controller\ScraperController::class . '::show',
+    true
+);
+$router->register(
+    'scraper_save',
+    \Seismo\Controller\ScraperController::class . '::save',
+    false
+);
+$router->register(
+    'scraper_delete',
+    \Seismo\Controller\ScraperController::class . '::delete',
+    false
+);
+$router->register(
+    'mail',
+    \Seismo\Controller\MailController::class . '::show',
+    true
+);
+$router->register(
+    'mail_subscription_save',
+    \Seismo\Controller\MailController::class . '::saveSubscription',
+    false
+);
+$router->register(
+    'mail_subscription_delete',
+    \Seismo\Controller\MailController::class . '::deleteSubscription',
+    false
+);
+$router->register(
+    'mail_subscription_disable',
+    \Seismo\Controller\MailController::class . '::disableSubscription',
+    false
+);
 $router->register(
     'magnitu',
     \Seismo\Controller\MagnituHighlightsController::class . '::show',
