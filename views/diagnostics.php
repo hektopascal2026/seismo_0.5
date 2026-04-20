@@ -30,15 +30,16 @@ if (!function_exists('seismo_format_utc')) {
 
 $accent = seismoBrandAccent();
 
-$statusBg = static function (?array $row): string {
+$diagCardClass = static function (?array $row): string {
     if ($row === null) {
-        return '#f5f5f5';
+        return 'entry-card--diag-never';
     }
+
     return match ($row['status']) {
-        'ok'      => '#d4edda',
-        'error'   => '#ffcccc',
-        'skipped' => '#f5f5f5',
-        default   => '#fff3cd',
+        'ok'      => 'entry-card--diag-ok',
+        'error'   => 'entry-card--diag-error',
+        'skipped' => 'entry-card--diag-skipped',
+        default   => 'entry-card--diag-warn',
     };
 };
 ?>
@@ -74,48 +75,48 @@ $statusBg = static function (?array $row): string {
             <div class="message message-error"><?= e($loadError) ?></div>
         <?php endif; ?>
         <?php if ($satellite): ?>
-            <p class="message message-error">Satellite mode: plugins do not run on this instance. The mothership refreshes the entry tables.</p>
+            <p class="message message-info">Satellite mode: plugins do not run on this instance. The mothership refreshes the entry tables.</p>
         <?php endif; ?>
 
-        <div class="latest-entries-section" style="margin-bottom: 24px;">
+        <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Master refresh</h2>
-            <p style="margin: 0 0 12px; color: #555;">
+            <p class="admin-intro">
                 Runs every registered plugin now, ignoring throttle. The CLI cron
                 <code>refresh_cron.php</code> calls the same code with throttle on.
             </p>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_all" style="display:inline;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_all" class="admin-inline-form">
                 <?= CsrfToken::field() ?>
                 <button type="submit" class="btn btn-primary"<?= $satellite ? ' disabled' : '' ?>>Refresh all now</button>
             </form>
         </div>
 
         <?php if ($coreStatus !== []): ?>
-        <div class="latest-entries-section" style="margin-bottom: 24px;">
+        <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Core fetchers (<?= count($coreStatus) ?>)</h2>
-            <p style="margin: 0 0 12px; color: #555;">RSS (incl. Substack), Parliament press (<code>core:parl_press</code>), scraper, and mail runs share <code>plugin_run_log</code> under synthetic ids (<code>core:*</code>). They run automatically with “Refresh all now” and CLI cron.</p>
+            <p class="admin-intro">RSS (incl. Substack), Parliament press (<code>core:parl_press</code>), scraper, and mail runs share <code>plugin_run_log</code> under synthetic ids (<code>core:*</code>). They run automatically with “Refresh all now” and CLI cron.</p>
             <?php foreach ($coreStatus as $id => $s): ?>
                 <?php
-                    $bg = $statusBg($s['last']);
+                    $cardClass = $diagCardClass($s['last']);
                     $lastStatus = $s['last']['status'] ?? 'never run';
                     $lastWhen   = $s['last'] !== null ? seismo_format_utc($s['last']['run_at']) : null;
                     $nextWhen   = $s['next_allowed'] !== null ? seismo_format_utc($s['next_allowed']) : null;
                 ?>
-                <div class="entry-card" style="background-color: <?= e($bg) ?>;">
+                <div class="entry-card <?= e($cardClass) ?>">
                     <div class="entry-header">
-                        <span class="entry-tag" style="background-color: #fff;">
+                        <span class="entry-tag entry-tag--surface">
                             <strong><?= e($s['label']) ?></strong>
-                            <span style="color:#555;">(<?= e($s['id']) ?>)</span>
+                            <span class="entry-muted">(<?= e($s['id']) ?>)</span>
                         </span>
-                        <span class="entry-tag" style="background-color: #f5f5f5;">family: <?= e((string)$s['entry_type']) ?></span>
-                        <span class="entry-tag" style="background-color: #f5f5f5;">
+                        <span class="entry-tag entry-tag--meta">family: <?= e((string)$s['entry_type']) ?></span>
+                        <span class="entry-tag entry-tag--meta">
                             throttle: <?= $s['min_interval'] > 0 ? e((string)round($s['min_interval'] / 60)) . ' min' : 'none' ?>
                         </span>
-                        <span class="entry-tag" style="background-color: #fff; border-color: #000;">last: <?= e($lastStatus) ?></span>
+                        <span class="entry-tag entry-tag--surface entry-tag--emphasis">last: <?= e($lastStatus) ?></span>
                         <?php if ($s['is_throttled']): ?>
-                            <span class="entry-tag" style="background-color: #fff3cd;">throttled</span>
+                            <span class="entry-tag entry-tag--warn-pill">throttled</span>
                         <?php endif; ?>
                     </div>
-                    <div class="entry-content" style="margin-top: 8px; font-family: monospace; font-size: 0.9em;">
+                    <div class="entry-content entry-content--mono-sm">
                         <?php if ($s['last'] === null): ?>
                             Never run.
                         <?php else: ?>
@@ -127,11 +128,11 @@ $statusBg = static function (?array $row): string {
                             <?php endif; ?>
                         <?php endif; ?>
                         <?php if (!empty($s['last']['error_message'])): ?>
-                            <div style="margin-top: 6px; color: #900;">error: <?= e((string)$s['last']['error_message']) ?></div>
+                            <div class="diag-inline-error">error: <?= e((string)$s['last']['error_message']) ?></div>
                         <?php endif; ?>
                     </div>
-                    <div class="entry-actions" style="margin-top: 10px;">
-                        <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" style="display:inline;">
+                    <div class="entry-actions diag-actions">
+                        <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" class="admin-inline-form">
                             <?= CsrfToken::field() ?>
                             <input type="hidden" name="plugin_id" value="<?= e($s['id']) ?>">
                             <button type="submit" class="btn btn-secondary"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
@@ -154,32 +155,32 @@ $statusBg = static function (?array $row): string {
             <?php else: ?>
                 <?php foreach ($status as $id => $s): ?>
                     <?php
-                        $bg = $statusBg($s['last']);
+                        $cardClass = $diagCardClass($s['last']);
                         $lastStatus = $s['last']['status'] ?? 'never run';
                         $lastWhen   = $s['last'] !== null ? seismo_format_utc($s['last']['run_at']) : null;
                         $nextWhen   = $s['next_allowed'] !== null ? seismo_format_utc($s['next_allowed']) : null;
                     ?>
-                    <div class="entry-card" style="background-color: <?= e($bg) ?>;">
+                    <div class="entry-card <?= e($cardClass) ?>">
                         <div class="entry-header">
-                            <span class="entry-tag" style="background-color: #fff;">
+                            <span class="entry-tag entry-tag--surface">
                                 <strong><?= e($s['label']) ?></strong>
-                                <span style="color:#555;">(<?= e($s['id']) ?>)</span>
+                                <span class="entry-muted">(<?= e($s['id']) ?>)</span>
                             </span>
-                            <span class="entry-tag" style="background-color: #f5f5f5;">
+                            <span class="entry-tag entry-tag--meta">
                                 family: <?= e($s['entry_type']) ?>
                             </span>
-                            <span class="entry-tag" style="background-color: #f5f5f5;">
+                            <span class="entry-tag entry-tag--meta">
                                 throttle: <?= $s['min_interval'] > 0 ? e((string)round($s['min_interval'] / 60)) . ' min' : 'none' ?>
                             </span>
-                            <span class="entry-tag" style="background-color: #fff; border-color: #000;">
+                            <span class="entry-tag entry-tag--surface entry-tag--emphasis">
                                 last: <?= e($lastStatus) ?>
                             </span>
                             <?php if ($s['is_throttled']): ?>
-                                <span class="entry-tag" style="background-color: #fff3cd;">throttled</span>
+                                <span class="entry-tag entry-tag--warn-pill">throttled</span>
                             <?php endif; ?>
                         </div>
 
-                        <div class="entry-content" style="margin-top: 8px; font-family: monospace; font-size: 0.9em;">
+                        <div class="entry-content entry-content--mono-sm">
                             <?php if ($s['last'] === null): ?>
                                 Never run.
                             <?php else: ?>
@@ -191,20 +192,20 @@ $statusBg = static function (?array $row): string {
                                 <?php endif; ?>
                             <?php endif; ?>
                             <?php if (!empty($s['last']['error_message'])): ?>
-                                <div style="margin-top: 6px; color: #900;">
+                                <div class="diag-inline-error">
                                     error: <?= e((string)$s['last']['error_message']) ?>
                                 </div>
                             <?php endif; ?>
                         </div>
 
-                        <div class="entry-actions" style="margin-top: 10px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" style="display:inline;">
+                        <div class="entry-actions diag-actions">
+                            <div class="admin-table-actions">
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" class="admin-inline-form">
                                     <?= CsrfToken::field() ?>
                                     <input type="hidden" name="plugin_id" value="<?= e($s['id']) ?>">
                                     <button type="submit" class="btn btn-secondary"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
                                 </form>
-                                <form method="post" action="<?= e($basePath) ?>/index.php?action=plugin_test" style="display:inline;">
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=plugin_test" class="admin-inline-form">
                                     <?= CsrfToken::field() ?>
                                     <input type="hidden" name="plugin_id" value="<?= e($s['id']) ?>">
                                     <button type="submit" class="btn btn-secondary"<?= $satellite ? ' disabled' : '' ?>>Test fetch (no save)</button>
@@ -221,16 +222,16 @@ $statusBg = static function (?array $row): string {
         </div>
 
         <?php if ($testResult !== null): ?>
-            <div class="latest-entries-section" style="margin-top: 24px;">
+            <div class="latest-entries-section diag-test-section">
                 <h2 class="section-title">Test fetch result: <?= e($testResult['id']) ?></h2>
                 <?php if ($testResult['error'] !== null): ?>
                     <div class="message message-error"><?= e((string)$testResult['error']) ?></div>
                 <?php else: ?>
-                    <p style="color:#555;">
+                    <p class="admin-intro">
                         Plugin returned <strong><?= (int)$testResult['count'] ?></strong> row(s).
                         Showing first <?= count($testResult['items']) ?> (no DB writes occurred).
                     </p>
-                    <pre style="background:#f5f5f5; padding: 12px; overflow-x: auto; font-size: 0.85em;"><?= e(json_encode($testResult['items'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) ?></pre>
+                    <pre class="pre-json-block"><?= e(json_encode($testResult['items'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) ?></pre>
                 <?php endif; ?>
             </div>
         <?php endif; ?>

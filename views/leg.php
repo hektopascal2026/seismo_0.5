@@ -63,7 +63,7 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
         <?php endif; ?>
 
         <?php if ($satellite): ?>
-            <p class="message message-error">Satellite mode: Leg rows are read from the mothership. Refresh is disabled.</p>
+            <p class="message message-info">Satellite mode: Leg rows are read from the mothership. Refresh is disabled.</p>
         <?php endif; ?>
 
         <form method="get" action="<?= e($basePath) ?>/index.php" id="leg-filter-form">
@@ -72,7 +72,7 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
             <?php if ($showPast): ?>
                 <input type="hidden" name="show_past" value="1">
             <?php endif; ?>
-            <div class="tag-filter-section" style="margin-bottom: 16px;">
+            <div class="tag-filter-section tag-filter-section--spaced-bottom">
                 <div class="tag-filter-list">
                     <?php
                     $legPills = [
@@ -84,7 +84,7 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                         }
                         $isActive = in_array($pill['key'], $activeSources, true);
                     ?>
-                    <label class="tag-filter-pill<?= $isActive ? ' tag-filter-pill-active' : '' ?>"<?= $isActive ? ' style="background-color: #d4edda;"' : '' ?>>
+                    <label class="tag-filter-pill<?= $isActive ? ' tag-filter-pill-active tag-filter-pill--leg-source' : '' ?>">
                         <input type="checkbox" name="sources[]" value="<?= e($pill['key']) ?>" <?= $isActive ? 'checked' : '' ?> onchange="this.form.submit()">
                         <span><?= e($pill['label']) ?></span>
                     </label>
@@ -93,7 +93,7 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                     <?php foreach ($eventTypes as $et):
                         $etSelected = ($eventType === $et);
                     ?>
-                    <label class="tag-filter-pill<?= $etSelected ? ' tag-filter-pill-active' : '' ?>"<?= $etSelected ? ' style="background-color: #e2e3f1;"' : '' ?>>
+                    <label class="tag-filter-pill<?= $etSelected ? ' tag-filter-pill-active tag-filter-pill--event-type' : '' ?>">
                         <input type="radio" name="event_type" value="<?= e($et) ?>" <?= $etSelected ? 'checked' : '' ?> onchange="this.form.submit()">
                         <span><?= e(seismo_calendar_event_type_label($et)) ?></span>
                     </label>
@@ -114,42 +114,44 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
         </form>
 
         <?php if (!$satellite): ?>
-        <div class="latest-entries-section" style="margin-bottom: 24px;">
+        <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Refresh Parlament CH</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_parl_ch" style="display:inline;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_parl_ch" class="admin-inline-form">
                 <?= $csrfField ?>
                 <button type="submit" class="btn btn-primary">Refresh Parlament CH</button>
             </form>
         </div>
 
-        <div class="latest-entries-section" style="margin-bottom: 24px;">
+        <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Parlament CH settings</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_leg_parl_ch" style="max-width:520px;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_leg_parl_ch" class="admin-form-card admin-form-card-narrow">
                 <?= $csrfField ?>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label><input type="checkbox" name="parliament_ch_enabled" value="1" <?= !empty($parlChCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Language (DE, FR, IT, EN, RM)<br>
-                    <input type="text" name="parliament_ch_language" value="<?= e((string)($parlChCfg['language'] ?? 'DE')) ?>" maxlength="2" style="width:100%;"></label>
+                    <input type="text" name="parliament_ch_language" value="<?= e((string)($parlChCfg['language'] ?? 'DE')) ?>" maxlength="2" class="search-input" style="width:100%; max-width:8rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Lookforward days (7–365)<br>
-                    <input type="number" name="parliament_ch_lookforward_days" value="<?= (int)($parlChCfg['lookforward_days'] ?? 90) ?>" min="7" max="365" style="width:100%;"></label>
+                    <input type="number" name="parliament_ch_lookforward_days" value="<?= (int)($parlChCfg['lookforward_days'] ?? 90) ?>" min="7" max="365" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Lookback days (1–90)<br>
-                    <input type="number" name="parliament_ch_lookback_days" value="<?= (int)($parlChCfg['lookback_days'] ?? 7) ?>" min="1" max="90" style="width:100%;"></label>
+                    <input type="number" name="parliament_ch_lookback_days" value="<?= (int)($parlChCfg['lookback_days'] ?? 7) ?>" min="1" max="90" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Row limit (10–500)<br>
-                    <input type="number" name="parliament_ch_limit" value="<?= (int)($parlChCfg['limit'] ?? 100) ?>" min="10" max="500" style="width:100%;"></label>
+                    <input type="number" name="parliament_ch_limit" value="<?= (int)($parlChCfg['limit'] ?? 100) ?>" min="10" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Notes<br>
-                    <textarea name="parliament_ch_notes" rows="2" style="width:100%;"><?= e((string)($parlChCfg['notes'] ?? '')) ?></textarea></label>
+                    <textarea name="parliament_ch_notes" rows="2" class="search-input" style="width:100%;"><?= e((string)($parlChCfg['notes'] ?? '')) ?></textarea></label>
                 </div>
-                <button type="submit" class="btn btn-secondary">Save Parlament CH settings</button>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Save Parlament CH settings</button>
+                </div>
             </form>
         </div>
         <?php endif; ?>
@@ -189,7 +191,7 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                             <a href="<?= e($showAllUrl) ?>">Show all</a>
                             to see them.
                         </p>
-                        <p style="font-size: 0.9em; color: #555;">
+                        <p class="empty-state-tip">
                             Tip: most <em>Geschaefte</em> are tagged with their original
                             submission date, which is usually in the past. Upcoming
                             sessions and dated hearings appear here without toggling.
@@ -218,7 +220,7 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                                 $groupLabel = 'Date unknown';
                             }
                     ?>
-                    <div style="margin: 20px 0 8px; padding: 4px 0; border-bottom: 2px solid #000; font-weight: 700; font-size: 0.95em;">
+                    <div class="leg-date-heading">
                         <?= e($groupLabel) ?>
                     </div>
                     <?php endif; ?>
@@ -275,9 +277,9 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                     ?>
                     <div class="entry-card">
                         <div class="entry-header">
-                            <span class="entry-tag" style="background-color: #d4edda;"><?= e($typeLabel) ?></span>
+                            <span class="entry-tag entry-tag--leg-type"><?= e($typeLabel) ?></span>
                             <?php if ($councilLabel !== ''): ?>
-                                <span class="entry-tag" style="background-color: #e2e3f1;"><?= e($councilLabel) ?></span>
+                                <span class="entry-tag entry-tag--leg-council"><?= e($councilLabel) ?></span>
                             <?php endif; ?>
                             <?php if ($legRel !== null): ?>
                                 <span class="magnitu-badge <?= e($legBadgeClass) ?>" title="<?= e((string)$legPred) ?> (<?= round($legRel * 100) ?>%)"><?= round($legRel * 100) ?></span>
@@ -286,8 +288,12 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                                 <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                             <?php endif; ?>
                             <?php if ($statusRaw !== 'scheduled'): ?>
-                                <?php $statusColor = $statusRaw === 'completed' ? '#f5f5f5' : ($statusRaw === 'cancelled' ? '#ffcccc' : '#fff3cd'); ?>
-                                <span class="entry-tag" style="background-color: <?= e($statusColor) ?>;"><?= e($statusLabel) ?></span>
+                                <?php
+                                $statusTagClass = $statusRaw === 'completed'
+                                    ? 'entry-tag--status-completed'
+                                    : ($statusRaw === 'cancelled' ? 'entry-tag--status-cancelled' : 'entry-tag--status-other');
+                                ?>
+                                <span class="entry-tag <?= e($statusTagClass) ?>"><?= e($statusLabel) ?></span>
                             <?php endif; ?>
                         </div>
                         <h3 class="entry-title">
@@ -300,19 +306,19 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                         <?php if ($preview !== ''): ?>
                             <div class="entry-content entry-preview"><?= nl2br(e($preview)) ?></div>
                             <?php if ($hasMore): ?>
-                                <div class="entry-full-content" style="display: none;"><?= nl2br(e($combined)) ?></div>
+                                <div class="entry-full-content"><?= nl2br(e($combined)) ?></div>
                             <?php endif; ?>
                         <?php endif; ?>
                         <div class="entry-actions">
-                            <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="entry-actions-main">
                                 <?php if ($hasMore): ?>
                                     <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                 <?php endif; ?>
                                 <?php if ($businessNumber !== ''): ?>
-                                    <span style="font-family: monospace;"><?= e($businessNumber) ?></span>
+                                    <span class="entry-meta-mono"><?= e($businessNumber) ?></span>
                                 <?php endif; ?>
                                 <?php if ($author !== ''): ?>
-                                    <span style="color:#555;"><?= e($author) ?></span>
+                                    <span class="entry-author-muted"><?= e($author) ?></span>
                                 <?php endif; ?>
                                 <?php if (seismo_is_navigable_url($eventUrl)): ?>
                                     <a href="<?= e($eventUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch →</a>
@@ -338,14 +344,14 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
             var preview = card.querySelector('.entry-preview');
             var full = card.querySelector('.entry-full-content');
             if (!preview || !full) return;
-            if (full.style.display === 'none') {
-                full.style.display = 'block';
-                preview.style.display = 'none';
-                btn.innerHTML = 'collapse \u25B2';
-            } else {
+            if (full.style.display === 'block') {
                 full.style.display = 'none';
                 preview.style.display = '';
                 btn.innerHTML = 'expand \u25BC';
+            } else {
+                full.style.display = 'block';
+                preview.style.display = 'none';
+                btn.innerHTML = 'collapse \u25B2';
             }
         });
     })();

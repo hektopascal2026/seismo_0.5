@@ -19,7 +19,9 @@ use Seismo\Service\Http\BaseClient;
  *   - `odata_title_substring` — when set, adds `and substringof('…',Title)` (SharePoint OData2).
  *     Example: `"sda-"` limits rows to SDA agency slugs (`sda-apk-n-…`, `mm-sda-…`) in the same Pages list.
  *   - `guid_prefix` — stable id prefix for `feed_items.guid` (default `parl_mm`). Use `parl_sda` for SDA-only feeds
- *     so rows stay distinct from Medienmitteilungen and survive alien-row cleanup.
+ *     so rows stay distinct from Medienmitteilungen and survive alien-row cleanup. When `odata_title_substring` is
+ *     set and `guid_prefix` is **omitted** from JSON, it defaults to **`parl_sda`** (filtered feeds are almost always
+ *     a second logical source; forgetting the key used to store `parl_mm:` guids and broke the dashboard pill).
  */
 final class ParlPressFetchService
 {
@@ -55,8 +57,13 @@ final class ParlPressFetchService
         $lookback = max(1, min(365, (int)($opts['lookback_days'] ?? self::DEFAULT_LOOKBACK)));
         $limit    = max(1, min(200, (int)($opts['limit'] ?? self::DEFAULT_LIMIT)));
         $lang     = $this->normaliseLanguage((string)($opts['language'] ?? 'de'));
-        $guidPrefix = $this->normaliseGuidPrefix((string)($opts['guid_prefix'] ?? 'parl_mm'));
         $titleNeedle = trim((string)($opts['odata_title_substring'] ?? ''));
+        $guidPrefixRaw = array_key_exists('guid_prefix', $opts) ? $opts['guid_prefix'] : null;
+        if ($guidPrefixRaw === null && $titleNeedle !== '') {
+            $guidPrefix = 'parl_sda';
+        } else {
+            $guidPrefix = $this->normaliseGuidPrefix((string)($guidPrefixRaw ?? 'parl_mm'));
+        }
 
         $sinceUtc = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
             ->modify('-' . $lookback . ' days')

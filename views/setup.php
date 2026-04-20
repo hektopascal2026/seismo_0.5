@@ -40,9 +40,9 @@ declare(strict_types=1);
             <?php unset($_SESSION['error']); ?>
         <?php endif; ?>
 
-        <div style="max-width: 40rem;">
-            <h1 style="margin-top: 0;">Configuration helper</h1>
-            <p style="opacity: 0.9;">
+        <div class="setup-content">
+            <h1>Configuration helper</h1>
+            <p class="admin-intro">
                 This stub (Slice&nbsp;9) tests your database credentials and builds a starter
                 <code>config.local.php</code>. If PHP cannot write to the install directory — common on shared hosting —
                 you will get a <strong>copy-and-paste</strong> block instead; save it via File Manager or SFTP.
@@ -58,7 +58,7 @@ declare(strict_types=1);
             <?php endif; ?>
 
             <?php if ($writeNote !== null && $writeNote !== ''): ?>
-                <div class="message message-error"><?= e($writeNote) ?></div>
+                <div class="message message-info"><?= e($writeNote) ?></div>
             <?php endif; ?>
 
             <?php if ($copyPasteBody !== null && $copyPasteBody !== ''): ?>
@@ -71,8 +71,8 @@ declare(strict_types=1);
                     $setupBlockJson = '""';
                 }
                 ?>
-                <textarea id="seismo-setup-block" readonly rows="18" style="width:100%; max-width:40rem; font-family: monospace; font-size: 0.85rem; padding: 0.75rem;"></textarea>
-                <p>
+                <textarea id="seismo-setup-block" readonly rows="18" class="search-input setup-code-preview" style="width:100%; max-width:40rem;"></textarea>
+                <p class="admin-form-actions">
                     <button type="button" class="btn btn-secondary" id="seismo-setup-copy">Copy to clipboard</button>
                 </p>
                 <script>
@@ -100,21 +100,37 @@ declare(strict_types=1);
             <?php endif; ?>
 
             <h2>Database</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=setup" style="display: grid; gap: 0.75rem;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=setup" class="admin-form-card">
                 <?= $csrfField ?>
-                <label>Host<br><input type="text" name="db_host" value="<?= e($old['db_host']) ?>" class="search-input" style="width:100%; max-width:28rem;"></label>
-                <label>Port (optional)<br><input type="text" name="db_port" value="<?= e($old['db_port']) ?>" class="search-input" style="width:100%; max-width:8rem;" placeholder="3306"></label>
-                <label>Database name<br><input type="text" name="db_name" value="<?= e($old['db_name']) ?>" required class="search-input" style="width:100%; max-width:28rem;"></label>
-                <label>User<br><input type="text" name="db_user" value="<?= e($old['db_user']) ?>" required autocomplete="username" class="search-input" style="width:100%; max-width:28rem;"></label>
-                <label>Password<br><input type="password" name="db_pass" value="<?= e($old['db_pass']) ?>" autocomplete="current-password" class="search-input" style="width:100%; max-width:28rem;"></label>
+                <div class="admin-form-field">
+                    <label>Host<br><input type="text" name="db_host" value="<?= e($old['db_host']) ?>" class="search-input" style="width:100%; max-width:28rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Port (optional)<br><input type="text" name="db_port" value="<?= e($old['db_port']) ?>" class="search-input" style="width:100%; max-width:8rem;" placeholder="3306"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Database name<br><input type="text" name="db_name" value="<?= e($old['db_name']) ?>" required class="search-input" style="width:100%; max-width:28rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>User<br><input type="text" name="db_user" value="<?= e($old['db_user']) ?>" required autocomplete="username" class="search-input" style="width:100%; max-width:28rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Password<br><input type="password" name="db_pass" value="<?= e($old['db_pass']) ?>" autocomplete="current-password" class="search-input" style="width:100%; max-width:28rem;"></label>
+                </div>
 
                 <h2>Optional</h2>
-                <label><code>SEISMO_MIGRATE_KEY</code> (browser migrations)<br>
-                    <input type="text" name="migrate_key" value="<?= e($old['migrate_key']) ?>" class="search-input" style="width:100%; max-width:28rem;" placeholder="long random secret or leave blank"></label>
-                <label>Admin password (stores <code>password_hash</code> only; leave blank to keep auth off)<br>
-                    <input type="password" name="admin_password" value="" class="search-input" style="width:100%; max-width:28rem;" autocomplete="new-password"></label>
+                <div class="admin-form-field">
+                    <label><code>SEISMO_MIGRATE_KEY</code> (browser migrations)<br>
+                        <input type="text" name="migrate_key" value="<?= e($old['migrate_key']) ?>" class="search-input" style="width:100%; max-width:28rem;" placeholder="long random secret or leave blank"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Admin password (stores <code>password_hash</code> only; leave blank to keep auth off)<br>
+                        <input type="password" name="admin_password" value="" class="search-input" style="width:100%; max-width:28rem;" autocomplete="new-password"></label>
+                </div>
 
-                <p><button type="submit" class="btn btn-primary">Test connection and write config</button></p>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Test connection and write config</button>
+                </div>
             </form>
         </div>
     </div>

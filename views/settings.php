@@ -42,18 +42,6 @@ $tabQs = static function (string $t) use ($basePath): string {
     <?php if ($accent): ?>
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
-    <style>
-        .settings-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-        .settings-tabs a { padding: 8px 14px; text-decoration: none; font-weight: 600; border: 2px solid #000; color: #000; background: #fff; }
-        .settings-tabs a:hover { box-shadow: 2px 2px 0 #000; }
-        .settings-tabs a.active { background: var(--seismo-accent, #000); color: #fff; border-color: #000; }
-        .retention-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-        .retention-table th, .retention-table td { padding: 8px 10px; border-bottom: 1px solid #e5e5e5; text-align: left; vertical-align: top; }
-        .retention-table th { background: #fafafa; font-weight: 600; }
-        .retention-table input[type="number"] { width: 90px; padding: 4px 6px; }
-        .retention-keeps label { display: block; font-size: 0.9em; margin-top: 2px; }
-        .retention-unlimited { color: #666; font-style: italic; }
-    </style>
 </head>
 <body>
     <div class="container">
@@ -88,7 +76,7 @@ $tabQs = static function (string $t) use ($basePath): string {
                 <div class="message message-error"><?= e($pageError) ?></div>
             <?php endif; ?>
             <?php if ($satellite): ?>
-                <p class="message message-error">Satellite mode — entry tables live on the mothership. Policies here are for reference; pruning runs on the mothership only.</p>
+                <p class="message message-info">Satellite mode — entry tables live on the mothership. Policies here are for reference; pruning runs on the mothership only.</p>
             <?php endif; ?>
             <?php require __DIR__ . '/partials/retention_panel.php'; ?>
         <?php endif; ?>

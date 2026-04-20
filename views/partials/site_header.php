@@ -33,16 +33,16 @@ $activeNav = $activeNav ?? 'index';
             </div>
             <div class="top-bar-actions">
                 <?php if (!empty($showTimelineRefresh) && $activeNav === 'index'): ?>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_all" style="display:inline; margin:0 8px 0 0;">
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_all" class="admin-inline-form" style="margin:0 8px 0 0;">
                         <?= $csrfField ?>
                         <input type="hidden" name="return_action" value="index">
-                        <button type="submit" class="top-bar-btn" title="Fetch all sources (same as Diagnostics → Refresh all)" style="width:auto; padding:0 10px; font-size:14px;">Refresh</button>
+                        <button type="submit" class="top-bar-btn top-bar-btn--text" title="Fetch all sources (same as Diagnostics → Refresh all)">Refresh</button>
                     </form>
                 <?php endif; ?>
                 <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" style="display:inline; margin:0;">
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" class="admin-inline-form" style="margin:0;">
                         <?= $csrfField ?>
-                        <button type="submit" class="top-bar-btn" title="Sign out" style="width:auto; padding:0 10px; font-size:14px;">Logout</button>
+                        <button type="submit" class="top-bar-btn top-bar-btn--text" title="Sign out">Logout</button>
                     </form>
                 <?php endif; ?>
             </div>

@@ -74,19 +74,19 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
             <div class="message message-error"><?= e($pageError) ?></div>
         <?php endif; ?>
 
-        <p class="message" style="background:#f5f5f5;border-color:#ccc;">
+        <p class="message message-info">
             <strong>Lex refresh:</strong> EU (<code>lex_eu</code>), Swiss Fedlex (<code>fedlex</code>), Germany (<code>recht_bund</code>), and France (<code>legifrance</code>) run from this page or from <a href="<?= e($basePath) ?>/index.php?action=diagnostics">Diagnostics</a> / cron (<code>Refresh all</code>).
             <strong>Parlament Medien</strong> (press) are <code>feed_items</code> — configure <code>parl_press</code> on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.
         </p>
 
         <?php if ($satellite): ?>
-            <p class="message message-error">Satellite mode: legislation rows are read from the mothership. Refresh is disabled.</p>
+            <p class="message message-info">Satellite mode: legislation rows are read from the mothership. Refresh is disabled.</p>
         <?php endif; ?>
 
         <form method="get" action="<?= e($basePath) ?>/index.php" id="lex-filter-form">
             <input type="hidden" name="action" value="lex">
             <input type="hidden" name="sources_submitted" value="1">
-            <div class="tag-filter-section" style="margin-bottom: 16px;">
+            <div class="tag-filter-section tag-filter-section--spaced-bottom">
                 <div class="tag-filter-list">
                     <?php
                     $lexPagePills = [
@@ -101,7 +101,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         }
                         $isActive = in_array($pill['key'], $activeSources, true);
                     ?>
-                    <label class="tag-filter-pill<?= $isActive ? ' tag-filter-pill-active' : '' ?>"<?= $isActive ? ' style="background-color: #f5f562;"' : '' ?>>
+                    <label class="tag-filter-pill<?= $isActive ? ' tag-filter-pill-active' : '' ?>">
                         <input type="checkbox" name="sources[]" value="<?= e($pill['key']) ?>" <?= $isActive ? 'checked' : '' ?> onchange="this.form.submit()">
                         <span><?= e($pill['label']) ?></span>
                     </label>
@@ -111,167 +111,175 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
         </form>
 
         <?php if (!$satellite): ?>
-        <div class="latest-entries-section" style="margin-bottom: 24px;">
+        <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Refresh legislation sources</h2>
-            <p style="margin:0 0 10px;color:#555;">Each button runs one plugin (same as Diagnostics → per-plugin refresh).</p>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_eu" style="display:inline;">
+            <p class="admin-intro">Each button runs one plugin (same as Diagnostics → per-plugin refresh).</p>
+            <div class="admin-form-actions">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_eu" class="admin-inline-form">
                     <?= $csrfField ?>
                     <button type="submit" class="btn btn-primary">Refresh EUR-Lex (EU)</button>
                 </form>
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_fedlex" style="display:inline;">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_fedlex" class="admin-inline-form">
                     <?= $csrfField ?>
                     <button type="submit" class="btn btn-primary">Refresh Fedlex (CH)</button>
                 </form>
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_recht_bund" style="display:inline;">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_recht_bund" class="admin-inline-form">
                     <?= $csrfField ?>
                     <button type="submit" class="btn btn-primary">Refresh recht.bund (DE)</button>
                 </form>
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_legifrance" style="display:inline;">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_legifrance" class="admin-inline-form">
                     <?= $csrfField ?>
                     <button type="submit" class="btn btn-primary">Refresh Légifrance (FR)</button>
                 </form>
             </div>
         </div>
 
-        <div class="latest-entries-section" style="margin-bottom: 24px;">
+        <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">EUR-Lex (EU) settings</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_eu" style="max-width:640px;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_eu" class="admin-form-card">
                 <?= $csrfField ?>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label><input type="checkbox" name="eu_enabled" value="1" <?= !empty($euCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>SPARQL endpoint (https only)<br>
-                    <input type="url" name="eu_endpoint" value="<?= e((string)($euCfg['endpoint'] ?? '')) ?>" style="width:100%;"></label>
+                    <input type="url" name="eu_endpoint" value="<?= e((string)($euCfg['endpoint'] ?? '')) ?>" class="search-input" style="width:100%;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Language code (EU authority, e.g. ENG, DEU, FRA)<br>
-                    <input type="text" name="eu_language" value="<?= e((string)($euCfg['language'] ?? 'ENG')) ?>" maxlength="8" style="width:100%;"></label>
+                    <input type="text" name="eu_language" value="<?= e((string)($euCfg['language'] ?? 'ENG')) ?>" maxlength="8" class="search-input" style="width:100%; max-width:12rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Document class (CDM curie, e.g. <code>cdm:legislation_secondary</code>)<br>
-                    <input type="text" name="eu_document_class" value="<?= e((string)($euCfg['document_class'] ?? 'cdm:legislation_secondary')) ?>" style="width:100%;"></label>
+                    <input type="text" name="eu_document_class" value="<?= e((string)($euCfg['document_class'] ?? 'cdm:legislation_secondary')) ?>" class="search-input" style="width:100%;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Lookback days<br>
-                    <input type="number" name="eu_lookback_days" value="<?= (int)($euCfg['lookback_days'] ?? 90) ?>" min="1" style="width:100%;"></label>
+                    <input type="number" name="eu_lookback_days" value="<?= (int)($euCfg['lookback_days'] ?? 90) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Row limit (max 200)<br>
-                    <input type="number" name="eu_limit" value="<?= (int)($euCfg['limit'] ?? 100) ?>" min="1" max="200" style="width:100%;"></label>
+                    <input type="number" name="eu_limit" value="<?= (int)($euCfg['limit'] ?? 100) ?>" min="1" max="200" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Notes<br>
-                    <textarea name="eu_notes" rows="2" style="width:100%;"><?= e((string)($euCfg['notes'] ?? '')) ?></textarea></label>
+                    <textarea name="eu_notes" rows="2" class="search-input" style="width:100%;"><?= e((string)($euCfg['notes'] ?? '')) ?></textarea></label>
                 </div>
-                <button type="submit" class="btn btn-secondary">Save EU settings</button>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Save EU settings</button>
+                </div>
             </form>
         </div>
 
-        <div class="latest-entries-section" style="margin-bottom: 24px;">
+        <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Fedlex settings (CH only)</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_ch" style="max-width:520px;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_ch" class="admin-form-card admin-form-card-narrow">
                 <?= $csrfField ?>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label><input type="checkbox" name="ch_enabled" value="1" <?= !empty($chCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Language (Fedlex expression)<br>
-                    <input type="text" name="ch_language" value="<?= e((string)($chCfg['language'] ?? 'DEU')) ?>" maxlength="8" style="width:100%;"></label>
+                    <input type="text" name="ch_language" value="<?= e((string)($chCfg['language'] ?? 'DEU')) ?>" maxlength="8" class="search-input" style="width:100%; max-width:12rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Lookback days<br>
-                    <input type="number" name="ch_lookback_days" value="<?= (int)($chCfg['lookback_days'] ?? 90) ?>" min="1" style="width:100%;"></label>
+                    <input type="number" name="ch_lookback_days" value="<?= (int)($chCfg['lookback_days'] ?? 90) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>SPARQL row limit<br>
-                    <input type="number" name="ch_limit" value="<?= (int)($chCfg['limit'] ?? 100) ?>" min="1" style="width:100%;"></label>
+                    <input type="number" name="ch_limit" value="<?= (int)($chCfg['limit'] ?? 100) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Resource type IDs (comma-separated)<br>
-                    <input type="text" name="ch_resource_types" value="<?= e($chResourceTypesStr) ?>" style="width:100%;"></label>
+                    <input type="text" name="ch_resource_types" value="<?= e($chResourceTypesStr) ?>" class="search-input" style="width:100%;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Notes<br>
-                    <textarea name="ch_notes" rows="2" style="width:100%;"><?= e((string)($chCfg['notes'] ?? '')) ?></textarea></label>
+                    <textarea name="ch_notes" rows="2" class="search-input" style="width:100%;"><?= e((string)($chCfg['notes'] ?? '')) ?></textarea></label>
                 </div>
-                <button type="submit" class="btn btn-secondary">Save Fedlex settings</button>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Save Fedlex settings</button>
+                </div>
             </form>
         </div>
 
-        <div class="latest-entries-section" style="margin-bottom: 24px;">
+        <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">recht.bund.de (DE) settings</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_de" style="max-width:640px;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_de" class="admin-form-card">
                 <?= $csrfField ?>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label><input type="checkbox" name="de_enabled" value="1" <?= !empty($deCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>RSS feed URL (https, <code>www.recht.bund.de</code>)<br>
-                    <input type="url" name="de_feed_url" value="<?= e((string)($deCfg['feed_url'] ?? '')) ?>" style="width:100%;"></label>
+                    <input type="url" name="de_feed_url" value="<?= e((string)($deCfg['feed_url'] ?? '')) ?>" class="search-input" style="width:100%;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Lookback days<br>
-                    <input type="number" name="de_lookback_days" value="<?= (int)($deCfg['lookback_days'] ?? 90) ?>" min="1" style="width:100%;"></label>
+                    <input type="number" name="de_lookback_days" value="<?= (int)($deCfg['lookback_days'] ?? 90) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Row limit (max 200)<br>
-                    <input type="number" name="de_limit" value="<?= (int)($deCfg['limit'] ?? 100) ?>" min="1" max="200" style="width:100%;"></label>
+                    <input type="number" name="de_limit" value="<?= (int)($deCfg['limit'] ?? 100) ?>" min="1" max="200" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Notes<br>
-                    <textarea name="de_notes" rows="2" style="width:100%;"><?= e((string)($deCfg['notes'] ?? '')) ?></textarea></label>
+                    <textarea name="de_notes" rows="2" class="search-input" style="width:100%;"><?= e((string)($deCfg['notes'] ?? '')) ?></textarea></label>
                 </div>
-                <button type="submit" class="btn btn-secondary">Save DE settings</button>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Save DE settings</button>
+                </div>
             </form>
         </div>
 
-        <div class="latest-entries-section" style="margin-bottom: 24px;">
+        <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Légifrance (FR) — PISTE API</h2>
-            <p style="margin:0 0 10px;color:#555;">Create an application on <a href="https://piste.gouv.fr/" target="_blank" rel="noopener">PISTE</a>, subscribe to the Légifrance API, then paste OAuth client credentials below. Leave the secret field blank to keep the stored secret.</p>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_fr" style="max-width:640px;">
+            <p class="admin-intro">Create an application on <a href="https://piste.gouv.fr/" target="_blank" rel="noopener">PISTE</a>, subscribe to the Légifrance API, then paste OAuth client credentials below. Leave the secret field blank to keep the stored secret.</p>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_fr" class="admin-form-card">
                 <?= $csrfField ?>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label><input type="checkbox" name="fr_enabled" value="1" <?= !empty($frCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>OAuth client id<br>
-                    <input type="text" name="fr_client_id" value="<?= e((string)($frCfg['client_id'] ?? '')) ?>" autocomplete="off" style="width:100%;"></label>
+                    <input type="text" name="fr_client_id" value="<?= e((string)($frCfg['client_id'] ?? '')) ?>" autocomplete="off" class="search-input" style="width:100%;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>OAuth client secret<br>
-                    <input type="password" name="fr_client_secret" value="" autocomplete="new-password" placeholder="(unchanged if empty)" style="width:100%;"></label>
+                    <input type="password" name="fr_client_secret" value="" autocomplete="new-password" placeholder="(unchanged if empty)" class="search-input" style="width:100%;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Token URL<br>
-                    <input type="url" name="fr_oauth_token_url" value="<?= e((string)($frCfg['oauth_token_url'] ?? 'https://oauth.piste.gouv.fr/api/oauth/token')) ?>" style="width:100%;"></label>
+                    <input type="url" name="fr_oauth_token_url" value="<?= e((string)($frCfg['oauth_token_url'] ?? 'https://oauth.piste.gouv.fr/api/oauth/token')) ?>" class="search-input" style="width:100%;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>API base (no trailing /search)<br>
-                    <input type="url" name="fr_api_base_url" value="<?= e((string)($frCfg['api_base_url'] ?? 'https://api.piste.gouv.fr/dila/legifrance/lf-engine-app')) ?>" style="width:100%;"></label>
+                    <input type="url" name="fr_api_base_url" value="<?= e((string)($frCfg['api_base_url'] ?? 'https://api.piste.gouv.fr/dila/legifrance/lf-engine-app')) ?>" class="search-input" style="width:100%;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Fond (e.g. JORF)<br>
-                    <input type="text" name="fr_fond" value="<?= e((string)($frCfg['fond'] ?? 'JORF')) ?>" maxlength="32" style="width:100%;"></label>
+                    <input type="text" name="fr_fond" value="<?= e((string)($frCfg['fond'] ?? 'JORF')) ?>" maxlength="32" class="search-input" style="width:100%; max-width:16rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Natures (comma-separated, JORF facet)<br>
-                    <input type="text" name="fr_natures" value="<?= e($frNaturesStr) ?>" style="width:100%;"></label>
+                    <input type="text" name="fr_natures" value="<?= e($frNaturesStr) ?>" class="search-input" style="width:100%;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Lookback days<br>
-                    <input type="number" name="fr_lookback_days" value="<?= (int)($frCfg['lookback_days'] ?? 90) ?>" min="1" style="width:100%;"></label>
+                    <input type="number" name="fr_lookback_days" value="<?= (int)($frCfg['lookback_days'] ?? 90) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Row limit (max 200)<br>
-                    <input type="number" name="fr_limit" value="<?= (int)($frCfg['limit'] ?? 100) ?>" min="1" max="200" style="width:100%;"></label>
+                    <input type="number" name="fr_limit" value="<?= (int)($frCfg['limit'] ?? 100) ?>" min="1" max="200" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Notes<br>
-                    <textarea name="fr_notes" rows="2" style="width:100%;"><?= e((string)($frCfg['notes'] ?? '')) ?></textarea></label>
+                    <textarea name="fr_notes" rows="2" class="search-input" style="width:100%;"><?= e((string)($frCfg['notes'] ?? '')) ?></textarea></label>
                 </div>
-                <button type="submit" class="btn btn-secondary">Save FR settings</button>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Save FR settings</button>
+                </div>
             </form>
         </div>
         <?php endif; ?>
@@ -338,11 +346,11 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                     <div class="entry-card">
                         <div class="entry-header">
                             <?php if ($showSourceTag): ?>
-                                <span class="entry-tag" style="background-color: #f5f562; border-color: #000000;">
+                                <span class="entry-tag entry-tag--lex-source">
                                     <?= e($sourceEmoji) ?> <?= e($sourceLabel) ?>
                                 </span>
                             <?php endif; ?>
-                            <span class="entry-tag" style="background-color: #f5f5f5;">
+                            <span class="entry-tag entry-tag--lex-doc">
                                 <?= e($docType) ?>
                             </span>
                         </div>
@@ -362,15 +370,15 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         <?php if ($lexDesc !== ''): ?>
                             <div class="entry-content entry-preview"><?= nl2br(e($lexPreview)) ?></div>
                             <?php if ($lexHasMore): ?>
-                                <div class="entry-full-content" style="display: none;"><?= nl2br(e($lexDesc)) ?></div>
+                                <div class="entry-full-content"><?= nl2br(e($lexDesc)) ?></div>
                             <?php endif; ?>
                         <?php endif; ?>
                         <div class="entry-actions">
-                            <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="entry-actions-main">
                                 <?php if ($lexHasMore): ?>
                                     <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                 <?php endif; ?>
-                                <span style="font-family: monospace;"><?= e((string)($item['celex'] ?? '')) ?></span>
+                                <span class="entry-meta-mono"><?= e((string)($item['celex'] ?? '')) ?></span>
                                 <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
                             </div>
                             <?php if (!empty($item['document_date'])): ?>
@@ -407,10 +415,10 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
             var card = btn.closest('.entry-card');
             if (!card) return;
             var full = card.querySelector('.entry-full-content');
-            if (full && full.style.display === 'none') {
-                expandEntry(card, btn);
-            } else {
+            if (full && full.style.display === 'block') {
                 collapseEntry(card, btn);
+            } else {
+                expandEntry(card, btn);
             }
         });
     })();

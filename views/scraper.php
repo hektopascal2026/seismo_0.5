@@ -50,14 +50,14 @@ $sourcesQs = 'action=scraper&view=sources';
             <?php unset($_SESSION['error']); ?>
         <?php endif; ?>
 
-        <div class="view-toggle" style="margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-            <span style="opacity: 0.85;">View:</span>
+        <div class="view-toggle view-toggle-bar">
+            <span class="view-toggle-label">View:</span>
             <a href="<?= e($basePath) ?>/index.php?<?= e($itemsQs) ?>" class="btn <?= $view === 'items' ? 'btn-primary' : 'btn-secondary' ?>">Items</a>
             <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn <?= $view === 'sources' ? 'btn-primary' : 'btn-secondary' ?>">Sources</a>
         </div>
 
         <?php if ($satellite && $view === 'sources'): ?>
-            <p class="message message-error">Satellite mode: scraper targets are read-only here. Manage sources on the mothership.</p>
+            <p class="message message-info">Satellite mode: scraper targets are read-only here. Manage sources on the mothership.</p>
         <?php endif; ?>
 
         <?php if ($pageError !== null): ?>
@@ -84,62 +84,66 @@ $sourcesQs = 'action=scraper&view=sources';
         <?php else: ?>
         <div class="latest-entries-section">
             <h2 class="section-title">Scraper sources</h2>
-            <p style="margin-bottom:12px; opacity:0.9;">Targets must match a row in <code>feeds</code> (same URL) for the core pipeline to store items. Plain RSS feeds belong on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.</p>
+            <p class="admin-intro">Targets must match a row in <code>feeds</code> (same URL) for the core pipeline to store items. Plain RSS feeds belong on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.</p>
 
             <?php if (!$satellite): ?>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_save" style="max-width:640px; margin-bottom:24px; padding:16px; border:1px solid #ccc; background:#fafafa;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_save" class="admin-form-card">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= $editRow ? (int)$editRow['id'] : '' ?>">
-                <h3 style="margin-bottom:12px;"><?= $editRow ? 'Edit source' : 'Add source' ?></h3>
-                <div style="margin-bottom:8px;">
+                <h3><?= $editRow ? 'Edit source' : 'Add source' ?></h3>
+                <div class="admin-form-field">
                     <label>Name <input type="text" name="name" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['name'] ?? '')) ?>"></label>
                 </div>
-                <div style="margin-bottom:8px;">
+                <div class="admin-form-field">
                     <label>Page URL <input type="url" name="url" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['url'] ?? '')) ?>" placeholder="https://…"></label>
                 </div>
-                <div style="margin-bottom:8px;">
+                <div class="admin-form-field">
                     <label>Link pattern (regex) <input type="text" name="link_pattern" class="search-input" style="width:100%;" value="<?= e((string)($editRow['link_pattern'] ?? '')) ?>"></label>
                 </div>
-                <div style="margin-bottom:8px;">
+                <div class="admin-form-field">
                     <label>Date selector (CSS) <input type="text" name="date_selector" class="search-input" style="width:100%;" value="<?= e((string)($editRow['date_selector'] ?? '')) ?>"></label>
                 </div>
-                <div style="margin-bottom:8px;">
-                    <label>Category <input type="text" name="category" class="search-input" value="<?= e((string)($editRow['category'] ?? 'scraper')) ?>"></label>
+                <div class="admin-form-field">
+                    <label>Category <input type="text" name="category" class="search-input" style="width:100%; max-width:24rem;" value="<?= e((string)($editRow['category'] ?? 'scraper')) ?>"></label>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <input type="hidden" name="disabled" value="0">
                     <label><input type="checkbox" name="disabled" value="1" <?= !empty($editRow['disabled']) ? 'checked' : '' ?>> Disabled</label>
                 </div>
-                <button type="submit" class="btn btn-primary"><?= $editRow ? 'Save' : 'Add source' ?></button>
-                <?php if ($editRow): ?>
-                    <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel edit</a>
-                <?php endif; ?>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success"><?= $editRow ? 'Save' : 'Add source' ?></button>
+                    <?php if ($editRow): ?>
+                        <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel edit</a>
+                    <?php endif; ?>
+                </div>
             </form>
             <?php endif; ?>
 
-            <table class="data-table" style="width:100%; border-collapse:collapse;">
+            <table class="data-table">
                 <thead>
-                    <tr style="text-align:left; border-bottom:1px solid #000;">
-                        <th style="padding:6px;">ID</th>
-                        <th style="padding:6px;">Name</th>
-                        <th style="padding:6px;">URL</th>
-                        <th style="padding:6px;"></th>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>URL</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($configsList as $row): ?>
-                    <tr style="border-bottom:1px solid #ddd;">
-                        <td style="padding:6px;"><?= (int)$row['id'] ?></td>
-                        <td style="padding:6px;"><?= e((string)$row['name']) ?></td>
-                        <td style="padding:6px; word-break:break-all;"><a href="<?= e((string)$row['url']) ?>" target="_blank" rel="noopener"><?= e((string)$row['url']) ?></a></td>
-                        <td style="padding:6px; white-space:nowrap;">
+                    <tr>
+                        <td><?= (int)$row['id'] ?></td>
+                        <td><?= e((string)$row['name']) ?></td>
+                        <td style="word-break:break-all;"><a href="<?= e((string)$row['url']) ?>" target="_blank" rel="noopener"><?= e((string)$row['url']) ?></a></td>
+                        <td>
                             <?php if (!$satellite): ?>
-                            <a href="<?= e($basePath) ?>/index.php?action=scraper&amp;view=sources&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary" style="font-size:12px; padding:2px 8px;">Edit</a>
-                            <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_delete" style="display:inline;" onsubmit="return confirm('Delete this scraper config?');">
-                                <?= $csrfField ?>
-                                <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
-                                <button type="submit" class="btn btn-secondary" style="font-size:12px; padding:2px 8px;">Delete</button>
-                            </form>
+                            <div class="admin-table-actions">
+                                <a href="<?= e($basePath) ?>/index.php?action=scraper&amp;view=sources&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary btn-sm">Edit</a>
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_delete" class="admin-inline-form" onsubmit="return confirm('Delete this scraper config?');">
+                                    <?= $csrfField ?>
+                                    <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                </form>
+                            </div>
                             <?php else: ?>
                             <span style="opacity:0.6;">—</span>
                             <?php endif; ?>
@@ -147,7 +151,7 @@ $sourcesQs = 'action=scraper&view=sources';
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($configsList === []): ?>
-                    <tr><td colspan="4" style="padding:12px; opacity:0.8;">No scraper configs.</td></tr>
+                    <tr class="data-table-empty"><td colspan="4">No scraper configs.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

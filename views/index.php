@@ -101,8 +101,8 @@ $clearSearchQs = http_build_query($clearSearchParams);
             <div class="message message-error"><?= e($dashboardError) ?></div>
         <?php endif; ?>
 
-        <div class="search-section" style="margin-bottom: 1rem;">
-            <form method="get" class="search-form" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+        <div class="search-section search-section-spaced">
+            <form method="get" class="search-form">
                 <input type="hidden" name="action" value="index">
                 <?php if ($currentView === 'favourites'): ?>
                     <input type="hidden" name="view" value="favourites">
@@ -113,8 +113,8 @@ $clearSearchQs = http_build_query($clearSearchParams);
                     <a href="?<?= e($clearSearchQs) ?>" class="btn btn-secondary">Clear search</a>
                 <?php endif; ?>
             </form>
-            <div class="view-toggle" style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-                <span style="opacity: 0.85; margin-right: 0.25rem;">View:</span>
+            <div class="view-toggle view-toggle-bar view-toggle-below-search">
+                <span class="view-toggle-label">View:</span>
                 <a href="?<?= e($indexNewestQs) ?>" class="btn <?= $currentView === 'newest' ? 'btn-primary' : 'btn-secondary' ?>">Newest</a>
                 <a href="?<?= e($indexFavouritesQs) ?>" class="btn <?= $currentView === 'favourites' ? 'btn-primary' : 'btn-secondary' ?>">Favourites</a>
             </div>
@@ -124,37 +124,37 @@ $clearSearchQs = http_build_query($clearSearchParams);
                 $lx = isset($_GET['lx']) ? (string)$_GET['lx'] : '';
                 $etag = isset($_GET['etag']) ? (string)$_GET['etag'] : '';
             ?>
-            <div class="tag-pills-section" style="margin-top: 1rem;">
-                <div style="opacity: 0.85; margin-bottom: 0.35rem;">Filters:</div>
-                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;">
-                    <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null])) ?>" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Clear filters</a>
-                    <span style="opacity: 0.7;">|</span>
-                    <span style="opacity: 0.75;">Feed type:</span>
-                    <a href="?<?= e($dashboardQs(['fk' => 'rss'])) ?>" class="btn <?= $fk === 'rss' ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">RSS</a>
-                    <a href="?<?= e($dashboardQs(['fk' => 'substack'])) ?>" class="btn <?= $fk === 'substack' ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Substack</a>
-                    <a href="?<?= e($dashboardQs(['fk' => 'scraper'])) ?>" class="btn <?= $fk === 'scraper' ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;">Scraper</a>
+            <div class="tag-pills-section filter-toolbar">
+                <div class="filter-toolbar__label">Filters</div>
+                <div class="filter-toolbar__row">
+                    <a href="?<?= e($dashboardQs(['fc' => null, 'fk' => null, 'lx' => null, 'etag' => null])) ?>" class="btn btn-secondary btn-sm">Clear filters</a>
+                    <span class="filter-toolbar__sep">|</span>
+                    <span class="filter-toolbar__hint">Feed type:</span>
+                    <a href="?<?= e($dashboardQs(['fk' => 'rss'])) ?>" class="btn btn-sm <?= $fk === 'rss' ? 'btn-primary' : 'btn-secondary' ?>">RSS</a>
+                    <a href="?<?= e($dashboardQs(['fk' => 'substack'])) ?>" class="btn btn-sm <?= $fk === 'substack' ? 'btn-primary' : 'btn-secondary' ?>">Substack</a>
+                    <a href="?<?= e($dashboardQs(['fk' => 'scraper'])) ?>" class="btn btn-sm <?= $fk === 'scraper' ? 'btn-primary' : 'btn-secondary' ?>">Scraper</a>
                 </div>
                 <?php if ($filterPillOptions['feed_categories'] !== []): ?>
-                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.5rem;">
-                    <span style="opacity: 0.75;">Feed category:</span>
+                <div class="filter-toolbar__row">
+                    <span class="filter-toolbar__hint">Feed category:</span>
                     <?php foreach ($filterPillOptions['feed_categories'] as $cat): ?>
-                        <a href="?<?= e($dashboardQs(['fc' => $cat, 'fk' => null])) ?>" class="btn <?= $fc === $cat ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;"><?= e($cat) ?></a>
+                        <a href="?<?= e($dashboardQs(['fc' => $cat, 'fk' => null])) ?>" class="btn btn-sm <?= $fc === $cat ? 'btn-primary' : 'btn-secondary' ?>"><?= e($cat) ?></a>
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
                 <?php if ($filterPillOptions['lex_sources'] !== []): ?>
-                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.5rem;">
-                    <span style="opacity: 0.75;">Lex:</span>
+                <div class="filter-toolbar__row">
+                    <span class="filter-toolbar__hint">Lex:</span>
                     <?php foreach ($filterPillOptions['lex_sources'] as $src): ?>
-                        <a href="?<?= e($dashboardQs(['lx' => $src])) ?>" class="btn <?= $lx === $src ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;"><?= e($src) ?></a>
+                        <a href="?<?= e($dashboardQs(['lx' => $src])) ?>" class="btn btn-sm <?= $lx === $src ? 'btn-primary' : 'btn-secondary' ?>"><?= e($src) ?></a>
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
                 <?php if ($filterPillOptions['email_tags'] !== []): ?>
-                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.5rem;">
-                    <span style="opacity: 0.75;">Email tag:</span>
+                <div class="filter-toolbar__row">
+                    <span class="filter-toolbar__hint">Email tag:</span>
                     <?php foreach ($filterPillOptions['email_tags'] as $tg): ?>
-                        <a href="?<?= e($dashboardQs(['etag' => $tg])) ?>" class="btn <?= $etag === $tg ? 'btn-primary' : 'btn-secondary' ?>" style="font-size: 0.85rem; padding: 0.2rem 0.5rem;"><?= e($tg) ?></a>
+                        <a href="?<?= e($dashboardQs(['etag' => $tg])) ?>" class="btn btn-sm <?= $etag === $tg ? 'btn-primary' : 'btn-secondary' ?>"><?= e($tg) ?></a>
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>

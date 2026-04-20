@@ -19,7 +19,7 @@ use Seismo\Http\CsrfToken;
     <link rel="stylesheet" href="<?= e($basePath) ?>/assets/css/style.css">
 </head>
 <body>
-    <div class="container" style="max-width:440px; margin-top:80px;">
+    <div class="container login-container">
         <div class="top-bar">
             <div class="top-bar-left">
                 <span class="top-bar-title">
@@ -36,15 +36,15 @@ use Seismo\Http\CsrfToken;
             <div class="message message-error"><?= e($errorMessage) ?></div>
         <?php endif; ?>
 
-        <div class="latest-entries-section" style="margin-top:24px;">
+        <div class="latest-entries-section login-form-card">
             <h2 class="section-title">Sign in</h2>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=login">
                 <?= CsrfToken::field() ?>
-                <div style="margin-bottom:12px;">
+                <div class="admin-form-field">
                     <label>Password<br>
-                    <input type="password" name="password" autofocus autocomplete="current-password" style="width:100%;"></label>
+                    <input type="password" name="password" autofocus autocomplete="current-password" class="search-input" style="width:100%;"></label>
                 </div>
-                <button type="submit" class="btn btn-primary">Sign in</button>
+                <button type="submit" class="btn btn-success">Sign in</button>
             </form>
         </div>
     </div>

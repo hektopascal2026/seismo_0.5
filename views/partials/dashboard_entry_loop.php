@@ -91,7 +91,9 @@ $feedLoopPrevDayKey = null;
                                 <?php if ($isParlPressFeed): ?>
                                     <?php
                                         $parlCommission = seismo_parl_press_commission_from_guid((string)($item['guid'] ?? ''));
-                                        $parlIsSda = strncmp((string)($item['guid'] ?? ''), 'parl_sda:', 9) === 0;
+                                        $parlCat = strtolower(trim((string)($item['feed_category'] ?? '')));
+                                        $parlIsSda = strncmp((string)($item['guid'] ?? ''), 'parl_sda:', 9) === 0
+                                            || $parlCat === 'parl_sda';
                                     ?>
                                     <span class="entry-tag" style="background-color: #f5f562; border-color: #000000;"><?= $parlIsSda ? '🏛 SDA' : '🏛 Parl MM' ?></span>
                                     <?php if ($parlCommission !== ''): ?>

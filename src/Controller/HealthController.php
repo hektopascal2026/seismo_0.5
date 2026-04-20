@@ -52,6 +52,7 @@ final class HealthController
             $data = [
                 'degraded'      => true,
                 'dbStatus'      => $isOk ? 'ok' : 'not ok',
+                'basePath'      => getBasePath(),
             ];
         } else {
             $data = [
