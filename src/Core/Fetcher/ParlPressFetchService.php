@@ -13,8 +13,13 @@ use Seismo\Service\Http\BaseClient;
  * Returns rows for {@see \Seismo\Repository\FeedItemRepository::upsertFeedItems()}.
  *
  * Configuration comes from the parent `feeds` row:
- * - `url` — SharePoint list items endpoint (GET).
- * - `description` — optional JSON: `{"lookback_days":90,"limit":50,"language":"de"}`.
+ * - `url` — SharePoint list items endpoint (GET), e.g. …/lists/getByTitle('Pages')/items
+ * - `description` — optional JSON:
+ *   - `lookback_days`, `limit`, `language` — same as always.
+ *   - `odata_title_substring` — when set, adds `and substringof('…',Title)` (SharePoint OData2).
+ *     Example: `"sda-"` limits rows to SDA agency slugs (`sda-apk-n-…`, `mm-sda-…`) in the same Pages list.
+ *   - `guid_prefix` — stable id prefix for `feed_items.guid` (default `parl_mm`). Use `parl_sda` for SDA-only feeds
+ *     so rows stay distinct from Medienmitteilungen and survive alien-row cleanup.
  */
 final class ParlPressFetchService
 {
@@ -50,10 +55,19 @@ final class ParlPressFetchService
         $lookback = max(1, min(365, (int)($opts['lookback_days'] ?? self::DEFAULT_LOOKBACK)));
         $limit    = max(1, min(200, (int)($opts['limit'] ?? self::DEFAULT_LIMIT)));
         $lang     = $this->normaliseLanguage((string)($opts['language'] ?? 'de'));
+        $guidPrefix = $this->normaliseGuidPrefix((string)($opts['guid_prefix'] ?? 'parl_mm'));
+        $titleNeedle = trim((string)($opts['odata_title_substring'] ?? ''));
 
         $sinceUtc = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
             ->modify('-' . $lookback . ' days')
             ->format('Y-m-d\TH:i:s\Z');
+
+        $filter = "Created ge datetime'{$sinceUtc}'";
+        if ($titleNeedle !== '') {
+            $escaped = str_replace("'", "''", $titleNeedle);
+            // SharePoint OData: use `substringof('x',Title)` — `eq true` is rejected when combined with `and`.
+            $filter .= " and substringof('{$escaped}',Title)";
+        }
 
         $langField    = 'Title_' . $lang;
         $contentField = 'Content_' . $lang;
@@ -65,7 +79,6 @@ final class ParlPressFetchService
             $titleCols[] = 'Title_' . $l;
         }
         $select  = implode(',', $titleCols) . ',' . $contentField . ',FileRef,Created,ArticleStartDate,ContentType/Name';
-        $filter  = "Created ge datetime'{$sinceUtc}'";
         $orderBy = 'Created desc';
 
         $url = $apiBase
@@ -126,7 +139,7 @@ final class ParlPressFetchService
             $rawContent = (string)($item[$contentField] ?? '');
             $plain      = trim(strip_tags($rawContent));
 
-            $guid = 'parl_mm:' . $slug;
+            $guid = $guidPrefix . ':' . $slug;
             $guid = mb_substr($guid, 0, 500);
 
             $commission = self::commissionFromSlug($slug);
@@ -147,8 +160,15 @@ final class ParlPressFetchService
         return $out;
     }
 
+    private function normaliseGuidPrefix(string $raw): string
+    {
+        $raw = strtolower(trim($raw));
+        // Keep in sync with {@see \Seismo\Repository\FeedItemRepository::deleteAlienParlPressFeedItems()}.
+        return in_array($raw, ['parl_mm', 'parl_sda'], true) ? $raw : 'parl_mm';
+    }
+
     /**
-     * @return array{lookback_days?: int, limit?: int, language?: string}
+     * @return array<string, mixed>
      */
     private function parseOptions(string $description): array
     {
@@ -215,6 +235,15 @@ final class ParlPressFetchService
         }
         if (preg_match('/^mm-([a-z]+)-\d{4}/i', $slug, $m)) {
             return strtoupper($m[1]);
+        }
+        if (preg_match('/^sda-([a-z]+)-([nsr])-\d{4}/i', $slug, $m)) {
+            return strtoupper($m[1]) . '-' . strtoupper($m[2]);
+        }
+        if (preg_match('/^sda-([a-z]+)-\d{4}/i', $slug, $m)) {
+            return strtoupper($m[1]);
+        }
+        if (str_contains($slug, '-sda-') || str_starts_with(strtolower($slug), 'mm-sda')) {
+            return 'SDA';
         }
         if (str_starts_with($slug, 'info-')) {
             return 'Info';

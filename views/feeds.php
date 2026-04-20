@@ -109,8 +109,12 @@ $sourcesQs = 'action=feeds&view=sources';
                 </div>
                 <?php if (($editRow['source_type'] ?? '') === 'parl_press'): ?>
                 <div style="margin-bottom:8px; font-size:12px; color:#555;">
-                    For <strong>parl_press</strong>, the URL is the SharePoint list endpoint. Put JSON in Description, e.g.
+                    For <strong>parl_press</strong>, the URL is the SharePoint list <code>…/items</code> endpoint (same host as Medienmitteilungen). Put JSON in Description, e.g.
                     <code style="word-break:break-all;">{"lookback_days":90,"limit":50,"language":"de"}</code>
+                    <br><br>
+                    <strong>SDA-Meldungen</strong> (same <code>Pages</code> list, slug filter): use the same URL as press releases, then e.g.
+                    <code style="word-break:break-all;">{"lookback_days":365,"limit":80,"language":"de","odata_title_substring":"sda-","guid_prefix":"parl_sda"}</code>
+                    — optional <code>guid_prefix</code> keeps SDA rows distinct from <code>parl_mm:</code> Medienmitteilungen. Use a generous <code>lookback_days</code> if few SDA pages fall in the window. Set feed title/category as you like (e.g. “Parlament.ch – SDA”).
                 </div>
                 <?php endif; ?>
                 <div style="margin-bottom:8px;">

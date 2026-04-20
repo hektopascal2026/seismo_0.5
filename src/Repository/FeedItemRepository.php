@@ -190,7 +190,8 @@ final class FeedItemRepository
 
     /**
      * Remove feed_items rows that cannot come from {@see \Seismo\Core\Fetcher\ParlPressFetchService}
-     * (guids are always `parl_mm:{slug}`). Same feed_id may contain RSS-shaped junk if the row was
+     * (guids are `parl_mm:{slug}` or `parl_sda:{slug}` from {@see \Seismo\Core\Fetcher\ParlPressFetchService}).
+     * Same feed_id may contain RSS-shaped junk if the row was
      * ever refreshed as `source_type = rss` against the SharePoint URL — 0.4 stored `Untitled`
      * in that case ({@see cacheFeedItems} in 0.4 controllers/rss.php).
      */
@@ -204,11 +205,11 @@ final class FeedItemRepository
         }
         $table = entryTable('feed_items');
         try {
-            $stmt = $this->pdo->prepare(
-                'DELETE FROM ' . $table . ' WHERE feed_id = ? AND guid NOT LIKE ?'
-            );
-            // Default LIKE escape: backslash before _ so only literal parl_mm: prefix matches.
-            $stmt->execute([$feedId, 'parl\\_mm:%']);
+            $sql = 'DELETE FROM ' . $table . ' WHERE feed_id = ? AND NOT ('
+                . "guid LIKE 'parl\\_mm:%' OR guid LIKE 'parl\\_sda:%'"
+                . ')';
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$feedId]);
 
             return $stmt->rowCount();
         } catch (PDOException $e) {

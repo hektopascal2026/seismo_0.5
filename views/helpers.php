@@ -60,7 +60,7 @@ if (!function_exists('seismo_magnitu_day_heading')) {
 if (!function_exists('seismo_parl_press_commission_from_guid')) {
     /**
      * Second pill label for parlament.ch press rows (0.4: lex document_type).
-     * Parses `parl_mm:{slug}` guids from {@see \Seismo\Core\Fetcher\ParlPressFetchService}.
+     * Parses `parl_mm:{slug}` / `parl_sda:{slug}` guids from {@see \Seismo\Core\Fetcher\ParlPressFetchService}.
      */
     function seismo_parl_press_commission_from_guid(?string $guid): string
     {
@@ -68,7 +68,7 @@ if (!function_exists('seismo_parl_press_commission_from_guid')) {
         if ($guid === '') {
             return '';
         }
-        $slug = preg_match('#^parl_mm:(.+)$#i', $guid, $m) ? $m[1] : $guid;
+        $slug = preg_match('#^parl_(mm|sda):(.+)$#i', $guid, $m) ? $m[2] : $guid;
 
         return \Seismo\Core\Fetcher\ParlPressFetchService::commissionFromSlug($slug);
     }

@@ -9,6 +9,28 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Parlament.ch — SDA second feed (`parl_press`, same `Pages` list)
+
+**Why.** Operators want **SDA-Meldungen** (agency wire) alongside official **Medienmitteilungen** in the timeline. The public **suche-news** UI is backed by SharePoint **search** (`/_api/search/query`); that surface is a poor fit for Seismo’s unattended HTTP fetcher (WAF / host / template constraints in real deployments). The **same** SharePoint **`Pages`** list used for press releases already contains SDA rows; they are distinguishable by **`Title`** containing **`sda-`** (including slugs like `mm-sda-…`).
+
+**What moved.** No new entry family — this extends the existing **`parl_press`** path. `src/Core/Fetcher/ParlPressFetchService.php` — optional `description` keys **`odata_title_substring`** (adds `and substringof('…',Title)` to the OData `$filter`) and **`guid_prefix`** (`parl_mm` default, **`parl_sda`** for a dedicated SDA feed so `feed_items.guid` stays unique vs Medienmitteilungen). `src/Repository/FeedItemRepository.php` — `deleteAlienParlPressFeedItems()` retains GUIDs for both **`parl_mm:`** and **`parl_sda:`**. `views/helpers.php` + `views/partials/dashboard_entry_loop.php` — commission / pill affordances for `parl_sda`. `views/feeds.php` — copy-paste example JSON for a second feed row.
+
+**New wiring (operator setup).** Add a **second** `feeds` row:
+
+- **`source_type`:** `parl_press`
+- **`url`:** same list endpoint as Medienmitteilungen, e.g. `https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items`
+- **`description`:** JSON, e.g. `{"lookback_days":365,"limit":80,"language":"de","odata_title_substring":"sda-","guid_prefix":"parl_sda"}` — name/category as you like (e.g. “Parlament.ch – SDA”, `parl_sda` category for pills).
+
+**Gotchas.**
+
+- **Do not** rely on reproducing the browser hash / `PdNewsTypeDE` search refiner via REST search unless you control a supported client and accept operational risk; the **list** API remains the supported integration.
+- **OData:** SharePoint rejects `substringof('x',Title) eq true` **when combined** with `Created ge …`; the fetcher uses `… and substringof('x',Title)` only (no `eq true`).
+- **Taxonomy:** `NewsType` / taxonomy fields are **not** usable in `$filter` on this farm (“cannot be used in the query filter expression”), so **title substring** is the practical server-side filter.
+- **Volume:** SDA pages are **sparser** than daily press releases — a short **`lookback_days`** window can return **zero** rows even though older items exist; use a generous lookback for the SDA feed if you care about history.
+- Keep **`guid_prefix`** to **`parl_mm`** or **`parl_sda`** only (unknown values fall back to `parl_mm`); alien cleanup only keeps those two prefixes.
+
+---
+
 ## Slice 9 — Dashboard refresh, About, setup stub, `ai_view` retirement
 
 **Why.** Operators needed a one-click refresh from the Timeline, an in-app explanation of sources and exports for non-developers, and an honest first-run path when `config.local.php` cannot be written by PHP. The 0.4 “AI view” must not disappear without a documented replacement.
