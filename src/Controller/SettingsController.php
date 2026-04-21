@@ -102,6 +102,13 @@ final class SettingsController
                 error_log('Seismo settings magnitu: ' . $e->getMessage());
                 $pageError = 'Could not load Magnitu state. Check error_log for details.';
             }
+
+            // After regenerate: show the new key once from session (matches write path).
+            $flashKey = MagnituAdminController::SESSION_API_KEY_FLASH;
+            if (isset($_SESSION[$flashKey]) && is_string($_SESSION[$flashKey]) && $_SESSION[$flashKey] !== '') {
+                $magnituConfig['api_key'] = $_SESSION[$flashKey];
+                unset($_SESSION[$flashKey]);
+            }
         }
 
         if ($tab === 'satellite') {

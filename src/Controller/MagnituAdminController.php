@@ -35,6 +35,15 @@ use Seismo\Repository\SystemConfigRepository;
 final class MagnituAdminController
 {
     /**
+     * Session flash: Settings → Magnitu reads this once after regenerate so the
+     * API key field always shows the freshly minted value even if the next SELECT
+     * misses (proxy/cache/host edge cases).
+     *
+     * @see SettingsController::show()
+     */
+    public const SESSION_API_KEY_FLASH = '_seismo_magnitu_api_key_flash_v1';
+
+    /**
      * Keys we reset when wiping scores. `recipe_json` + `recipe_version`
      * pair with the DELETE so the next Magnitu sync gets a clean slate;
      * `last_sync_at` is reset so the Settings display reverts to
@@ -87,6 +96,16 @@ final class MagnituAdminController
             $key    = bin2hex(random_bytes(16));
             $config = new SystemConfigRepository(getDbConnection());
             $config->set('api_key', $key);
+            $verify = $config->get('api_key');
+            if ($verify !== $key) {
+                error_log('Seismo settings_regenerate_magnitu_key: read-back mismatch after set');
+                $_SESSION['error'] = 'Could not persist API key (verification failed).';
+
+                $this->redirect();
+
+                return;
+            }
+            $_SESSION[self::SESSION_API_KEY_FLASH] = $key;
             $_SESSION['success'] = 'New Magnitu API key generated. Copy it into Magnitu\'s magnitu_config.json.';
         } catch (\Throwable $e) {
             error_log('Seismo settings_regenerate_magnitu_key: ' . $e->getMessage());
