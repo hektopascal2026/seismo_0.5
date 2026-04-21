@@ -5,6 +5,9 @@
  * No feeds, Lex/Leg admin, diagnostics UI, retention, exports, or other
  * mothership-only surfaces.
  *
+ * Satellite bundle pruning (seismo-generator) uses `satellite-prune.json` — when
+ * adding mothership-only routes, update that manifest so generated uploads stay in sync.
+ *
  * @var \Seismo\Http\Router $router
  */
 
