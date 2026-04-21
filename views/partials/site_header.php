@@ -5,7 +5,7 @@
  * @var string $basePath
  * @var string $headerTitle
  * @var string|null $headerSubtitle
- * @var string $activeNav index|filter|about|magnitu|feeds|scraper|mail|lex|leg|diagnostics|settings|styleguide
+ * @var string $activeNav index|filter|about|magnitu|label|feeds|scraper|mail|lex|leg|diagnostics|settings|styleguide
  * @var string $csrfField
  */
 
@@ -56,10 +56,8 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
         <nav id="seismo-nav-drawer" class="nav-drawer" aria-label="Main navigation" aria-hidden="true">
             <a href="<?= e($basePath) ?>/index.php?action=index" class="nav-link<?= $activeNav === 'index' ? ' active' : '' ?>">Timeline</a>
             <a href="<?= e($basePath) ?>/index.php?<?= e($filterNavQs) ?>" class="nav-link<?= $activeNav === 'filter' ? ' active' : '' ?>">Filter</a>
-            <?php if (!isSatellite()): ?>
-            <a href="<?= e($basePath) ?>/index.php?action=about" class="nav-link<?= $activeNav === 'about' ? ' active' : '' ?>">About</a>
-            <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=magnitu" class="nav-link<?= $activeNav === 'magnitu' ? ' active' : '' ?>">Highlights</a>
+            <a href="<?= e($basePath) ?>/index.php?action=label" class="nav-link<?= $activeNav === 'label' ? ' active' : '' ?>">Label</a>
             <?php if (!isSatellite()): ?>
             <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>
             <a href="<?= e($basePath) ?>/index.php?action=scraper" class="nav-link<?= $activeNav === 'scraper' ? ' active' : '' ?>">Scraper</a>
@@ -71,6 +69,9 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <a href="<?= e($basePath) ?>/index.php?action=styleguide" class="nav-link<?= $activeNav === 'styleguide' ? ' active' : '' ?>">Styleguide</a>
             <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=settings" class="nav-link<?= $activeNav === 'settings' ? ' active' : '' ?>">Settings</a>
+            <?php if (!isSatellite()): ?>
+            <a href="<?= e($basePath) ?>/index.php?action=about" class="nav-link<?= $activeNav === 'about' ? ' active' : '' ?>">About</a>
+            <?php endif; ?>
         </nav>
         <script>
         (function() {

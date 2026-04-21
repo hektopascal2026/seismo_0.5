@@ -57,6 +57,34 @@ final class MagnituLabelRepository
     }
 
     /**
+     * Keys `entry_type:entry_id` for entries that already have a label row.
+     * Bounded by {@see self::MAX_LIST_LIMIT} rows (same cap as {@see listAll()}).
+     *
+     * @return array<string, true>
+     */
+    public function listLabeledKeys(): array
+    {
+        try {
+            $stmt = $this->pdo->query(
+                'SELECT entry_type, entry_id FROM magnitu_labels LIMIT ' . self::MAX_LIST_LIMIT
+            );
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $out = [];
+            foreach ($rows as $r) {
+                $t = (string)($r['entry_type'] ?? '');
+                $id = (int)($r['entry_id'] ?? 0);
+                if ($t !== '' && $id > 0) {
+                    $out[$t . ':' . $id] = true;
+                }
+            }
+
+            return $out;
+        } catch (PDOException $e) {
+            return [];
+        }
+    }
+
+    /**
      * List every label, newest first. Bounded by {@see self::MAX_LIST_LIMIT}.
      *
      * @return array<int, array<string, mixed>>

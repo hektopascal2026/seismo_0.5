@@ -1,7 +1,7 @@
 <?php
 /**
- * Satellite-only route table — timeline, highlights, settings (general + Magnitu),
- * Magnitu Bearer API, remote “refresh mothership” POST, auth, health, migrate.
+ * Satellite-only route table — timeline, highlights, in-app Label training UI,
+ * settings (general + Magnitu), Magnitu Bearer API, remote “refresh mothership” POST, auth, health, migrate.
  * No feeds, Lex/Leg admin, diagnostics UI, retention, exports, or other
  * mothership-only surfaces.
  *
@@ -79,6 +79,16 @@ $router->register(
     'magnitu',
     \Seismo\Controller\MagnituHighlightsController::class . '::show',
     true
+);
+$router->register(
+    'label',
+    \Seismo\Controller\MagnituLabelUiController::class . '::show',
+    true
+);
+$router->register(
+    'label_save',
+    \Seismo\Controller\MagnituLabelUiController::class . '::save',
+    false
 );
 $router->register(
     'magnitu_entries',

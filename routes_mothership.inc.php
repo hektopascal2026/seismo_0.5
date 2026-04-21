@@ -253,6 +253,16 @@ $router->register(
     true
 );
 $router->register(
+    'label',
+    \Seismo\Controller\MagnituLabelUiController::class . '::show',
+    true
+);
+$router->register(
+    'label_save',
+    \Seismo\Controller\MagnituLabelUiController::class . '::save',
+    false
+);
+$router->register(
     'retention',
     \Seismo\Controller\RetentionController::class . '::show',
     true
