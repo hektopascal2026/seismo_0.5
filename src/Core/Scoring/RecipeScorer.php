@@ -23,6 +23,22 @@ final class RecipeScorer
     public const DEFAULT_CLASS_WEIGHTS = [1.0, 0.66, 0.33, 0.0];
 
     /**
+     * Normalised CLIR expansion map: German keyword (lowercase) → translated tokens (lowercase).
+     * Loaded once per PHP process from {@see SWISS_DICTIONARY_PATH}.
+     *
+     * @var array<string, list<string>>|null
+     */
+    private static ?array $swissDictionary = null;
+
+    private const SWISS_DICTIONARY_PATH = '/config/swiss_dictionary.json';
+
+    /**
+     * Upper bound for n-gram phrases (unigrams through this many words). Matches
+     * longest CLIR dictionary translations; keep in sync with distiller if needed.
+     */
+    private const MAX_NGRAM = 5;
+
+    /**
      * Score one entry. Returns null when the recipe is missing / empty
      * (caller should treat as "unscored"), else the 0.4-shaped dictionary.
      *
@@ -44,7 +60,7 @@ final class RecipeScorer
         /** @var array<int, float> $classWeights */
         $classWeights  = $recipe['class_weights']  ?? self::DEFAULT_CLASS_WEIGHTS;
         /** @var array<string, array<string, float>> $keywords */
-        $keywords      = $recipe['keywords']       ?? [];
+        $keywords      = self::expandRecipeKeywords($recipe['keywords'] ?? []);
         /** @var array<string, array<string, float>> $sourceWeights */
         $sourceWeights = $recipe['source_weights'] ?? [];
 
@@ -56,11 +72,17 @@ final class RecipeScorer
             PREG_SPLIT_NO_EMPTY
         ) ?: [];
 
-        // Unigrams + bigrams.
-        $tokens = $words;
+        // Unigrams through MAX_NGRAM-grams (space-joined), same shape as recipe/dictionary keys.
+        $tokens = [];
         $count  = count($words);
-        for ($i = 0; $i < $count - 1; $i++) {
-            $tokens[] = $words[$i] . ' ' . $words[$i + 1];
+        for ($i = 0; $i < $count; $i++) {
+            $maxSpan = min(self::MAX_NGRAM, $count - $i);
+            $chunk   = $words[$i];
+            $tokens[] = $chunk;
+            for ($span = 2; $span <= $maxSpan; $span++) {
+                $chunk   .= ' ' . $words[$i + $span - 1];
+                $tokens[] = $chunk;
+            }
         }
 
         $classScores  = array_fill_keys($classes, 0.0);
@@ -138,5 +160,96 @@ final class RecipeScorer
                 'prediction'   => $predictedLabel,
             ],
         ];
+    }
+
+    /**
+     * In-memory dictionary expansion: for each recipe keyword, keep the original
+     * class weights and add the same weights under every translated token from
+     * {@see SWISS_DICTIONARY_PATH}. Duplicate translation keys merge by summing
+     * per-class weights.
+     *
+     * @param array<string, array<string, float>> $baseKeywords
+     * @return array<string, array<string, float>>
+     */
+    private static function expandRecipeKeywords(array $baseKeywords): array
+    {
+        $dict = self::loadSwissDictionary();
+        if ($dict === []) {
+            return $baseKeywords;
+        }
+
+        $expanded = $baseKeywords;
+        foreach ($baseKeywords as $keyword => $classWeights) {
+            $lookup = mb_strtolower((string)$keyword, 'UTF-8');
+            if (!isset($dict[$lookup])) {
+                continue;
+            }
+            foreach ($dict[$lookup] as $translated) {
+                if ($translated === '' || $translated === $lookup) {
+                    continue;
+                }
+                if (!isset($expanded[$translated])) {
+                    $expanded[$translated] = $classWeights;
+                    continue;
+                }
+                foreach ($classWeights as $class => $w) {
+                    if (!isset($expanded[$translated][$class])) {
+                        $expanded[$translated][$class] = 0.0;
+                    }
+                    $expanded[$translated][$class] += (float)$w;
+                }
+            }
+        }
+
+        return $expanded;
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private static function loadSwissDictionary(): array
+    {
+        if (self::$swissDictionary !== null) {
+            return self::$swissDictionary;
+        }
+
+        $path = dirname(__DIR__, 3) . self::SWISS_DICTIONARY_PATH;
+        if (!is_readable($path)) {
+            self::$swissDictionary = [];
+            return self::$swissDictionary;
+        }
+
+        $json = file_get_contents($path);
+        if ($json === false || $json === '') {
+            self::$swissDictionary = [];
+            return self::$swissDictionary;
+        }
+
+        $data = json_decode($json, true);
+        if (!is_array($data)) {
+            self::$swissDictionary = [];
+            return self::$swissDictionary;
+        }
+
+        $normalized = [];
+        foreach ($data as $german => $translations) {
+            if (!is_array($translations)) {
+                continue;
+            }
+            $key = mb_strtolower((string)$german, 'UTF-8');
+            $words = [];
+            foreach ($translations as $t) {
+                $w = mb_strtolower((string)$t, 'UTF-8');
+                if ($w !== '') {
+                    $words[] = $w;
+                }
+            }
+            if ($words !== []) {
+                $normalized[$key] = $words;
+            }
+        }
+
+        self::$swissDictionary = $normalized;
+        return self::$swissDictionary;
     }
 }

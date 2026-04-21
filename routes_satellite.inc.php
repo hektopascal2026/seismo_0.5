@@ -1,7 +1,9 @@
 <?php
 /**
- * Satellite-only route table — timeline, highlights, in-app Label training UI,
- * settings (general + Magnitu), Magnitu Bearer API, remote “refresh mothership” POST, auth, health, migrate.
+ * Satellite-only route table — UI nav (drawer) is Timeline, Highlights, Label, Settings;
+ * the Filter view remains registered and reachable by URL but is hidden from the nav on
+ * satellites. In-app: highlights, in-app Label training, settings (General + Magnitu), Magnitu
+ * Bearer API, remote “refresh mothership” POST, auth, health, migrate.
  * No feeds, Lex/Leg admin, diagnostics UI, retention, exports, or other
  * mothership-only surfaces.
  *
