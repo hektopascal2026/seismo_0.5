@@ -28,6 +28,7 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use PDOException;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -97,7 +98,7 @@ final class MagnituAdminController
             $config = new SystemConfigRepository(getDbConnection());
             $config->set('api_key', $key);
             $verify = $config->get('api_key');
-            if ($verify !== $key) {
+            if (trim((string)$verify) !== $key) {
                 error_log('Seismo settings_regenerate_magnitu_key: read-back mismatch after set');
                 $_SESSION['error'] = 'Could not persist API key (verification failed).';
 
@@ -107,9 +108,12 @@ final class MagnituAdminController
             }
             $_SESSION[self::SESSION_API_KEY_FLASH] = $key;
             $_SESSION['success'] = 'New Magnitu API key generated. Copy it into Magnitu\'s magnitu_config.json.';
+        } catch (PDOException $e) {
+            error_log('Seismo settings_regenerate_magnitu_key: ' . $e->getMessage());
+            $_SESSION['error'] = self::pdoUserHint($e);
         } catch (\Throwable $e) {
             error_log('Seismo settings_regenerate_magnitu_key: ' . $e->getMessage());
-            $_SESSION['error'] = 'Could not regenerate API key.';
+            $_SESSION['error'] = 'Could not regenerate API key. Check server error_log for details.';
         }
 
         $this->redirect();
@@ -154,5 +158,40 @@ final class MagnituAdminController
     {
         header('Location: ' . getBasePath() . '/index.php?action=settings&tab=magnitu', true, 303);
         exit;
+    }
+
+    /**
+     * Human hints for common satellite misconfiguration (read-only DB user, missing table).
+     */
+    private static function pdoUserHint(PDOException $e): string
+    {
+        $msg  = $e->getMessage();
+        $drv  = (string)($e->errorInfo[1] ?? '');
+        $sql  = (string)($e->errorInfo[0] ?? '');
+
+        if ($drv === '1146'
+            || str_contains($msg, '1146')
+            || str_contains($msg, "doesn't exist")
+            || str_contains($msg, 'Unknown table')) {
+            return 'Could not save API key — table `system_config` is missing. Import sql/install.sql (satellite DB) or run migrations.';
+        }
+
+        if (($sql === 'HY000' && ($drv === '1044' || str_contains($msg, '1044')))
+            || (str_contains($msg, 'Access denied') && str_contains($msg, 'database'))) {
+            return 'Could not save API key — MySQL denied access to this database. Check DB_NAME and GRANT ALL on the satellite database for DB_USER.';
+        }
+
+        if (str_contains($msg, 'INSERT command denied')
+            || str_contains($msg, 'UPDATE command denied')
+            || str_contains($msg, 'DELETE command denied')) {
+            return 'Could not save API key — DB user needs INSERT/UPDATE on `system_config`. Example: GRANT ALL ON `' . self::satelliteDbNameForHint() . '`.* TO your user@localhost;';
+        }
+
+        return 'Could not regenerate API key. Check server error_log for the SQL error.';
+    }
+
+    private static function satelliteDbNameForHint(): string
+    {
+        return defined('DB_NAME') && is_string(DB_NAME) && DB_NAME !== '' ? DB_NAME : 'your_satellite_db';
     }
 }
