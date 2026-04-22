@@ -334,7 +334,13 @@ $entryLoopIndex                 = 0;
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
-                                <?php if (!empty($email['sender_tag']) && $email['sender_tag'] !== 'unclassified'): ?>
+                                <?php
+                                    $subLabel = trim((string)($email['subscription_display_name'] ?? ''));
+                                    $legacySenderTag = !empty($email['sender_tag']) && $email['sender_tag'] !== 'unclassified';
+                                ?>
+                                <?php if ($subLabel !== ''): ?>
+                                    <span class="entry-tag entry-tag--email-sender"><?= htmlspecialchars($subLabel) ?></span>
+                                <?php elseif ($legacySenderTag): ?>
                                     <span class="entry-tag entry-tag--email-sender"><?= htmlspecialchars($email['sender_tag']) ?></span>
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>

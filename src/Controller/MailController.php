@@ -21,12 +21,15 @@ final class MailController
 
         $view = (isset($_GET['view']) && (string)$_GET['view'] === 'subscriptions') ? 'subscriptions' : 'items';
         $editId = (int)($_GET['edit'] ?? 0);
+        $subscriptionId = (int)($_GET['subscription'] ?? 0);
 
-        $allItems      = [];
-        $subscriptions = [];
-        $editRow       = null;
-        $pageError     = null;
-        $alertThreshold = 0.75;
+        $allItems             = [];
+        $subscriptions        = [];
+        $subscriptionLatest   = [];
+        $subscriptionFilter   = null;
+        $editRow              = null;
+        $pageError            = null;
+        $alertThreshold       = 0.75;
 
         try {
             $pdo = getDbConnection();
@@ -37,10 +40,35 @@ final class MailController
             }
 
             $entryRepo = new EntryRepository($pdo);
-            $allItems = $entryRepo->getEmailModuleTimeline(self::LIST_LIMIT, 0);
+            $subRepo   = new EmailSubscriptionRepository($pdo);
 
-            $subRepo = new EmailSubscriptionRepository($pdo);
+            if ($view === 'items' && $subscriptionId > 0) {
+                $subForFilter = $subRepo->findById($subscriptionId);
+                if ($subForFilter !== null) {
+                    $subscriptionFilter = $subForFilter;
+                    $allItems = $entryRepo->getEmailModuleTimelineForSubscription(
+                        (string)$subForFilter['match_type'],
+                        (string)$subForFilter['match_value'],
+                        self::LIST_LIMIT,
+                        0
+                    );
+                } else {
+                    $allItems = $entryRepo->getEmailModuleTimeline(self::LIST_LIMIT, 0);
+                }
+            } else {
+                $allItems = $entryRepo->getEmailModuleTimeline(self::LIST_LIMIT, 0);
+            }
+
             $subscriptions = $subRepo->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
+            if ($view === 'subscriptions') {
+                foreach ($subscriptions as $row) {
+                    $sid = (int)$row['id'];
+                    $subscriptionLatest[$sid] = $entryRepo->peekLatestEmailForSubscription(
+                        (string)$row['match_type'],
+                        (string)$row['match_value']
+                    );
+                }
+            }
             if ($editId > 0) {
                 $editRow = $subRepo->findById($editId);
             }

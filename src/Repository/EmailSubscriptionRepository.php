@@ -49,6 +49,47 @@ final class EmailSubscriptionRepository
     }
 
     /**
+     * Human label for the inbox card: `display_name` from the best matching
+     * non-disabled subscription row. `email` rules beat `domain`; ties use
+     * the first matching row in `$subscriptionRows` order (newest id first
+     * when the list comes from {@see listAll}).
+     *
+     * @param list<array<string, mixed>> $subscriptionRows
+     */
+    public static function resolveDisplayNameForFromEmail(string $fromEmail, array $subscriptionRows): ?string
+    {
+        $from = trim($fromEmail);
+        if ($from === '') {
+            return null;
+        }
+        $bestRank = 0;
+        $bestName = null;
+        foreach ($subscriptionRows as $row) {
+            if (!empty($row['disabled'])) {
+                continue;
+            }
+            $mt = (string)($row['match_type'] ?? '');
+            $mv = (string)($row['match_value'] ?? '');
+            if (!self::matchesAddress($from, $mt, $mv)) {
+                continue;
+            }
+            $rank = $mt === 'email' ? 2 : 1;
+            $name = trim((string)($row['display_name'] ?? ''));
+            if ($rank > $bestRank) {
+                $bestRank = $rank;
+                $bestName = $name !== '' ? $name : null;
+
+                continue;
+            }
+            if ($rank === $bestRank && ($bestName === null || $bestName === '') && $name !== '') {
+                $bestName = $name;
+            }
+        }
+
+        return $bestName;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function listAll(int $limit, int $offset): array

@@ -127,6 +127,7 @@ final class EntryRepository
         $this->sortMergedTimeline($items, $sortByRelevance);
         $items = array_slice($items, $offset, $limit);
         $this->attachFavourites($items);
+        $this->attachEmailSubscriptionDisplayNames($items);
 
         return $items;
     }
@@ -174,6 +175,7 @@ final class EntryRepository
         $this->sortMergedTimeline($items, $sortByRelevance);
         $items = array_slice($items, $offset, $limit);
         $this->attachFavourites($items);
+        $this->attachEmailSubscriptionDisplayNames($items);
 
         return $items;
     }
@@ -297,6 +299,7 @@ final class EntryRepository
         $this->sortMergedTimeline($items, false);
         $items = array_slice($items, $offset, $limit);
         $this->attachFavourites($items);
+        $this->attachEmailSubscriptionDisplayNames($items);
 
         return $items;
     }
@@ -410,6 +413,7 @@ final class EntryRepository
         $items = array_slice($items, $offset, $limit);
 
         $this->attachScores($items);
+        $this->attachEmailSubscriptionDisplayNames($items);
 
         return $items;
     }
@@ -1127,6 +1131,46 @@ final class EntryRepository
         unset($item);
     }
 
+    /**
+     * Adds `subscription_display_name` onto email `data` from `email_subscriptions`
+     * (same match semantics as {@see EmailSubscriptionRepository::matchesAddress}).
+     *
+     * @param array<int, array<string, mixed>> $items
+     */
+    private function attachEmailSubscriptionDisplayNames(array &$items): void
+    {
+        $hasEmail = false;
+        foreach ($items as $it) {
+            if (($it['type'] ?? '') === 'email') {
+                $hasEmail = true;
+                break;
+            }
+        }
+        if (!$hasEmail) {
+            return;
+        }
+        try {
+            $subs = (new EmailSubscriptionRepository($this->pdo))
+                ->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
+        } catch (\Throwable) {
+            return;
+        }
+        foreach ($items as &$it) {
+            if (($it['type'] ?? '') !== 'email') {
+                continue;
+            }
+            $from = trim((string)($it['data']['from_email'] ?? ''));
+            if ($from === '') {
+                continue;
+            }
+            $label = EmailSubscriptionRepository::resolveDisplayNameForFromEmail($from, $subs);
+            if ($label !== null && $label !== '') {
+                $it['data']['subscription_display_name'] = $label;
+            }
+        }
+        unset($it);
+    }
+
     // ------------------------------------------------------------------
     // Slice 8 — module pages (Feeds / Scraper / Mail) single-family timelines.
     // ------------------------------------------------------------------
@@ -1167,8 +1211,52 @@ final class EntryRepository
         }
         $this->attachScores($items);
         $this->attachFavourites($items);
+        $this->attachEmailSubscriptionDisplayNames($items);
 
         return $items;
+    }
+
+    /**
+     * Mail module timeline rows whose `from_email` matches an `email_subscriptions` rule
+     * (same semantics as {@see \Seismo\Repository\EmailSubscriptionRepository::matchesAddress}).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getEmailModuleTimelineForSubscription(string $matchType, string $matchValue, int $limit, int $offset): array
+    {
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+        $rows   = $this->fetchEmailsMatchingSubscription($matchType, $matchValue, $limit, $offset);
+        $items  = [];
+        foreach ($rows as $row) {
+            $items[] = $this->wrapEmail($row);
+        }
+        $this->attachScores($items);
+        $this->attachFavourites($items);
+        $this->attachEmailSubscriptionDisplayNames($items);
+
+        return $items;
+    }
+
+    /**
+     * Newest stored email for a subscription match (for Subscriptions table "Latest" link).
+     *
+     * @return ?array{email_id: int, subject: ?string}
+     */
+    public function peekLatestEmailForSubscription(string $matchType, string $matchValue): ?array
+    {
+        $rows = $this->fetchEmailsMatchingSubscription($matchType, $matchValue, 1, 0);
+        if ($rows === []) {
+            return null;
+        }
+        $r = $rows[0];
+
+        return [
+            'email_id' => (int)$r['id'],
+            'subject'  => isset($r['subject']) && $r['subject'] !== null && $r['subject'] !== ''
+                ? (string)$r['subject']
+                : null,
+        ];
     }
 
     /**
@@ -1253,6 +1341,68 @@ final class EntryRepository
                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
 
         return $this->selectOrEmpty($sql);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchEmailsMatchingSubscription(string $matchType, string $matchValue, int $limit, int $offset): array
+    {
+        $matchType = strtolower(trim($matchType));
+        if ($matchType !== 'domain' && $matchType !== 'email') {
+            return [];
+        }
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+
+        if ($matchType === 'email') {
+            $param = strtolower(trim($matchValue));
+            if ($param === '') {
+                return [];
+            }
+            $whereSql = 'LOWER(TRIM(COALESCE(e.from_email, \'\'))) = ?';
+        } else {
+            $param = strtolower(ltrim(trim($matchValue), '@'));
+            if ($param === '') {
+                return [];
+            }
+            $whereSql = 'LOWER(TRIM(SUBSTRING_INDEX(COALESCE(e.from_email, \'\'), \'@\', -1))) = ?';
+        }
+
+        $table    = getEmailTableName();
+        $emailT   = entryTable($table);
+        $dateCols = $this->resolveEmailDateColumns($table);
+        if ($dateCols === []) {
+            $orderBy = 'ORDER BY e.id DESC';
+        } elseif (count($dateCols) === 1) {
+            $orderBy = 'ORDER BY e.`' . $dateCols[0] . '` DESC';
+        } else {
+            $coalesce = implode(
+                ', ',
+                array_map(static fn (string $c) => '`e`.`' . $c . '`', $dateCols)
+            );
+            $orderBy = 'ORDER BY COALESCE(' . $coalesce . ') DESC';
+        }
+        $st  = entryTable('sender_tags');
+        $sql = 'SELECT e.*, st.tag AS sender_tag
+                FROM ' . $emailT . ' e
+                LEFT JOIN ' . $st . ' st
+                  ON st.from_email = e.from_email AND st.removed_at IS NULL
+                WHERE ' . $whereSql . '
+                ' . $orderBy . '
+                LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$param]);
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            throw $e;
+        }
+
+        return $stmt->fetchAll();
     }
 
     /**

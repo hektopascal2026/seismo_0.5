@@ -4,6 +4,8 @@
  *
  * @var array<int, array<string, mixed>> $allItems
  * @var list<array<string, mixed>> $subscriptions
+ * @var array<int, ?array{email_id: int, subject: ?string}> $subscriptionLatest
+ * @var ?array<string, mixed> $subscriptionFilter
  * @var ?array<string, mixed> $editRow
  * @var ?string $pageError
  * @var string $csrfField
@@ -66,6 +68,18 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
 
         <?php if ($view === 'items'): ?>
         <div class="latest-entries-section">
+            <?php if ($subscriptionFilter !== null): ?>
+                <?php
+                $sfLabel = trim((string)($subscriptionFilter['display_name'] ?? ''));
+                if ($sfLabel === '') {
+                    $sfLabel = (string)$subscriptionFilter['match_type'] . ': ' . (string)$subscriptionFilter['match_value'];
+                }
+                ?>
+                <p class="message message-info" style="margin-bottom:1rem;">
+                    Mail items filtered to subscription #<?= (int)$subscriptionFilter['id'] ?> (<?= e($sfLabel) ?>).
+                    <a href="<?= e($basePath) ?>/index.php?action=mail">Show all mail</a>
+                </p>
+            <?php endif; ?>
             <div class="section-title-row">
                 <h2 class="section-title">
                     <?= count($allItems) ?> <?= count($allItems) === 1 ? 'entry' : 'entries' ?>
@@ -142,6 +156,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                         <th>ID</th>
                         <th>Match</th>
                         <th>Name</th>
+                        <th>Latest</th>
                         <th>Disabled</th>
                         <th>Magnitu</th>
                         <th></th>
@@ -149,10 +164,40 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                 </thead>
                 <tbody>
                 <?php foreach ($subscriptions as $row): ?>
+                    <?php
+                    $sid = (int)$row['id'];
+                    $peek = $subscriptionLatest[$sid] ?? null;
+                    $latestQs = 'action=mail&view=items&subscription=' . $sid;
+                    ?>
                     <tr>
-                        <td><?= (int)$row['id'] ?></td>
+                        <td><?= $sid ?></td>
                         <td><?= e((string)$row['match_type']) ?>: <?= e((string)$row['match_value']) ?></td>
                         <td><?= e((string)$row['display_name']) ?></td>
+                        <td>
+                            <?php if ($peek !== null): ?>
+                                <?php
+                                $subj = $peek['subject'] ?? null;
+                                $linkText = 'Latest';
+                                $trunc = false;
+                                if ($subj !== null && $subj !== '') {
+                                    $max = 56;
+                                    if (function_exists('mb_strlen')) {
+                                        $trunc = mb_strlen($subj) > $max;
+                                        $linkText = mb_substr($subj, 0, $max);
+                                    } else {
+                                        $trunc = strlen($subj) > $max;
+                                        $linkText = substr($subj, 0, $max);
+                                    }
+                                }
+                                if ($trunc) {
+                                    $linkText .= '…';
+                                }
+                                ?>
+                                <a href="<?= e($basePath) ?>/index.php?<?= e($latestQs) ?>" title="<?= e($subj ?? 'Open matching mail items') ?>"><?= e($linkText) ?></a>
+                            <?php else: ?>
+                                <span class="table-cell-placeholder">No messages yet</span>
+                            <?php endif; ?>
+                        </td>
                         <td><?= !empty($row['disabled']) ? 'yes' : 'no' ?></td>
                         <td><?= !isset($row['show_in_magnitu']) || !empty($row['show_in_magnitu']) ? 'on' : 'off' ?></td>
                         <td>
@@ -177,7 +222,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($subscriptions === []): ?>
-                    <tr class="data-table-empty"><td colspan="6">No subscriptions.</td></tr>
+                    <tr class="data-table-empty"><td colspan="7">No subscriptions.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

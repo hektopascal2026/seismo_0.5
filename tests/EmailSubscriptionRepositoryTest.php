@@ -49,4 +49,39 @@ final class EmailSubscriptionRepositoryTest extends TestCase
             'bob@example.com'
         ));
     }
+
+    public function testResolveDisplayNamePrefersEmailRuleOverDomain(): void
+    {
+        $rows = [
+            [
+                'match_type'    => 'domain',
+                'match_value'   => 'example.com',
+                'display_name'  => 'Example domain',
+                'disabled'      => 0,
+            ],
+            [
+                'match_type'    => 'email',
+                'match_value'   => 'alice@example.com',
+                'display_name'  => 'Alice only',
+                'disabled'      => 0,
+            ],
+        ];
+        self::assertSame(
+            'Alice only',
+            EmailSubscriptionRepository::resolveDisplayNameForFromEmail('alice@example.com', $rows)
+        );
+    }
+
+    public function testResolveDisplayNameSkipsDisabled(): void
+    {
+        $rows = [
+            [
+                'match_type'    => 'domain',
+                'match_value'   => 'example.com',
+                'display_name'  => 'Newsletter',
+                'disabled'      => 1,
+            ],
+        ];
+        self::assertNull(EmailSubscriptionRepository::resolveDisplayNameForFromEmail('a@example.com', $rows));
+    }
 }
