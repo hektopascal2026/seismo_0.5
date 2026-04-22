@@ -23,7 +23,15 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     <a href="<?= e($basePath) ?>/index.php?action=index">
                         <img src="<?= e($basePath) ?>/assets/img/logo.png" alt="" class="logo-icon logo-icon-large" width="38" height="38" decoding="async">
                     </a>
-                    <?= e($headerTitle) ?>
+                    <?php
+                    $brandFull = seismoBrandTitle();
+                    if (($headerTitle ?? '') === $brandFull) {
+                        echo '<span class="top-bar-brand-name">' . e(seismoBrandBase()) . '</span>';
+                        echo ' <span class="top-bar-brand-version">' . e(seismoBrandVersionLabel()) . '</span>';
+                    } else {
+                        echo '<span class="top-bar-page-title">' . e((string)$headerTitle) . '</span>';
+                    }
+                    ?>
                 </span>
                 <?php if (($headerSubtitle ?? '') !== ''): ?>
                 <span class="top-bar-subtitle"><?= e((string)$headerSubtitle) ?></span>

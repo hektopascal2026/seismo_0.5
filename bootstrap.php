@@ -8,7 +8,8 @@
  *   3. Register a minimal PSR-4 autoloader for Seismo\* classes under src/.
  *   4. Provide a handful of global helpers that every layer depends on:
  *      getDbConnection(), getBasePath(), isSatellite(), entryTable(),
- *      entryDbSchemaExpr(), seismoBrandTitle(), seismoBrandAccent().
+ *      entryDbSchemaExpr(), seismoBrandBase(), seismoBrandVersionLabel(),
+ *      seismoBrandTitle(), seismoBrandAccent().
  *
  * Anything larger (DDL, scoring, feature config) lives in its own module or
  * migration file. See docs/consolidation-plan.md.
@@ -229,14 +230,26 @@ function getEmailTableName(): string
 }
 
 /**
- * Top-bar / document brand. Defaults to "Seismo (v.{@see SEISMO_VERSION})";
- * satellites may set SEISMO_BRAND_TITLE to replace the "Seismo" prefix only.
+ * Product name before the version segment (default "Seismo").
+ * Satellites may set SEISMO_BRAND_TITLE to override the default prefix.
+ */
+function seismoBrandBase(): string
+{
+    return SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : 'Seismo';
+}
+
+/** Display version label for the top bar, e.g. "v0.5.1". */
+function seismoBrandVersionLabel(): string
+{
+    return 'v' . SEISMO_VERSION;
+}
+
+/**
+ * Full brand string for document titles and APIs (base + space + version label).
  */
 function seismoBrandTitle(): string
 {
-    $base = SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : 'Seismo';
-
-    return $base . ' (v.' . SEISMO_VERSION . ')';
+    return seismoBrandBase() . ' ' . seismoBrandVersionLabel();
 }
 
 /**

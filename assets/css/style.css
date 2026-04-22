@@ -59,13 +59,25 @@ body {
 
 .top-bar-title {
     font-size: 18px;                /* big */
-    font-weight: 700;
+    font-weight: 400;
     color: #000000;
     text-decoration: none;
     display: flex;
     align-items: center;
     gap: 0.3em;
     white-space: nowrap;
+}
+
+.top-bar-title .top-bar-brand-name {
+    font-weight: 700;
+}
+
+.top-bar-title .top-bar-brand-version {
+    font-weight: 400;
+}
+
+.top-bar-title .top-bar-page-title {
+    font-weight: 700;
 }
 
 .top-bar-title a {
