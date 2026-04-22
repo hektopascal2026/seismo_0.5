@@ -87,7 +87,7 @@ $sourcesQs = 'action=feeds&view=sources';
             <h2 class="section-title">Feed sources</h2>
 
             <?php if (!$satellite): ?>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_save" class="admin-form-card">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_save" class="admin-form-card" id="feed-source-form">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= $editRow ? (int)$editRow['id'] : '' ?>">
                 <h3><?= $editRow ? 'Edit feed' : 'Add feed' ?></h3>
@@ -127,11 +127,18 @@ $sourcesQs = 'action=feeds&view=sources';
                 </div>
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success"><?= $editRow ? 'Save' : 'Add feed' ?></button>
+                    <button type="button" class="btn btn-secondary" id="feed-preview-btn">Preview (dry run)</button>
                     <?php if ($editRow): ?>
                         <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel edit</a>
                     <?php endif; ?>
                 </div>
             </form>
+            <div id="feed-preview-panel" class="scraper-preview-panel" hidden>
+                <h3 class="section-title">Preview <span class="scraper-preview-badge">not saved</span></h3>
+                <p id="feed-preview-error" class="message message-error" hidden></p>
+                <p id="feed-preview-warnings" class="message message-info" hidden></p>
+                <div id="feed-preview-cards" class="latest-entries-section scraper-preview-cards"></div>
+            </div>
             <?php endif; ?>
 
             <table class="data-table">
@@ -178,6 +185,59 @@ $sourcesQs = 'action=feeds&view=sources';
 
     <script>
     (function() {
+        var form = document.getElementById('feed-source-form');
+        var btnPreview = document.getElementById('feed-preview-btn');
+        var panel = document.getElementById('feed-preview-panel');
+        var outCards = document.getElementById('feed-preview-cards');
+        var outErr = document.getElementById('feed-preview-error');
+        var outWarn = document.getElementById('feed-preview-warnings');
+        var previewUrl = <?= json_encode($basePath . '/index.php?action=feed_preview', JSON_UNESCAPED_SLASHES) ?>;
+
+        if (form && btnPreview && panel) {
+            btnPreview.addEventListener('click', function() {
+                if (outErr) { outErr.hidden = true; outErr.textContent = ''; }
+                if (outWarn) { outWarn.hidden = true; outWarn.textContent = ''; }
+                outCards.innerHTML = '<p class="admin-intro">Loading…</p>';
+                panel.hidden = false;
+                var fd = new FormData(form);
+                fetch(previewUrl, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                    .then(function(r) { return r.text().then(function(t) { return { status: r.status, body: t }; }); })
+                    .then(function(res) {
+                        var data;
+                        try { data = JSON.parse(res.body); } catch (e) {
+                            if (outErr) {
+                                outErr.textContent = 'Invalid response (HTTP ' + res.status + ').';
+                                outErr.hidden = false;
+                            }
+                            outCards.innerHTML = '';
+                            return;
+                        }
+                        if (!data.ok) {
+                            if (outErr) {
+                                outErr.textContent = data.error || 'Preview failed.';
+                                outErr.hidden = false;
+                            }
+                            outCards.innerHTML = '';
+                        } else {
+                            if (outErr) { outErr.hidden = true; }
+                            outCards.innerHTML = data.html || '';
+                        }
+                        if (data.warnings && data.warnings.length && outWarn) {
+                            outWarn.textContent = data.warnings.join(' ');
+                            outWarn.hidden = false;
+                        } else if (outWarn) {
+                            outWarn.hidden = true;
+                        }
+                    })
+                    .catch(function() {
+                        if (outErr) {
+                            outErr.textContent = 'Network error — could not run preview.';
+                            outErr.hidden = false;
+                        }
+                        outCards.innerHTML = '';
+                    });
+            });
+        }
         function collapse(card, btn) {
             var preview = card.querySelector('.entry-preview');
             var full    = card.querySelector('.entry-full-content');

@@ -213,6 +213,11 @@ $router->register(
     false
 );
 $router->register(
+    'feed_preview',
+    \Seismo\Controller\FeedController::class . '::preview',
+    false
+);
+$router->register(
     'scraper',
     \Seismo\Controller\ScraperController::class . '::show',
     true

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryRepository;
 use Seismo\Repository\FeedRepository;
@@ -12,6 +13,9 @@ use Seismo\Repository\SystemConfigRepository;
 final class FeedController
 {
     private const LIST_LIMIT = 50;
+
+    /** Matches {@see \Seismo\Core\Fetcher\ScraperFetchService::PREVIEW_MAX_ITEMS} — no DB access. */
+    private const PREVIEW_MAX_ITEMS = 5;
 
     public function show(): void
     {
@@ -112,6 +116,90 @@ final class FeedController
         $this->redirect(['view' => 'sources']);
     }
 
+    /**
+     * Stateless feed preview: fetch RSS/Atom via SimplePie, return dashboard-style cards. No DB writes.
+     * POST + CSRF; {@see CsrfToken::verifyRequest} does not rotate the token (same as scraper preview).
+     */
+    public function preview(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed. Use POST.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Session expired or invalid CSRF — reload the page.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+        if (isSatellite()) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Satellite mode — configure feeds on the mothership.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $url = trim((string)($_POST['url'] ?? ''));
+        if ($url === '' || !preg_match('#^https?://#i', $url)) {
+            echo json_encode(['ok' => false, 'error' => 'A valid http(s) feed URL is required.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $sourceType = strtolower(trim((string)($_POST['source_type'] ?? 'rss')));
+        if (!in_array($sourceType, ['rss', 'substack', 'parl_press'], true)) {
+            $sourceType = 'rss';
+        }
+        if ($sourceType === 'parl_press') {
+            echo json_encode([
+                'ok'    => false,
+                'error' => 'Preview is for RSS and Substack only. Parliament Medien (parl_press) uses the SharePoint API — save the feed and use Refresh in Diagnostics to verify.',
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $feedTitle = trim((string)($_POST['title'] ?? ''));
+        if ($feedTitle === '') {
+            $feedTitle = 'Preview feed';
+        }
+        $category = trim((string)($_POST['category'] ?? ''));
+
+        try {
+            $rows = (new RssFetchService())->fetchFeedItems($url);
+        } catch (\Throwable $e) {
+            echo json_encode([
+                'ok'    => false,
+                'error' => $e->getMessage() !== '' ? $e->getMessage() : 'Could not load or parse the feed.',
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if ($rows === []) {
+            echo json_encode(['ok' => false, 'error' => 'No items in this feed.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $rows = array_slice($rows, 0, self::PREVIEW_MAX_ITEMS);
+        $loopType = $sourceType === 'substack' ? 'substack' : 'feed';
+
+        $html = $this->renderRssPreviewCards(
+            $rows,
+            $feedTitle,
+            $category,
+            $loopType,
+            $url,
+            $sourceType
+        );
+        echo json_encode(
+            [
+                'ok'       => true,
+                'html'     => $html,
+                'warnings' => [],
+            ],
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        );
+    }
+
     public function delete(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -172,5 +260,95 @@ final class FeedController
         $p['action'] = 'feeds';
 
         return http_build_query($p);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows Normalised rows from {@see RssFetchService::fetchFeedItems()}.
+     */
+    private function renderRssPreviewCards(
+        array $rows,
+        string $feedName,
+        string $feedCategory,
+        string $loopType,
+        string $feedUrl,
+        string $sourceType
+    ): string {
+        require_once SEISMO_ROOT . '/views/helpers.php';
+
+        $searchQuery       = '';
+        $returnQuery       = 'action=feeds&view=sources';
+        $showFavourites     = false;
+        $alertThreshold     = 0.75;
+        $csrfField          = '';
+        $relevanceScore     = null;
+        $predictedLabel     = null;
+        $scoreBadgeClass     = '';
+        $showAlertBadge     = false;
+        $favouriteEntryType = 'feed_item';
+        $favouriteEntryId   = 0;
+        $isFavourite        = false;
+        $cat                = $feedCategory;
+        if ($cat === 'unsortiert') {
+            $cat = '';
+        }
+
+        ob_start();
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $padded        = $this->padPreviewFeedItemRow($row, $feedName, $cat, $sourceType, $feedUrl);
+            $itemWrapper   = $this->buildFeedPreviewItemWrapper($padded, $loopType);
+            require SEISMO_ROOT . '/views/partials/entry_card_rss_substack.php';
+        }
+
+        return (string)ob_get_clean();
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function buildFeedPreviewItemWrapper(array $data, string $loopType): array
+    {
+        $ts = (string)($data['published_date'] ?? '');
+        $date = $ts !== '' ? (int)strtotime($ts) : 0;
+        if ($date < 0) {
+            $date = 0;
+        }
+
+        return [
+            'type'         => $loopType,
+            'entry_type'   => 'feed_item',
+            'entry_id'     => 0,
+            'date'         => $date,
+            'data'         => $data,
+            'score'        => null,
+            'is_favourite' => false,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function padPreviewFeedItemRow(
+        array $row,
+        string $feedName,
+        string $category,
+        string $sourceType,
+        string $feedUrl
+    ): array {
+        return array_merge($row, [
+            'id'                => 0,
+            'feed_id'           => 0,
+            'feed_name'         => $feedName,
+            'feed_title'        => $feedName,
+            'feed_source_type'  => $sourceType,
+            'feed_category'     => $category,
+            'feed_url'          => $feedUrl,
+            'scraper_config_id' => 0,
+            'cached_at'         => $row['published_date'] ?? null,
+        ]);
     }
 }
