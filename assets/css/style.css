@@ -31,10 +31,12 @@ body {
     height: 1em;
     width: auto;
     margin-right: 0.3em;
+    object-fit: contain;
 }
 
 .logo-icon-large {
-    height: 24px;
+    height: 28px;
+    width: 28px;
 }
 
 /* ═══ Top Bar ═══ */

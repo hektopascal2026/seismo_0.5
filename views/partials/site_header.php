@@ -21,10 +21,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                 <button type="button" id="seismo-nav-toggle" class="top-bar-btn nav-menu-toggle" aria-expanded="false" aria-controls="seismo-nav-drawer" title="Menu">☰</button>
                 <span class="top-bar-title">
                     <a href="<?= e($basePath) ?>/index.php?action=index">
-                        <svg class="logo-icon logo-icon-large" viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg">
-                            <rect width="24" height="16" fill="#FFFFC5"/>
-                            <path d="M0,8 L4,12 L6,4 L10,10 L14,2 L18,8 L20,6 L24,8" stroke="#000000" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
+                        <img src="<?= e($basePath) ?>/assets/img/logo.png" alt="" class="logo-icon logo-icon-large" width="28" height="28" decoding="async">
                     </a>
                     <?= e($headerTitle) ?>
                 </span>
