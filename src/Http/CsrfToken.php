@@ -11,8 +11,9 @@ namespace Seismo\Http;
  *   - One token per session, stored in $_SESSION['seismo_csrf'].
  *   - {@see ensure()} generates it lazily the first time it's needed.
  *   - {@see field()} renders a hidden `<input name="_csrf">`.
- *   - {@see verify()} is timing-safe and replaces the token on success
- *     (defence-in-depth — a stolen token is single-use).
+ *   - {@see verify()} is timing-safe and, by default, replaces the token on
+ *     success (defence-in-depth — a stolen token is single-use). Read-only
+ *     POSTs may pass $rotateOnSuccess = false (e.g. {@see ScraperController::preview}).
  *
  * Why a single rotating token rather than per-form? Seismo is a single-user
  * admin app with a short session lifetime. Per-form tokens add a lot of
@@ -48,7 +49,7 @@ final class CsrfToken
         return $token;
     }
 
-    public static function verify(?string $token): bool
+    public static function verify(?string $token, bool $rotateOnSuccess = true): bool
     {
         if ($token === null || $token === '') {
             return false;
@@ -63,20 +64,26 @@ final class CsrfToken
         if (!hash_equals($expected, $token)) {
             return false;
         }
-        // Single-use rotation: every accepted POST gets a fresh token on return.
-        $_SESSION[self::SESSION_KEY] = bin2hex(random_bytes(32));
+        if ($rotateOnSuccess) {
+            // Single-use rotation: most mutating POSTs get a fresh token.
+            $_SESSION[self::SESSION_KEY] = bin2hex(random_bytes(32));
+        }
 
         return true;
     }
 
     /**
      * True when the current POST carries a matching _csrf token.
+     *
+     * @param bool $rotateOnSuccess If false, the session token is not rotated
+     *                              (for stateless "dry run" POSTs that must not
+     *                              invalidate the same page’s form token).
      */
-    public static function verifyRequest(): bool
+    public static function verifyRequest(bool $rotateOnSuccess = true): bool
     {
         $raw = $_POST[self::FIELD_NAME] ?? null;
 
-        return is_string($raw) && self::verify($raw);
+        return is_string($raw) && self::verify($raw, $rotateOnSuccess);
     }
 
     public static function fieldName(): string

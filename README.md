@@ -21,8 +21,23 @@ The codebase targets **PHP 8.2**, **MariaDB/MySQL**, and **vanilla PHP** (no Red
 |------|----------------|
 | **Feeds** | RSS and Substack-style sources; per-feed URLs and optional categories. |
 | **Mail** | IMAP ingest into a unified `emails` table; **Subscriptions** UI with domain-first matching (e.g. `@example.com`), tags, and unsubscribe where supported. |
-| **Scraper** | Scheduled fetches for configured URLs (with link-following where configured). |
+| **Scraper** | Scheduled fetches for configured URLs (with link-following where configured). See **Scraper (web sources)** below. |
 | **Leg** | Swiss Federal Assembly business (motions, sessions, publications, hearings) via the Parliament OData API — *not* a personal calendar. |
+
+### Scraper (web sources)
+
+Scraper feeds use **`src/Core/Fetcher/ScraperFetchService.php`** for both **preview** and **production** so behaviour matches.
+
+| Aspect | Behaviour |
+|--------|------------|
+| **Preview (Sources UI)** | POST `scraper_preview` from **`?action=scraper`**. Stateless dry-run: up to **5** successful articles, **no** random delay between page fetches. |
+| **Production** | Core fetcher **`core:scraper`** (Diagnostics refresh, full **Refresh**, **`refresh_cron.php`** via the same refresh pipeline as other core fetchers). Up to **20** articles per scraper **feed** per run. |
+| **Politeness** | In **link-following** mode (non-empty link pattern), a **random 1–3 second** `sleep` runs **before each article fetch after the first**, to reduce the risk of IP blocks. |
+| **HTTP** | Fetches go through **`BaseClient::getWebPage()`** with a **desktop Chrome–style User-Agent** and **browser-like `Accept` / `Accept-Language` headers** (and cURL content encoding where available). |
+| **Row shape** | Each item is normalised for **`FeedItemRepository`**: **`guid`** = article URL (truncated to 500 chars), **`content_hash`** = **`md5()`** of the extracted plain-text **`content`**, so upserts stay idempotent and duplicates are not multiplied by re-fetch. |
+| **Extraction** | Readability-style main text + optional **CSS `date_selector`** for publish time (see `ScraperContentExtractor`). Link mode uses a **substring** match on absolute URLs, **same host** as the listing page, **fragment** stripped for dedupe. |
+
+Config rows live in **`scraper_configs`**; feeds are tied by URL, with `scraper_link_pattern` / `scraper_date_selector` taken from the first matching enabled config (**`FeedItemRepository::listFeedsForScraperRefresh`**). There is **no** admin UI for preview/production caps yet — they are the constants above.
 
 ### Lex — legislative plugins
 

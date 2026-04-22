@@ -59,6 +59,8 @@ final class FeedItemRepository
 
     /**
      * Feeds that should be scraped (explicit scraper type or listed in scraper_configs).
+     * Includes {@see scraper_link_pattern} / {@see scraper_date_selector} from the first
+     * matching enabled `scraper_configs` row (same URL), for the unified scraper pipeline.
      *
      * @return list<array<string, mixed>>
      */
@@ -68,10 +70,16 @@ final class FeedItemRepository
         $offset = max(0, $offset);
         $feeds = entryTable('feeds');
         $sc    = entryTable('scraper_configs');
-        $sql = "SELECT DISTINCT f.* FROM {$feeds} f
-            LEFT JOIN {$sc} sc ON sc.url = f.url AND sc.disabled = 0
+        $sql = "SELECT f.*,
+            (SELECT sc2.link_pattern FROM {$sc} sc2
+                WHERE sc2.url = f.url AND sc2.disabled = 0 ORDER BY sc2.id ASC LIMIT 1) AS scraper_link_pattern,
+            (SELECT sc3.date_selector FROM {$sc} sc3
+                WHERE sc3.url = f.url AND sc3.disabled = 0 ORDER BY sc3.id ASC LIMIT 1) AS scraper_date_selector
+            FROM {$feeds} f
             WHERE f.disabled = 0
-              AND (f.source_type = 'scraper' OR sc.id IS NOT NULL)
+              AND (f.source_type = 'scraper' OR EXISTS (
+                SELECT 1 FROM {$sc} sc0 WHERE sc0.url = f.url AND sc0.disabled = 0
+              ))
             ORDER BY f.id ASC
             LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
 

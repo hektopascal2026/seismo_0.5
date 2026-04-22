@@ -233,7 +233,22 @@ final class CoreRunner
                         continue;
                     }
                     try {
-                        $items = $this->scraper->scrapePage($url);
+                        $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
+                        $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
+                        $out         = $this->scraper->fetchScraperFeedItems(
+                            $url,
+                            $linkPattern,
+                            $dateSel,
+                            ScraperFetchService::PRODUCTION_MAX_ARTICLES,
+                            true
+                        );
+                        if ($out['fatal_error'] !== null) {
+                            throw new \RuntimeException($out['fatal_error']);
+                        }
+                        foreach ($out['warnings'] as $w) {
+                            error_log('Seismo core:scraper feed ' . $id . ': ' . $w);
+                        }
+                        $items = $out['items'];
                         $n = $this->feeds->upsertFeedItems($id, $items);
                         $total += $n;
                         $this->feeds->touchFeedSuccess($id);

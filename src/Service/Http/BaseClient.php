@@ -38,7 +38,24 @@ final class BaseClient
      */
     public function get(string $url, array $headers = []): Response
     {
-        return $this->request('GET', $url, $headers, null);
+        return $this->request('GET', $url, $headers, null, false);
+    }
+
+    /**
+     * HTML document fetch: modern desktop Accept* headers, optional Accept-Encoding
+     * negotiation on cURL (automatic decompression). Use for scraping only.
+     */
+    public function getWebPage(string $url): Response
+    {
+        $headers = [
+            'Accept'            => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language'   => 'en-US,en;q=0.9,de-CH;q=0.8,de;q=0.7,fr;q=0.6',
+            'Cache-Control'     => 'no-cache',
+            'DNT'               => '1',
+            'Upgrade-Insecure-Requests' => '1',
+        ];
+
+        return $this->request('GET', $url, $headers, null, true);
     }
 
     /**
@@ -49,7 +66,7 @@ final class BaseClient
     {
         $headers = array_merge(['Content-Type' => 'application/x-www-form-urlencoded'], $headers);
 
-        return $this->request('POST', $url, $headers, http_build_query($fields));
+        return $this->request('POST', $url, $headers, http_build_query($fields), false);
     }
 
     /**
@@ -63,19 +80,19 @@ final class BaseClient
             $headers
         );
 
-        return $this->request('POST', $url, $headers, (string)json_encode($payload, JSON_THROW_ON_ERROR));
+        return $this->request('POST', $url, $headers, (string)json_encode($payload, JSON_THROW_ON_ERROR), false);
     }
 
     /**
      * @param array<string, string> $headers
      */
-    private function request(string $method, string $url, array $headers, ?string $body): Response
+    private function request(string $method, string $url, array $headers, ?string $body, bool $curlWebEncoding): Response
     {
-        $response = $this->execute($method, $url, $headers, $body);
+        $response = $this->execute($method, $url, $headers, $body, $curlWebEncoding);
 
         if ($response->status === 429 || $response->status === 503) {
             usleep(self::RETRY_SLEEP_MS * 1000);
-            $response = $this->execute($method, $url, $headers, $body);
+            $response = $this->execute($method, $url, $headers, $body, $curlWebEncoding);
         }
 
         return $response;
@@ -84,13 +101,13 @@ final class BaseClient
     /**
      * @param array<string, string> $headers
      */
-    private function execute(string $method, string $url, array $headers, ?string $body): Response
+    private function execute(string $method, string $url, array $headers, ?string $body, bool $curlWebEncoding): Response
     {
         $ua = $this->effectiveUserAgent();
         $headers = array_merge(['User-Agent' => $ua], $headers);
 
         if (function_exists('curl_init')) {
-            return $this->executeCurl($method, $url, $headers, $body);
+            return $this->executeCurl($method, $url, $headers, $body, $curlWebEncoding);
         }
 
         return $this->executeStream($method, $url, $headers, $body);
@@ -99,7 +116,7 @@ final class BaseClient
     /**
      * @param array<string, string> $headers
      */
-    private function executeCurl(string $method, string $url, array $headers, ?string $body): Response
+    private function executeCurl(string $method, string $url, array $headers, ?string $body, bool $webEncoding): Response
     {
         $ch = curl_init();
         if ($ch === false) {
@@ -124,7 +141,7 @@ final class BaseClient
             return $len;
         };
 
-        curl_setopt_array($ch, [
+        $opts = [
             CURLOPT_URL            => $url,
             CURLOPT_CUSTOMREQUEST  => $method,
             CURLOPT_HTTPHEADER     => $flatHeaders,
@@ -134,7 +151,11 @@ final class BaseClient
             CURLOPT_TIMEOUT        => $this->timeoutSeconds,
             CURLOPT_CONNECTTIMEOUT => min(10, $this->timeoutSeconds),
             CURLOPT_HEADERFUNCTION => $headerCallback,
-        ]);
+        ];
+        if ($webEncoding) {
+            $opts[CURLOPT_ENCODING] = '';
+        }
+        curl_setopt_array($ch, $opts);
 
         if ($body !== null) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, $body);

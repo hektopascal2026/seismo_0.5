@@ -13,8 +13,8 @@ use DOMXPath;
 
 /**
  * Readability-lite + date extraction — ported from 0.4 seismo_scraper.php behaviour
- * (see project docs / consolidation notes). Used by {@see ScraperFetchService} preview
- * only until production ingest is switched to the same pipeline.
+ * (see project docs / consolidation notes). Used by {@see ScraperFetchService} for
+ * preview and production ingest.
  */
 final class ScraperContentExtractor
 {

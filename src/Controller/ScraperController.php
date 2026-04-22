@@ -124,17 +124,16 @@ final class ScraperController
             echo json_encode(['ok' => false, 'error' => 'Method not allowed. Use POST.'], JSON_UNESCAPED_UNICODE);
             return;
         }
-        if (!CsrfToken::verifyRequest()) {
+        // No token rotation: dry-run must not burn the form’s CSRF; user may preview
+        // many times then submit Save with the same page token.
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             http_response_code(403);
             echo json_encode(['ok' => false, 'error' => 'Session expired or invalid CSRF — reload the page.'], JSON_UNESCAPED_UNICODE);
             return;
         }
         if (isSatellite()) {
             http_response_code(403);
-            echo json_encode(
-                $this->withJsonCsrf(['ok' => false, 'error' => 'Satellite mode — configure scraper sources on the mothership.']),
-                JSON_UNESCAPED_UNICODE
-            );
+            echo json_encode(['ok' => false, 'error' => 'Satellite mode — configure scraper sources on the mothership.'], JSON_UNESCAPED_UNICODE);
             return;
         }
 
@@ -154,53 +153,33 @@ final class ScraperController
         $result   = $fetcher->preview($url, $linkPattern, ScraperFetchService::PREVIEW_MAX_ITEMS, $dateSelector);
         $warnings = $result['warnings'] ?? [];
         if (empty($result['ok']) || !empty($result['error'])) {
-            echo json_encode(
-                $this->withJsonCsrf([
-                    'ok'       => false,
-                    'error'    => (string)($result['error'] ?? 'Preview failed.'),
-                    'warnings' => $warnings,
-                ]),
-                JSON_UNESCAPED_UNICODE
-            );
+            echo json_encode([
+                'ok'       => false,
+                'error'    => (string)($result['error'] ?? 'Preview failed.'),
+                'warnings' => $warnings,
+            ], JSON_UNESCAPED_UNICODE);
             return;
         }
 
         $items = $result['items'] ?? [];
         if ($items === []) {
-            echo json_encode(
-                $this->withJsonCsrf([
-                    'ok'       => false,
-                    'error'    => 'No items extracted.',
-                    'warnings' => $warnings,
-                ]),
-                JSON_UNESCAPED_UNICODE
-            );
+            echo json_encode([
+                'ok'       => false,
+                'error'    => 'No items extracted.',
+                'warnings' => $warnings,
+            ], JSON_UNESCAPED_UNICODE);
             return;
         }
 
         $html = $this->renderScraperPreviewCards($items, $name, $category);
         echo json_encode(
-            $this->withJsonCsrf([
+            [
                 'ok'       => true,
                 'html'     => $html,
                 'warnings' => $warnings,
-            ]),
+            ],
             JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         );
-    }
-
-    /**
-     * After a successful {@see CsrfToken::verifyRequest()} the session token rotates;
-     * JSON clients must read `csrf` and update the form hidden field for the next POST.
-     *
-     * @param array<string, mixed> $payload
-     * @return array<string, mixed>
-     */
-    private function withJsonCsrf(array $payload): array
-    {
-        $payload['csrf'] = CsrfToken::ensure();
-
-        return $payload;
     }
 
     public function delete(): void

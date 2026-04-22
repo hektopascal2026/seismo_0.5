@@ -9,37 +9,39 @@ use DateTimeZone;
 use Seismo\Service\Http\BaseClient;
 
 /**
- * Minimal HTML page scrape → one feed_item-shaped row per configured feed URL.
- *
- * {@see self::preview()} is the dry-run / spec: 0.4-style substring link_pattern,
- * same-host only, fragment dedupe, readability-lite body + optional date_selector,
- * guid = article URL, md5(content_hash). Production CoreRunner still uses
- * {@see self::scrapePage()} (legacy strip) until aligned.
+ * Unified scraper pipeline: listing + optional substring link mode, same-host, readability
+ * extraction, date_selector, `guid` = article URL, `content_hash` = md5(content).
+ * Preview and CoreRunner share {@see self::fetchScraperFeedItems()}.
  */
 final class ScraperFetchService
 {
-    /** Max successful detail items returned by {@see self::preview()} when a link pattern is set. */
+    /** Max articles per feed for cron / CoreRunner. */
+    public const PRODUCTION_MAX_ARTICLES = 20;
+
+    /** Max successful articles for the Sources preview. */
     public const PREVIEW_MAX_ITEMS = 5;
 
-    /** Upper bound on anchor hrefs to scan (first wins in document order) after pattern filter. */
-    private const PREVIEW_MAX_LINKS_SCAN = 50;
+    /** Upper bound on hrefs scanned in DOM order after the substring filter. */
+    private const LINKS_SCAN_CAP = 50;
 
-    public function __construct(private BaseClient $http = new BaseClient())
+    /** Inclusive random delay (seconds) between article page fetches in production. */
+    private const DELAY_BETWEEN_ARTICLES_MIN_SEC = 1;
+
+    private const DELAY_BETWEEN_ARTICLES_MAX_SEC = 3;
+
+    /** ~Chrome 131 on Windows — paired with {@see BaseClient::getWebPage()}. */
+    public const BROWSER_UA
+        = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+    public function __construct(private BaseClient $http = new BaseClient(BaseClient::DEFAULT_TIMEOUT, self::BROWSER_UA))
     {
     }
 
     /**
-     * Stateless preview: fetch listing (or single page when $linkPattern is empty),
-     * optionally match links with a substring in the resolved URL (0.4 semantics), fetch up
-     * to {@see self::PREVIEW_MAX_ITEMS} targets using readability + date_selector. Does
-     * not touch the database.
+     * Dry-run: same item pipeline as production, cap {@see self::PREVIEW_MAX_ITEMS},
+     * no inter-article delay.
      *
-     * @return array{
-     *     ok: bool,
-     *     error?: string,
-     *     warnings: list<string>,
-     *     items: list<array<string, mixed>>
-     * }
+     * @return array{ok: bool, error?: string, warnings: list<string>, items: list<array<string, mixed>>}
      */
     public function preview(
         string $pageUrl,
@@ -51,77 +53,119 @@ final class ScraperFetchService
         if ($pageUrl === '' || !$this->isNavigableHttpUrl($pageUrl)) {
             return ['ok' => false, 'error' => 'A valid http(s) URL is required.', 'warnings' => [], 'items' => []];
         }
-
-        $dateSel = trim($dateSelector);
-        $dsOpt   = $dateSel === '' ? null : $dateSel;
-
-        $linkPattern = trim($linkPattern);
-        if ($linkPattern === '') {
-            try {
-                $rows = $this->scrapeArticleForPreview($pageUrl, $dsOpt);
-
+        $maxItems = max(1, min($maxItems, self::PREVIEW_MAX_ITEMS));
+        $out = $this->fetchScraperFeedItems(
+            $pageUrl,
+            trim($linkPattern),
+            trim($dateSelector),
+            $maxItems,
+            false
+        );
+        if ($out['fatal_error'] !== null) {
+            return ['ok' => false, 'error' => $out['fatal_error'], 'warnings' => $out['warnings'], 'items' => []];
+        }
+        if ($out['items'] === []) {
+            if (trim($linkPattern) === '') {
                 return [
-                    'ok'         => true,
-                    'warnings'   => [],
-                    'items'      => $rows,
+                    'ok'       => false,
+                    'error'    => 'No article extracted for this URL.',
+                    'warnings' => $out['warnings'],
+                    'items'    => [],
                 ];
-            } catch (\Throwable $e) {
-                return ['ok' => false, 'error' => $e->getMessage(), 'warnings' => [], 'items' => []];
             }
-        }
-
-        $warnings = [];
-        try {
-            $html = $this->fetchHtmlBody($pageUrl);
-        } catch (\Throwable $e) {
-            return ['ok' => false, 'error' => $e->getMessage(), 'warnings' => [], 'items' => []];
-        }
-
-        $candidates = $this->collectMatchingLinkUrls($pageUrl, $html, $linkPattern, self::PREVIEW_MAX_LINKS_SCAN);
-        if ($candidates === []) {
+            if ($out['warnings'] !== []) {
+                return [
+                    'ok'         => false,
+                    'error'      => 'Every matched link failed to load. See warnings.',
+                    'warnings'   => $out['warnings'],
+                    'items'      => [],
+                ];
+            }
             return [
                 'ok'         => false,
                 'error'      => 'No same-host links on the page contain the link pattern (substring, like 0.4).',
-                'warnings'   => $warnings,
+                'warnings'   => $out['warnings'],
                 'items'      => [],
             ];
         }
 
-        $items = [];
-        $maxItems = max(1, min($maxItems, self::PREVIEW_MAX_ITEMS));
+        return ['ok' => true, 'warnings' => $out['warnings'], 'items' => $out['items']];
+    }
+
+    /**
+     * Production ingest: up to $maxArticles rows, 1–3 s random delay before each
+     * article request after the first (link-following mode only).
+     *
+     * @return array{items: list<array<string, mixed>>, warnings: list<string>, fatal_error: ?string}
+     */
+    public function fetchScraperFeedItems(
+        string $listingUrl,
+        string $linkPattern,
+        string $dateSelector,
+        int $maxArticles,
+        bool $delayBetweenArticleFetches
+    ): array {
+        $warnings  = [];
+        $listingUrl = trim($listingUrl);
+        $linkPattern = trim($linkPattern);
+        $dateSel    = trim($dateSelector);
+        $dsOpt      = $dateSel === '' ? null : $dateSel;
+        $maxArticles = max(1, $maxArticles);
+
+        if ($listingUrl === '' || !$this->isNavigableHttpUrl($listingUrl)) {
+            return ['items' => [], 'warnings' => [], 'fatal_error' => 'Invalid listing URL.'];
+        }
+
+        if ($linkPattern === '') {
+            try {
+                $row = $this->buildArticleRow($listingUrl, $dsOpt);
+
+                return ['items' => [$row], 'warnings' => [], 'fatal_error' => null];
+            } catch (\Throwable $e) {
+                return ['items' => [], 'warnings' => [], 'fatal_error' => $e->getMessage()];
+            }
+        }
+
+        try {
+            $html = $this->fetchHtmlBody($listingUrl);
+        } catch (\Throwable $e) {
+            return ['items' => [], 'warnings' => [], 'fatal_error' => $e->getMessage()];
+        }
+
+        $candidates = $this->collectMatchingLinkUrls($listingUrl, $html, $linkPattern, self::LINKS_SCAN_CAP);
+        if ($candidates === []) {
+            return [
+                'items'       => [],
+                'warnings'    => [],
+                'fatal_error' => null,
+            ];
+        }
+
+        $items   = [];
+        $attempt = 0;
         foreach ($candidates as $targetUrl) {
-            if (count($items) >= $maxItems) {
+            if (count($items) >= $maxArticles) {
                 break;
             }
+            if ($delayBetweenArticleFetches && $attempt > 0) {
+                sleep(random_int(self::DELAY_BETWEEN_ARTICLES_MIN_SEC, self::DELAY_BETWEEN_ARTICLES_MAX_SEC));
+            }
+            ++$attempt;
             try {
-                $chunk = $this->scrapeArticleForPreview($targetUrl, $dsOpt);
-                if ($chunk !== []) {
-                    $items[] = $chunk[0];
-                }
+                $row = $this->buildArticleRow($targetUrl, $dsOpt);
+                $items[] = $row;
             } catch (\Throwable $e) {
                 $warnings[] = 'Failed to fetch ' . $targetUrl . ': ' . $e->getMessage();
             }
         }
 
-        if ($items === []) {
-            return [
-                'ok'         => false,
-                'error'      => 'Every matched link failed to load. See warnings.',
-                'warnings'   => $warnings,
-                'items'      => [],
-            ];
-        }
-
-        return ['ok' => true, 'warnings' => $warnings, 'items' => $items];
+        return ['items' => $items, 'warnings' => $warnings, 'fatal_error' => null];
     }
 
     /**
-     * Preview / future-ingest spec: 0.4-style readable body, optional date, guid = URL, md5 hash.
-     * Core cron still uses {@see self::scrapePage()} until wired.
-     *
-     * @return list<array<string, mixed>>
+     * @return array<string, mixed> one feed_items-shaped row: guid=URL, content_hash=md5(content)
      */
-    private function scrapeArticleForPreview(string $pageUrl, ?string $dateSelector): array
+    private function buildArticleRow(string $pageUrl, ?string $dateSelector): array
     {
         $html = $this->fetchHtmlBody($pageUrl);
         $read = ScraperContentExtractor::extractReadableContent($html);
@@ -145,7 +189,7 @@ final class ScraperFetchService
         }
         $guid = mb_substr($pageUrl, 0, 500);
 
-        return [[
+        return [
             'guid'             => $guid,
             'title'            => mb_substr($title, 0, 500),
             'link'             => mb_substr($pageUrl, 0, 500),
@@ -154,70 +198,7 @@ final class ScraperFetchService
             'author'           => '',
             'published_date'   => $published,
             'content_hash'     => md5($content),
-        ]];
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    public function scrapePage(string $pageUrl): array
-    {
-        $pageUrl = trim($pageUrl);
-        if ($pageUrl === '' || !$this->isNavigableHttpUrl($pageUrl)) {
-            return [];
-        }
-
-        $res = $this->http->get($pageUrl);
-        if ($res->status < 200 || $res->status >= 400) {
-            throw new \RuntimeException('HTTP ' . $res->status . ' fetching ' . $pageUrl);
-        }
-        $html = $res->body;
-        if ($html === '') {
-            throw new \RuntimeException('Empty body for ' . $pageUrl);
-        }
-
-        $title = $this->extractTitle($html);
-        if ($title === '') {
-            $title = $pageUrl;
-        }
-        $text = $this->stripToText($html);
-        if (mb_strlen($text) > 50000) {
-            $text = mb_substr($text, 0, 50000);
-        }
-
-        $now = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
-        $guid = substr(sha1($pageUrl . "\0" . $title), 0, 32);
-
-        return [[
-            'guid'           => $guid,
-            'title'          => mb_substr($title, 0, 500),
-            'link'           => mb_substr($pageUrl, 0, 500),
-            'description'    => mb_substr($text, 0, 2000),
-            'content'        => $text,
-            'author'         => '',
-            'published_date' => $now,
-            'content_hash'   => substr(sha1($text), 0, 32),
-        ]];
-    }
-
-    private function extractTitle(string $html): string
-    {
-        if (preg_match('#<title[^>]*>([^<]+)</title>#i', $html, $m)) {
-            return html_entity_decode(trim($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        }
-
-        return '';
-    }
-
-    private function stripToText(string $html): string
-    {
-        $t = preg_replace('#<script\b[^>]*>.*?</script>#is', '', $html) ?? $html;
-        $t = preg_replace('#<style\b[^>]*>.*?</style>#is', '', $t) ?? $t;
-        $t = strip_tags($t);
-        $t = html_entity_decode($t, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $t = preg_replace('/\s+/u', ' ', $t) ?? $t;
-
-        return trim($t);
+        ];
     }
 
     private function isNavigableHttpUrl(string $url): bool
@@ -232,12 +213,12 @@ final class ScraperFetchService
 
     private function fetchHtmlBody(string $pageUrl): string
     {
-        $res = $this->http->get($pageUrl);
+        $res = $this->http->getWebPage($pageUrl);
         if ($res->status < 200 || $res->status >= 400) {
-            throw new \RuntimeException('HTTP ' . $res->status . ' fetching listing ' . $pageUrl);
+            throw new \RuntimeException('HTTP ' . $res->status . ' fetching ' . $pageUrl);
         }
         if ($res->body === '') {
-            throw new \RuntimeException('Empty body for listing ' . $pageUrl);
+            throw new \RuntimeException('Empty body for ' . $pageUrl);
         }
 
         return $res->body;
@@ -304,9 +285,6 @@ final class ScraperFetchService
         return $out;
     }
 
-    /**
-     * Strip #fragment for deduplication (0.4).
-     */
     private function stripFragment(string $url): string
     {
         $p = strpos($url, '#');
@@ -324,9 +302,6 @@ final class ScraperFetchService
         return strtolower($u);
     }
 
-    /**
-     * RFC 3986–style resolution (good enough for preview).
-     */
     private function resolveAgainstBase(string $base, string $ref): string
     {
         $ref = str_replace(["\0", "\r", "\n"], '', trim($ref));
