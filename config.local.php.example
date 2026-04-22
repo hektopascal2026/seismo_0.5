@@ -61,7 +61,8 @@ define('DB_PASS', 'CHANGE_ME');
 // define('SEISMO_REMOTE_REFRESH_KEY', 'same-value-as-on-mothership');
 
 /**
- * Optional per-satellite branding.
+ * Optional per-satellite branding (replaces the default "Seismo" prefix;
+ * the UI still appends " (v.{version})" from SEISMO_VERSION).
  */
 // define('SEISMO_BRAND_TITLE', 'Seismo Digital');
 // define('SEISMO_BRAND_ACCENT', '#4a90e2');

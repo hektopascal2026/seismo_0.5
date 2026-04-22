@@ -24,7 +24,7 @@ $basePath = getBasePath();
 $accent   = seismoBrandAccent();
 
 $headerTitle    = seismoBrandTitle();
-$headerSubtitle = !isSatellite() ? 'ein Prototyp von hektopascal.org | v' . SEISMO_VERSION : null;
+$headerSubtitle = null;
 $activeNav      = 'index';
 
 $indexLinkParams = ['action' => 'index'];

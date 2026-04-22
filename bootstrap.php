@@ -16,7 +16,7 @@
 
 declare(strict_types=1);
 
-define('SEISMO_VERSION', '0.5.0-dev');
+define('SEISMO_VERSION', '0.5.1');
 define('SEISMO_ROOT', __DIR__);
 
 // ---------------------------------------------------------------------------
@@ -229,11 +229,14 @@ function getEmailTableName(): string
 }
 
 /**
- * Top-bar title. Defaults to "Seismo"; satellites override via SEISMO_BRAND_TITLE.
+ * Top-bar / document brand. Defaults to "Seismo (v.{@see SEISMO_VERSION})";
+ * satellites may set SEISMO_BRAND_TITLE to replace the "Seismo" prefix only.
  */
 function seismoBrandTitle(): string
 {
-    return SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : 'Seismo';
+    $base = SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : 'Seismo';
+
+    return $base . ' (v.' . SEISMO_VERSION . ')';
 }
 
 /**

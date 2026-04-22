@@ -211,13 +211,14 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.5 (Current)</strong> <span class="v-date">Apr 2026</span></div>
+                        <div class="v-header"><strong>v0.5.1 (Current)</strong> <span class="v-date">Apr 2026</span></div>
                         <div class="v-title">Architectural Consolidation</div>
                         <ul>
                             <li><strong>Service-Oriented Core:</strong> Replaced procedural logic with lightweight controllers and repository patterns.</li>
                             <li><strong>Unified Pipeline:</strong> All fetching now runs under a master cron (<code>refresh_cron.php</code>).</li>
                             <li><strong>Security Hardening:</strong> Implementation of CSRF protection and a dormant session-auth layer.</li>
                             <li><strong>Clean API:</strong> Retired the "AI view" in favor of a stable, bearer-token-protected JSON/Markdown export API.</li>
+                            <li><strong>Source previews (0.5.1):</strong> Feeds, Scraper, and Mail pages help validate sources before you commit them.</li>
                         </ul>
                     </div>
                 </div>

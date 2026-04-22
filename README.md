@@ -6,6 +6,8 @@ Behind the scenes it runs a **deterministic recipe scorer** (keywords, source we
 
 The codebase targets **PHP 8.2**, **MariaDB/MySQL**, and **vanilla PHP** (no Redis, no background worker daemons): one web app plus a **CLI cron** entry is enough for typical shared hosting.
 
+**0.5.1** adds **previews** on the **Feeds** (RSS/Substack), **Scraper**, and **Mail** module pages so you can validate URLs, extracted articles, and newsletter matches before saving — making it easier to build up a library of sources.
+
 ---
 
 ## Features
