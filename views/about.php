@@ -50,13 +50,13 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
         <?php endif; ?>
 
         <main class="settings-container about-modern-layout">
-            <header class="settings-header">
-                <h1>About Seismo</h1>
-                <p class="subtitle">Legislative and media monitoring tool &mdash; Version <?= e($seismoVersion) ?></p>
+            <header class="settings-header about-hero">
+                <h1>Seismo <?= e($seismoVersion) ?> &mdash; dashboard</h1>
+                <p class="subtitle">Legislative and media monitoring &mdash; unified timeline, scoring, and exports</p>
             </header>
 
-            <!-- I. Overview Card -->
-            <section class="settings-section about-card">
+            <!-- I. Overview -->
+            <section class="settings-section about-card dashboard-section">
                 <h2>I. What is Seismo?</h2>
                 <p class="about-lede">Seismo is a professional-grade monitoring dashboard designed to aggregate disparate information streams into a single, unified chronological feed.</p>
                 <div class="about-grid">
@@ -77,11 +77,11 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 <?php endif; ?>
             </section>
 
-            <!-- II. Architecture & Sources -->
-            <section class="settings-section about-card">
-                <h2>II. Architecture & Data Sources</h2>
-                <p>Everything you track merges into a single stream. You can tune these sources via their respective management screens.</p>
-                
+            <!-- II. Architecture & sources -->
+            <section class="settings-section about-card dashboard-section">
+                <h2>II. Architecture &amp; data sources</h2>
+                <p>Everything you track merges into a single stream. Tune sources from Feeds, Mail, Scraper, Lex, and Leg.</p>
+
                 <div class="table-responsive">
                     <table class="styleguide-table">
                         <thead>
@@ -118,13 +118,38 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </tbody>
                     </table>
                 </div>
+
+                <h3 class="about-subheading">The Swiss angle: monitoring hidden impact</h3>
+                <p>Foreign legislation and EU acts often move Swiss interests even when the text never names Switzerland. A banking or market rule framed for third countries or the single market can still shape compliance, passporting, or supply chains in CH. Lex and Leg catch the obvious Swiss file; the harder work is spotting <em>indirect</em> pressure early.</p>
+                <p class="meta-text">Example pattern: a neighbouring state’s finance law (e.g. a major 2026 budget or market reform) may matter for cross-border desks before Swiss media tie the thread.</p>
+                <p class="meta-text" style="margin-top: 0.5rem;"><strong>Watch-list tokens</strong> (German / EU context) often surface relevance without &ldquo;Switzerland&rdquo; in the title:</p>
+                <div class="about-detail-grid" role="list">
+                    <div class="about-detail-grid__item" role="listitem">Drittstaaten</div>
+                    <div class="about-detail-grid__item" role="listitem">Binnenmarkt</div>
+                    <div class="about-detail-grid__item" role="listitem">Konformit&auml;tsbewertung</div>
+                </div>
             </section>
 
-            <!-- III. Scoring Intelligence -->
-            <section class="settings-section about-card">
-                <h2>III. Intelligence: Magnitu Engine</h2>
-                <p>Magnitu is Seismo’s companion scoring engine—an optional Python application that learns what matters to you.</p>
-                
+            <!-- III. Hybrid intelligence -->
+            <section class="settings-section about-card dashboard-section">
+                <h2>III. Hybrid intelligence &amp; scoring</h2>
+                <p>Seismo keeps the timeline ordered and legible in two stages: a fast local baseline, then an optional ML layer that refines it.</p>
+
+                <div class="about-hybrid-stage">
+                    <h3>Stage 1: PHP recipe engine</h3>
+                    <p>As soon as an entry lands, a deterministic scorer runs in Seismo (keywords, source weights, class rules). You get immediate ranking and badges without waiting for an external service, so the dashboard stays usable during outages or first-time imports.</p>
+                </div>
+                <div class="about-hybrid-stage">
+                    <h3>Stage 2: Magnitu v3</h3>
+                    <p>The Python companion app syncs over HTTP: it can replace baseline scores with model predictions (relevance as a 0&ndash;100% style signal in the UI) and training labels. Magnitu reads entries and posts scores; recipe scores remain the fallback until Magnitu has written a row.</p>
+                </div>
+            </section>
+
+            <!-- IV. Magnitu labels -->
+            <section class="settings-section about-card dashboard-section">
+                <h2>IV. Magnitu: training labels</h2>
+                <p>Manual labels and model output use a shared vocabulary so sorting and filters stay consistent.</p>
+
                 <div class="about-scoring-levels">
                     <div class="scoring-level">
                         <span class="level-tag tag-lead">Investigation Lead</span>
@@ -143,23 +168,19 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <p>Irrelevant entries automatically deprioritized.</p>
                     </div>
                 </div>
-
-                <div class="about-grid" style="margin-top: 1.5rem;">
-                    <div class="about-grid-item">
-                        <strong>Deterministic Recipes</strong>
-                        <p>Immediate scoring based on keyword weights and title boosting configured inside Seismo.</p>
-                    </div>
-                    <div class="about-grid-item">
-                        <strong>Machine Learning</strong>
-                        <p>Full ML classifier (e.g., XLM-RoBERTa) that trains on your manual labels for deep relevance.</p>
-                    </div>
-                </div>
-                <p class="meta-text">API endpoints are documented in the <a href="https://github.com/hektopascal2026/magnitu" target="_blank" rel="noopener">Magnitu repository</a>.</p>
+                <p class="meta-text">HTTP contract and client docs: <a href="https://github.com/hektopascal2026/magnitu" target="_blank" rel="noopener">Magnitu repository</a>.</p>
             </section>
 
-            <!-- IV. Version History (Expanded) -->
-            <section class="settings-section about-card">
-                <h2>IV. Version History</h2>
+            <!-- V. Mothership & satellite -->
+            <section class="settings-section about-card dashboard-section">
+                <h2>V. Deployment patterns: mothership &amp; satellite</h2>
+                <p><strong>Mothership</strong> is the instance that runs core fetchers: RSS and Substack feeds, IMAP mail, scrapers, Lex plugins, Leg, and parliament press ingestion. It owns the heavy write load into shared entry tables.</p>
+                <p style="margin-top: 0.75rem;"><strong>Satellite</strong> instances are secondary installs on the same MySQL server that <em>read</em> those entry tables from the mothership database. Each satellite keeps its own scores, labels, and <code>system_config</code> so you can run separate Magnitu profiles (e.g. topic-focused relevance) without duplicating ingestion.</p>
+            </section>
+
+            <!-- VI. Version history -->
+            <section class="settings-section about-card dashboard-section">
+                <h2>VI. Version history</h2>
                 <div class="about-timeline">
                     <div class="about-timeline-entry">
                         <div class="v-header"><strong>v0.1 – v0.3</strong> <span class="v-date">Jan – Feb 2026</span></div>
@@ -202,31 +223,45 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 </div>
             </section>
 
-            <!-- V. Operations & API -->
-            <section class="settings-section about-card">
-                <h2>V. Operations & Automation</h2>
+            <!-- VII. Operations & machine-readable exports -->
+            <section class="settings-section about-card dashboard-section">
+                <h2>VII. Operations &amp; machine-readable exports</h2>
                 <div class="about-grid">
                     <div class="about-grid-item">
-                        <strong>Refresh & Cron</strong>
-                        <p>Timeline and Diagnostics share a single pipeline (<code>RefreshAllService</code>). Use <code>refresh_cron.php</code> for scheduled CLI updates.</p>
+                        <strong>Refresh &amp; cron</strong>
+                        <p>The web <strong>Refresh</strong> control and <code>refresh_cron.php</code> share one pipeline (<code>RefreshAllService::runAll()</code>). Cron is CLI-only; interactive refresh bypasses plugin throttles.</p>
                     </div>
                     <div class="about-grid-item">
                         <strong>Retention</strong>
-                        <p>Per-family cleanup policies ensure the database remains performant with dry-run safety.</p>
+                        <p>Per-family policies prune old rows (defaults often around 180 days for feeds and mail; Lex and Leg may stay unlimited). Dry-run previews run before destructive deletes.</p>
                     </div>
                 </div>
-                
-                <h3 class="about-subheading">Export API</h3>
-                <p>Seismo provides a dedicated Bearer-protected API for downstream automation (Raycast, n8n, LLMs):</p>
+
+                <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
+                <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for briefings, n8n, Raycast, or custom scripts:</p>
                 <ul>
-                    <li><code>?action=export_briefing</code> &mdash; Clean Markdown digest.</li>
-                    <li><code>?action=export_entries</code> &mdash; Full JSON with score metadata.</li>
+                    <li><code>?action=export_briefing</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
+                    <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                 </ul>
+                <p class="meta-text"><strong>Security:</strong> the <code>export:api_key</code> in Settings is <strong>read-only</strong> for these actions. It must not reuse the Magnitu write <code>api_key</code>; the server rejects the write key on export routes by design.</p>
             </section>
 
-            <!-- VI. Statistics -->
-            <section class="settings-section about-card">
-                <h2>VI. System Statistics</h2>
+            <!-- VIII. Operational health & row counts -->
+            <section class="settings-section about-card dashboard-section">
+                <h2>VIII. Operational health &amp; row counts</h2>
+
+                <h3 class="about-subheading">System requirements</h3>
+                <ul>
+                    <li><strong>PHP</strong> 8.2 or newer</li>
+                    <li><strong>MariaDB</strong> or MySQL with <code>utf8mb4</code></li>
+                    <li><strong>Extension:</strong> <code>pdo_mysql</code> (required); <code>curl</code> recommended for some Lex paths; <code>imap</code> if you use core mail fetch</li>
+                    <li>Timestamps are handled in <strong>UTC</strong> end-to-end</li>
+                </ul>
+
+                <h3 class="about-subheading">Reliability &amp; diagnostics</h3>
+                <p>Plugin throttles, last run status, and manual test-fetch live under <a href="<?= e($basePath) ?>/index.php?action=diagnostics">Diagnostics</a>. Use that screen when a source stops updating or cron misbehaves.</p>
+
+                <h3 class="about-subheading">Live database snapshot</h3>
                 <?php if ($aboutStats !== null && $scoreCounts !== null): ?>
                 <div class="table-responsive">
                     <table class="styleguide-table">
@@ -251,14 +286,8 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     </table>
                 </div>
                 <?php else: ?>
-                <p class="meta-text">Database statistics currently unavailable.</p>
+                <p class="meta-text">Database statistics are unavailable (connection or schema not ready).</p>
                 <?php endif; ?>
-            </section>
-
-            <!-- VII. Roadmap -->
-            <section class="settings-section about-card">
-                <h2>VII. Roadmap: Seismo Satellites</h2>
-                <p>The current focus is the rollout of <strong>Seismo Satellites</strong>. This architecture allows topic-specific profiles (e.g., Security, Digital Policy) to run on their own lightweight instances while sharing the heavy ingestion infrastructure of a central <strong>Mothership</strong>.</p>
             </section>
 
             <footer class="about-footer">

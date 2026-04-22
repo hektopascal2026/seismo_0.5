@@ -2302,3 +2302,46 @@ textarea.search-input.setup-code-preview {
     margin-top: 0.5rem;
 }
 
+/* About — keyword grid & hybrid stages (views/about.php) */
+.about-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    margin: 1rem 0 0.5rem;
+}
+
+.about-detail-grid__item {
+    padding: 8px 12px;
+    border: 2px solid #000000;
+    background: #fafafa;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    color: #000000;
+}
+
+.about-hybrid-stage {
+    margin: 0.75rem 0 1rem;
+    padding: 0.85rem 1rem;
+    border: 2px solid #000000;
+    background: #ffffff;
+    line-height: 1.55;
+}
+
+.about-hybrid-stage h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 0.4rem;
+    color: #000000;
+}
+
+.about-hybrid-stage p {
+    margin: 0;
+    font-size: 14px;
+    color: #000000;
+}
+
+.about-hybrid-stage + .about-hybrid-stage {
+    margin-top: 0.65rem;
+}
+
