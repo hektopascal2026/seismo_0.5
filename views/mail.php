@@ -133,7 +133,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                 </div>
                 <div class="admin-form-field">
                     <input type="hidden" name="strip_listing_boilerplate" value="0">
-                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip Admin.ch–style listing boilerplate (affects new mail in the DB, recipe scoring, Magnitu sync, and dashboard cards)</label>
+                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate (example: email subject repeated in body, &ldquo;Medienmitteilung&rdquo;, &ldquo;view in browser&rdquo; and image display lines, etc., including EN/DE; applies to new mail in the DB, recipe scoring, Magnitu sync, and dashboard cards)</label>
                 </div>
                 <div class="admin-form-field">
                     <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>
@@ -163,7 +163,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                         <th>Latest</th>
                         <th>Disabled</th>
                         <th>Magnitu</th>
-                        <th>Strip lede</th>
+                        <th>Strip boilerplate</th>
                         <th></th>
                     </tr>
                 </thead>
