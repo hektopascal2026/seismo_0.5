@@ -35,8 +35,8 @@ body {
 }
 
 .logo-icon-large {
-    height: 28px;
-    width: 28px;
+    height: 38px;
+    width: 38px;
 }
 
 /* ═══ Top Bar ═══ */
@@ -1316,6 +1316,72 @@ textarea.search-input.setup-code-preview {
     justify-content: flex-end;
 }
 
+/* Index only: mobile search sits between day label and “expand all” */
+.timeline-inline-search {
+    display: none;
+}
+
+.timeline-day-row--with-inline-search .magnitu-day-separator {
+    flex: 0 1 auto;
+}
+
+.timeline-day-row--with-inline-search .timeline-inline-search {
+    flex: 1;
+    min-width: 0;
+}
+
+.timeline-day-row--expand-only.timeline-day-row--with-inline-search {
+    justify-content: flex-start;
+    gap: 8px;
+}
+
+.timeline-day-row--expand-only.timeline-day-row--with-inline-search .entry-expand-all-btn {
+    margin-left: auto;
+}
+
+.search-form--timeline-inline {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 0;
+}
+
+.search-form--timeline-inline .search-input--timeline-inline {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    font-size: 14px;
+}
+
+.btn-timeline-search-submit {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.timeline-search-clear {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 32px;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: 700;
+    text-decoration: none;
+    color: #000000;
+    border: 2px solid #000000;
+    background: #ffffff;
+}
+
+.timeline-search-clear:hover {
+    box-shadow: 2px 2px 0 #000000;
+}
+
 .magnitu-day-separator {
     margin: 18px 0 10px 0;
 }
@@ -1863,13 +1929,26 @@ textarea.search-input.setup-code-preview {
     }
 
     .add-feed-form,
-    .search-form {
+    .search-form:not(.search-form--timeline-inline) {
         flex-direction: column;
     }
 
     .add-feed-form .feed-input,
-    .search-form .search-input {
+    .search-form:not(.search-form--timeline-inline) .search-input {
         min-width: 100%;
+    }
+
+    .dashboard-search-desktop--hide-on-mobile {
+        display: none;
+    }
+
+    .timeline-inline-search {
+        display: block;
+    }
+
+    .search-form--timeline-inline .search-input--timeline-inline {
+        min-width: 0;
+        width: auto;
     }
 
     .tag-filter-section {

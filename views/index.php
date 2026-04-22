@@ -98,56 +98,19 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
             <div class="message message-error"><?= e($dashboardError) ?></div>
         <?php endif; ?>
 
-        <div class="search-section search-section-spaced">
-            <form method="get" class="search-form">
-                <input type="hidden" name="action" value="index">
-                <?php if ($currentView === 'favourites'): ?>
-                    <input type="hidden" name="view" value="favourites">
-                <?php endif; ?>
-                <?php
-                $ff = $_GET['filter_form'] ?? null;
-                if (is_scalar($ff) && trim((string)$ff) !== '') {
-                    echo '<input type="hidden" name="filter_form" value="' . e((string)$ff) . '">';
-                }
-                $noneP = $_GET['none'] ?? null;
-                if (is_scalar($noneP) && trim((string)$noneP) !== '') {
-                    echo '<input type="hidden" name="none" value="' . e((string)$noneP) . '">';
-                }
-                if (isset($_GET['filters']) && is_array($_GET['filters'])) {
-                    foreach ($_GET['filters'] as $fk => $fv) {
-                        if (!is_string($fk) || !preg_match('/^[a-z]+$/', $fk)) {
-                            continue;
-                        }
-                        if (is_array($fv)) {
-                            foreach ($fv as $item) {
-                                if (!is_scalar($item)) {
-                                    continue;
-                                }
-                                $s = trim((string)$item);
-                                if ($s === '') {
-                                    continue;
-                                }
-                                echo '<input type="hidden" name="filters[' . e($fk) . '][]" value="' . e($s) . '">';
-                            }
-                        } elseif (is_scalar($fv)) {
-                            echo '<input type="hidden" name="filters[' . e($fk) . ']" value="' . e(trim((string)$fv)) . '">';
-                        }
-                    }
-                }
-                ?>
-                <input type="search" name="q" placeholder="Search entries…" class="search-input" value="<?= e($searchQuery) ?>" style="min-width: 12rem; flex: 1;">
-                <button type="submit" class="btn btn-primary">Search</button>
-                <?php if ($searchQuery !== ''): ?>
-                    <a href="?<?= e($clearSearchQs) ?>" class="btn btn-secondary">Clear search</a>
-                <?php endif; ?>
-            </form>
+        <div class="search-section search-section-spaced dashboard-search-desktop<?= $allItems !== [] ? ' dashboard-search-desktop--hide-on-mobile' : '' ?>">
+                <?php $inlineTimeline = false; ?>
+                <?php require __DIR__ . '/partials/dashboard_index_search_form.php'; ?>
         </div>
 
         <div class="latest-entries-section">
             <?php if ($dashboardError !== null): ?>
                 <?php // Error banner above — no empty-state. ?>
             <?php elseif ($allItems !== []): ?>
-                <?php $embedTimelineExpandAllInDayRow = true; ?>
+                <?php
+                $embedTimelineExpandAllInDayRow = true;
+                $embedDashboardTimelineSearch   = true;
+                ?>
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
                 <div class="empty-state">

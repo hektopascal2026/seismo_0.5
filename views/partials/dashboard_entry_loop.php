@@ -17,6 +17,7 @@
  *
  * @var string $csrfField From DashboardController (CSRF hidden input HTML)
  * @var bool $embedTimelineExpandAllInDayRow When true (index only), first day heading shares a row with "expand all".
+ * @var bool $embedDashboardTimelineSearch When true (index + items), mobile search form is embedded in that row.
  */
 $searchQuery = $searchQuery ?? '';
 if (!isset($showFavourites)) {
@@ -26,6 +27,7 @@ $returnQuery = $returnQuery ?? ($_SERVER['QUERY_STRING'] ?? 'action=index');
 $showDaySeparators = !empty($showDaySeparators);
 $feedLoopPrevDayKey = null;
 $embedTimelineExpandAllInDayRow = !empty($embedTimelineExpandAllInDayRow);
+$embedDashboardTimelineSearch   = !empty($embedDashboardTimelineSearch);
 $timelineExpandAllInDayRowDone  = false;
 $entryLoopIndex                 = 0;
 ?>
@@ -63,7 +65,15 @@ $entryLoopIndex                 = 0;
                                 if ($__h !== '') {
                                     if ($embedTimelineExpandAllInDayRow && !$timelineExpandAllInDayRowDone) {
                                         $timelineExpandAllInDayRowDone = true;
-                                        echo '<div class="timeline-day-row"><div class="magnitu-day-separator"><span class="magnitu-day-separator-text">' . htmlspecialchars($__h) . '</span></div><button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button></div>';
+                                        $rowClass = 'timeline-day-row' . ($embedDashboardTimelineSearch ? ' timeline-day-row--with-inline-search' : '');
+                                        echo '<div class="' . $rowClass . '"><div class="magnitu-day-separator"><span class="magnitu-day-separator-text">' . htmlspecialchars($__h) . '</span></div>';
+                                        if ($embedDashboardTimelineSearch) {
+                                            echo '<div class="timeline-inline-search">';
+                                            $inlineTimeline = true;
+                                            require __DIR__ . '/dashboard_index_search_form.php';
+                                            echo '</div>';
+                                        }
+                                        echo '<button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button></div>';
                                     } else {
                                         echo '<div class="magnitu-day-separator"><span class="magnitu-day-separator-text">' . htmlspecialchars($__h) . '</span></div>';
                                     }
@@ -76,7 +86,15 @@ $entryLoopIndex                 = 0;
                     <?php endif; ?>
                     <?php
                     if ($embedTimelineExpandAllInDayRow && !$timelineExpandAllInDayRowDone && $entryLoopIndex === 0) {
-                        echo '<div class="timeline-day-row timeline-day-row--expand-only"><button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button></div>';
+                        $rowClass = 'timeline-day-row timeline-day-row--expand-only' . ($embedDashboardTimelineSearch ? ' timeline-day-row--with-inline-search' : '');
+                        echo '<div class="' . $rowClass . '">';
+                        if ($embedDashboardTimelineSearch) {
+                            echo '<div class="timeline-inline-search">';
+                            $inlineTimeline = true;
+                            require __DIR__ . '/dashboard_index_search_form.php';
+                            echo '</div>';
+                        }
+                        echo '<button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button></div>';
                         $timelineExpandAllInDayRowDone = true;
                     }
                     ?>

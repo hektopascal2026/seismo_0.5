@@ -23,7 +23,7 @@ use Seismo\Http\CsrfToken;
         <div class="top-bar">
             <div class="top-bar-left">
                 <span class="top-bar-title">
-                    <img src="<?= e($basePath) ?>/assets/img/logo.png" alt="" class="logo-icon logo-icon-large" width="28" height="28" decoding="async">
+                    <img src="<?= e($basePath) ?>/assets/img/logo.png" alt="" class="logo-icon logo-icon-large" width="38" height="38" decoding="async">
                     <?= e(seismoBrandTitle()) ?>
                 </span>
             </div>
