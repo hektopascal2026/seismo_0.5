@@ -36,7 +36,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
     <style>:root { --seismo-accent: <?= e((string)$accent) ?>; }</style>
     <?php endif; ?>
 </head>
-<body class="about-page">
+<body>
     <div class="container">
         <?php require __DIR__ . '/partials/site_header.php'; ?>
 
