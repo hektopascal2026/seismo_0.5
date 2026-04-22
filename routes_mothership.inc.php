@@ -228,6 +228,11 @@ $router->register(
     false
 );
 $router->register(
+    'scraper_preview',
+    \Seismo\Controller\ScraperController::class . '::preview',
+    false
+);
+$router->register(
     'mail',
     \Seismo\Controller\MailController::class . '::show',
     true

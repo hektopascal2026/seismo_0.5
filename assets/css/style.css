@@ -381,6 +381,13 @@ textarea.search-input.setup-code-preview {
     color: #000000;
 }
 
+.admin-hint {
+    margin: -4px 0 10px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #333333;
+}
+
 .data-table {
     width: 100%;
     border-collapse: collapse;
@@ -2334,5 +2341,28 @@ main.about-modern-layout ul:not(.about-history) {
 
 .about-hybrid-stage + .about-hybrid-stage {
     margin-top: 0.65rem;
+}
+
+/* Scraper Sources — dry-run preview (Slice: scraper preview) */
+.scraper-preview-panel {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 2px solid #000000;
+}
+
+.scraper-preview-badge {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.1rem 0.45rem;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    vertical-align: middle;
+    border: 1px solid #000000;
+    background: #f0f0f0;
+}
+
+.scraper-preview-cards {
+    margin-top: 0.75rem;
 }
 

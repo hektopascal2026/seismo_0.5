@@ -87,7 +87,7 @@ $sourcesQs = 'action=scraper&view=sources';
             <p class="admin-intro">Targets must match a row in <code>feeds</code> (same URL) for the core pipeline to store items. Plain RSS feeds belong on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.</p>
 
             <?php if (!$satellite): ?>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_save" class="admin-form-card">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_save" class="admin-form-card" id="scraper-source-form">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= $editRow ? (int)$editRow['id'] : '' ?>">
                 <h3><?= $editRow ? 'Edit source' : 'Add source' ?></h3>
@@ -98,11 +98,13 @@ $sourcesQs = 'action=scraper&view=sources';
                     <label>Page URL <input type="url" name="url" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['url'] ?? '')) ?>" placeholder="https://…"></label>
                 </div>
                 <div class="admin-form-field">
-                    <label>Link pattern (regex) <input type="text" name="link_pattern" class="search-input" style="width:100%;" value="<?= e((string)($editRow['link_pattern'] ?? '')) ?>"></label>
+                    <label>Link pattern (substring) <input type="text" name="link_pattern" class="search-input" style="width:100%;" value="<?= e((string)($editRow['link_pattern'] ?? '')) ?>" placeholder="must appear in the article URL" title="0.4-style: plain substring in resolved http(s) URL, not a regex."></label>
                 </div>
+                <p class="admin-hint">Link mode: the resolved same-host URL must <strong>contain</strong> this text (0.4 behaviour). Single-page mode: leave empty.</p>
                 <div class="admin-form-field">
-                    <label>Date selector (CSS) <input type="text" name="date_selector" class="search-input" style="width:100%;" value="<?= e((string)($editRow['date_selector'] ?? '')) ?>"></label>
+                    <label>Date selector <input type="text" name="date_selector" class="search-input" style="width:100%;" value="<?= e((string)($editRow['date_selector'] ?? '')) ?>" placeholder="e.g. .date or //time[@datetime]"></label>
                 </div>
+                <p class="admin-hint">Date: simple CSS (tag, .class, #id, meta[…]) or raw XPath. Preview uses the same extractor as the planned 0.4 port.</p>
                 <div class="admin-form-field">
                     <label>Category <input type="text" name="category" class="search-input" style="width:100%; max-width:24rem;" value="<?= e((string)($editRow['category'] ?? 'scraper')) ?>"></label>
                 </div>
@@ -112,11 +114,18 @@ $sourcesQs = 'action=scraper&view=sources';
                 </div>
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success"><?= $editRow ? 'Save' : 'Add source' ?></button>
+                    <button type="button" class="btn btn-secondary" id="scraper-preview-btn">Preview (dry run)</button>
                     <?php if ($editRow): ?>
                         <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel edit</a>
                     <?php endif; ?>
                 </div>
             </form>
+            <div id="scraper-preview-panel" class="scraper-preview-panel" hidden>
+                <h3 class="section-title">Preview <span class="scraper-preview-badge">not saved</span></h3>
+                <p id="scraper-preview-error" class="message message-error" hidden></p>
+                <p id="scraper-preview-warnings" class="message message-info" hidden></p>
+                <div id="scraper-preview-cards" class="latest-entries-section scraper-preview-cards"></div>
+            </div>
             <?php endif; ?>
 
             <table class="data-table">
@@ -161,6 +170,59 @@ $sourcesQs = 'action=scraper&view=sources';
 
     <script>
     (function() {
+        var form = document.getElementById('scraper-source-form');
+        var btnPreview = document.getElementById('scraper-preview-btn');
+        var panel = document.getElementById('scraper-preview-panel');
+        var outCards = document.getElementById('scraper-preview-cards');
+        var outErr = document.getElementById('scraper-preview-error');
+        var outWarn = document.getElementById('scraper-preview-warnings');
+        var previewUrl = <?= json_encode($basePath . '/index.php?action=scraper_preview', JSON_UNESCAPED_SLASHES) ?>;
+
+        if (form && btnPreview && panel) {
+            btnPreview.addEventListener('click', function() {
+                if (outErr) { outErr.hidden = true; outErr.textContent = ''; }
+                if (outWarn) { outWarn.hidden = true; outWarn.textContent = ''; }
+                outCards.innerHTML = '<p class="admin-intro">Loading…</p>';
+                panel.hidden = false;
+                var fd = new FormData(form);
+                fetch(previewUrl, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                    .then(function(r) { return r.text().then(function(t) { return { status: r.status, body: t }; }); })
+                    .then(function(res) {
+                        var data;
+                        try { data = JSON.parse(res.body); } catch (e) {
+                            if (outErr) {
+                                outErr.textContent = 'Invalid response (HTTP ' + res.status + ').';
+                                outErr.hidden = false;
+                            }
+                            outCards.innerHTML = '';
+                            return;
+                        }
+                        if (!data.ok) {
+                            if (outErr) {
+                                outErr.textContent = data.error || 'Preview failed.';
+                                outErr.hidden = false;
+                            }
+                            outCards.innerHTML = '';
+                        } else {
+                            if (outErr) { outErr.hidden = true; }
+                            outCards.innerHTML = data.html || '';
+                        }
+                        if (data.warnings && data.warnings.length && outWarn) {
+                            outWarn.textContent = data.warnings.join(' ');
+                            outWarn.hidden = false;
+                        } else if (outWarn) {
+                            outWarn.hidden = true;
+                        }
+                    })
+                    .catch(function() {
+                        if (outErr) {
+                            outErr.textContent = 'Network error — could not run preview.';
+                            outErr.hidden = false;
+                        }
+                        outCards.innerHTML = '';
+                    });
+            });
+        }
         function collapse(card, btn) {
             var preview = card.querySelector('.entry-preview');
             var full    = card.querySelector('.entry-full-content');

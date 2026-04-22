@@ -197,69 +197,7 @@ $entryLoopIndex                 = 0;
                             </div>
                         </div>
                     <?php elseif ($itemWrapper['type'] === 'scraper'): ?>
-                        <?php $item = $itemWrapper['data']; ?>
-                        <?php
-                            $scraperLink = seismo_feed_item_resolved_link($item);
-                            $rawSc = trim(strip_tags((string)($item['content'] ?? '')));
-                            $rawDesc = trim(strip_tags((string)($item['description'] ?? '')));
-                            $scraperContent = $rawSc !== '' ? $rawSc : $rawDesc;
-                            if ($scraperContent === '' && !empty($item['title'])) {
-                                $scraperContent = trim((string)$item['title']);
-                            }
-                            $scraperPreview = mb_substr($scraperContent, 0, 200);
-                            if (mb_strlen($scraperContent) > 200) $scraperPreview .= '...';
-                            $scraperHasMore = mb_strlen($scraperContent) > 200;
-                        ?>
-                        <div class="entry-card">
-                            <div class="entry-header">
-                                <span class="entry-tag entry-tag--scraper">🌐 <?= htmlspecialchars($item['feed_name'] ?? 'Scraper') ?></span>
-                                <?php if ($relevanceScore !== null): ?>
-                                    <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
-                                <?php if (!empty($showAlertBadge)): ?>
-                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
-                                <?php endif; ?>
-                            </div>
-                            <h3 class="entry-title">
-                                <?php if (seismo_is_navigable_url($scraperLink)): ?>
-                                    <a href="<?= htmlspecialchars($scraperLink) ?>" target="_blank" rel="noopener">
-                                        <?= htmlspecialchars($item['title'] ?? '') ?>
-                                    </a>
-                                <?php else: ?>
-                                    <?= htmlspecialchars($item['title'] ?? '') ?>
-                                <?php endif; ?>
-                            </h3>
-                            <?php if (!empty($scraperContent)): ?>
-                                <div class="entry-content entry-preview">
-                                    <?= htmlspecialchars($scraperPreview) ?>
-                                    <?php if (seismo_is_navigable_url($scraperLink)): ?>
-                                    <a href="<?= htmlspecialchars($scraperLink) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">Open page &rarr;</a>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="entry-full-content"><?= htmlspecialchars($scraperContent) ?></div>
-                            <?php endif; ?>
-                            <div class="entry-actions">
-                                <div class="entry-actions-main">
-                                    <?php if ($scraperHasMore): ?>
-                                        <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="entry-meta-right">
-                                    <?php if ($item['published_date']): ?>
-                                        <span class="entry-date"><?= date('d.m.Y H:i', strtotime($item['published_date'])) ?></span>
-                                    <?php endif; ?>
-                                    <?php if ($showFavourites): ?>
-                                    <form method="POST" action="?action=toggle_favourite" class="favourite-form">
-                                        <?= $csrfField ?>
-                                        <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
-                                        <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
-                                        <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">
-                                        <button type="submit" class="favourite-btn<?= $isFavourite ? ' is-favourite' : '' ?>" title="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>" aria-label="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>"><?= $isFavourite ? '★' : '☆' ?></button>
-                                    </form>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
+                        <?php require __DIR__ . '/entry_card_scraper.php'; ?>
                     <?php elseif ($itemWrapper['type'] === 'lex'): ?>
                         <?php $lexItem = $itemWrapper['data']; ?>
                         <?php
