@@ -122,6 +122,7 @@ final class MailController
                 'category'               => (string)($_POST['category'] ?? ''),
                 'disabled'               => ((string)($_POST['disabled'] ?? '0')) === '1',
                 'show_in_magnitu'        => ((string)($_POST['show_in_magnitu'] ?? '0')) === '1',
+                'strip_listing_boilerplate' => ((string)($_POST['strip_listing_boilerplate'] ?? '0')) === '1',
                 'unsubscribe_url'        => (string)($_POST['unsubscribe_url'] ?? ''),
                 'unsubscribe_mailto'     => (string)($_POST['unsubscribe_mailto'] ?? ''),
                 'unsubscribe_one_click'  => ((string)($_POST['unsubscribe_one_click'] ?? '0')) === '1',

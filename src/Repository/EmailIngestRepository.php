@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 use PDO;
+use Seismo\Core\Mail\EmailListingBoilerplateStripper;
 
 /**
  * INSERT / upsert path for the unified `emails` table (IMAP ingestion).
@@ -64,6 +65,9 @@ final class EmailIngestRepository
 
         $stmt = $this->pdo->prepare($sql);
 
+        $subs = (new EmailSubscriptionRepository($this->pdo))
+            ->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
+
         $this->pdo->beginTransaction();
         try {
             $n = 0;
@@ -72,6 +76,7 @@ final class EmailIngestRepository
                 if ($uid <= 0) {
                     continue;
                 }
+                $row = $this->maybeStripListingBoilerplate($row, $subs);
                 $stmt->execute([
                     $uid,
                     $this->nullStr($row['message_id'] ?? null),
@@ -99,6 +104,29 @@ final class EmailIngestRepository
             $this->pdo->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param list<array<string, mixed>> $subs
+     * @return array<string, mixed>
+     */
+    private function maybeStripListingBoilerplate(array $row, array $subs): array
+    {
+        $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
+        if (empty($ui['strip_listing_boilerplate'])) {
+            return $row;
+        }
+        $subj = (string)($row['subject'] ?? '');
+        $forStrip = $subj !== '' ? $subj : null;
+        foreach (['text_body', 'body_text'] as $key) {
+            $t = (string)($row[$key] ?? '');
+            if ($t !== '') {
+                $row[$key] = EmailListingBoilerplateStripper::strip($t, $forStrip);
+            }
+        }
+
+        return $row;
     }
 
     private function nullStr(mixed $v): ?string

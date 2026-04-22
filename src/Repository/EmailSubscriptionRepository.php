@@ -50,21 +50,23 @@ final class EmailSubscriptionRepository
     }
 
     /**
-     * Human label for the inbox card: `display_name` from the best matching
-     * non-disabled subscription row. `email` rules beat `domain`; ties use
-     * the first matching row in `$subscriptionRows` order (newest id first
-     * when the list comes from {@see listAll}).
+     * Inbox card flags from the best matching non-disabled row: display label
+     * and optional listing-boilerplate strip. `email` rules beat `domain`;
+     * ties follow the first matching row in list order (newest id first from
+     * {@see listAll}).
      *
      * @param list<array<string, mixed>> $subscriptionRows
+     * @return array{display_name: ?string, strip_listing_boilerplate: bool}
      */
-    public static function resolveDisplayNameForFromEmail(string $fromEmail, array $subscriptionRows): ?string
+    public static function resolveSubscriptionUiForFromEmail(string $fromEmail, array $subscriptionRows): array
     {
         $from = trim($fromEmail);
         if ($from === '') {
-            return null;
+            return ['display_name' => null, 'strip_listing_boilerplate' => false];
         }
-        $bestRank = 0;
-        $bestName = null;
+        $bestRank  = 0;
+        $bestName  = null;
+        $bestStrip = false;
         foreach ($subscriptionRows as $row) {
             if (!empty($row['disabled'])) {
                 continue;
@@ -77,8 +79,9 @@ final class EmailSubscriptionRepository
             $rank = $mt === 'email' ? 2 : 1;
             $name = trim((string)($row['display_name'] ?? ''));
             if ($rank > $bestRank) {
-                $bestRank = $rank;
-                $bestName = $name !== '' ? $name : null;
+                $bestRank  = $rank;
+                $bestName  = $name !== '' ? $name : null;
+                $bestStrip = !empty($row['strip_listing_boilerplate']);
 
                 continue;
             }
@@ -87,7 +90,18 @@ final class EmailSubscriptionRepository
             }
         }
 
-        return $bestName;
+        return [
+            'display_name'               => $bestName,
+            'strip_listing_boilerplate'  => $bestStrip,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $subscriptionRows
+     */
+    public static function resolveDisplayNameForFromEmail(string $fromEmail, array $subscriptionRows): ?string
+    {
+        return self::resolveSubscriptionUiForFromEmail($fromEmail, $subscriptionRows)['display_name'];
     }
 
     /**
@@ -133,6 +147,7 @@ final class EmailSubscriptionRepository
      *   category?: string|null,
      *   disabled?: int|bool,
      *   show_in_magnitu?: int|bool,
+     *   strip_listing_boilerplate?: int|bool,
      *   unsubscribe_url?: string|null,
      *   unsubscribe_mailto?: string|null,
      *   unsubscribe_one_click?: int|bool,
@@ -161,13 +176,14 @@ final class EmailSubscriptionRepository
         $showMagnitu = array_key_exists('show_in_magnitu', $data)
             ? (!empty($data['show_in_magnitu']) ? 1 : 0)
             : 1;
+        $stripListing = !empty($data['strip_listing_boilerplate']) ? 1 : 0;
 
         $t   = entryTable('email_subscriptions');
         $sql = "INSERT INTO {$t} (
-            match_type, match_value, display_name, category, disabled, show_in_magnitu,
+            match_type, match_value, display_name, category, disabled, show_in_magnitu, strip_listing_boilerplate,
             auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
             item_count
-        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 0)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 0)";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             $matchType,
@@ -176,6 +192,7 @@ final class EmailSubscriptionRepository
             $data['category'] ?? null,
             !empty($data['disabled']) ? 1 : 0,
             $showMagnitu,
+            $stripListing,
             $data['unsubscribe_url'] ?? null,
             $data['unsubscribe_mailto'] ?? null,
             !empty($data['unsubscribe_one_click']) ? 1 : 0,
@@ -226,6 +243,9 @@ final class EmailSubscriptionRepository
         $showMagnitu = array_key_exists('show_in_magnitu', $data)
             ? (!empty($data['show_in_magnitu']) ? 1 : 0)
             : (int)($existing['show_in_magnitu'] ?? 1);
+        $stripListing = array_key_exists('strip_listing_boilerplate', $data)
+            ? (!empty($data['strip_listing_boilerplate']) ? 1 : 0)
+            : (int)($existing['strip_listing_boilerplate'] ?? 0);
 
         $t   = entryTable('email_subscriptions');
         $sql = "UPDATE {$t} SET
@@ -235,6 +255,7 @@ final class EmailSubscriptionRepository
             category = ?,
             disabled = ?,
             show_in_magnitu = ?,
+            strip_listing_boilerplate = ?,
             unsubscribe_url = ?,
             unsubscribe_mailto = ?,
             unsubscribe_one_click = ?
@@ -247,6 +268,7 @@ final class EmailSubscriptionRepository
             $data['category'] ?? $existing['category'],
             $disabled,
             $showMagnitu,
+            $stripListing,
             $data['unsubscribe_url'] ?? $existing['unsubscribe_url'],
             $data['unsubscribe_mailto'] ?? $existing['unsubscribe_mailto'],
             array_key_exists('unsubscribe_one_click', $data)

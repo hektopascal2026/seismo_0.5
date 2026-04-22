@@ -1163,9 +1163,12 @@ final class EntryRepository
             if ($from === '') {
                 continue;
             }
-            $label = EmailSubscriptionRepository::resolveDisplayNameForFromEmail($from, $subs);
-            if ($label !== null && $label !== '') {
-                $it['data']['subscription_display_name'] = $label;
+            $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail($from, $subs);
+            if ($ui['display_name'] !== null && $ui['display_name'] !== '') {
+                $it['data']['subscription_display_name'] = $ui['display_name'];
+            }
+            if (!empty($ui['strip_listing_boilerplate'])) {
+                $it['data']['subscription_strip_listing_boilerplate'] = true;
             }
         }
         unset($it);

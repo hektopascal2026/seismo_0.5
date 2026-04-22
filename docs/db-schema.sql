@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS email_subscriptions (
     category              VARCHAR(100) DEFAULT NULL,
     disabled              TINYINT(1)   NOT NULL DEFAULT 0,
     show_in_magnitu       TINYINT(1)   NOT NULL DEFAULT 1,
+    strip_listing_boilerplate TINYINT(1) NOT NULL DEFAULT 0,
     auto_detected         TINYINT(1)   NOT NULL DEFAULT 1,
     unsubscribe_url       VARCHAR(1000) DEFAULT NULL,
     unsubscribe_mailto    VARCHAR(500)  DEFAULT NULL,

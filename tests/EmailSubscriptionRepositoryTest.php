@@ -107,4 +107,20 @@ final class EmailSubscriptionRepositoryTest extends TestCase
         ];
         self::assertNull(EmailSubscriptionRepository::resolveDisplayNameForFromEmail('a@example.com', $rows));
     }
+
+    public function testResolveSubscriptionUiCarriesStripBoilerplateFromWinningRow(): void
+    {
+        $rows = [
+            [
+                'match_type'                 => 'domain',
+                'match_value'                => 'news.admin.ch',
+                'display_name'               => 'News Service Bund',
+                'disabled'                   => 0,
+                'strip_listing_boilerplate'  => 1,
+            ],
+        ];
+        $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail('no-reply@news.admin.ch', $rows);
+        self::assertSame('News Service Bund', $ui['display_name']);
+        self::assertTrue($ui['strip_listing_boilerplate']);
+    }
 }

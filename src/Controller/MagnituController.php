@@ -33,9 +33,13 @@ use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Repository\MagnituExportRepository;
 use Seismo\Repository\MagnituLabelRepository;
+use Seismo\Repository\EmailSubscriptionRepository;
+use Seismo\Core\Mail\EmailListingBoilerplateStripper;
 
 final class MagnituController
 {
+    /** @var list<array<string, mixed>>|null */
+    private static ?array $emailSubscriptionListCache = null;
     private const LEX_SOURCE_LABELS = [
         'eu'       => 'EUR-Lex',
         'ch'       => 'Fedlex',
@@ -376,6 +380,23 @@ final class MagnituController
         $body = (string)($row['text_body'] ?? '');
         if ($body === '') {
             $body = strip_tags((string)($row['html_body'] ?? ''));
+        }
+        $subject = (string)($row['subject'] ?? '');
+        if ($body !== '') {
+            if (self::$emailSubscriptionListCache === null) {
+                self::$emailSubscriptionListCache = (new EmailSubscriptionRepository(getDbConnection()))
+                    ->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
+            }
+            $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail(
+                (string)($row['from_email'] ?? ''),
+                self::$emailSubscriptionListCache
+            );
+            if (!empty($ui['strip_listing_boilerplate'])) {
+                $body = EmailListingBoilerplateStripper::strip(
+                    $body,
+                    $subject !== '' ? $subject : null
+                );
+            }
         }
         $fromName = (string)($row['from_name'] ?? '');
         $fromAddr = (string)($row['from_email'] ?? '');

@@ -132,6 +132,10 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                     <label><input type="checkbox" name="show_in_magnitu" value="1" <?= ($editRow === null || !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu'])) ? 'checked' : '' ?>> Show in Magnitu (stored preference)</label>
                 </div>
                 <div class="admin-form-field">
+                    <input type="hidden" name="strip_listing_boilerplate" value="0">
+                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip Admin.ch–style listing boilerplate (affects new mail in the DB, recipe scoring, Magnitu sync, and dashboard cards)</label>
+                </div>
+                <div class="admin-form-field">
                     <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>
                 </div>
                 <div class="admin-form-field">
@@ -159,6 +163,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                         <th>Latest</th>
                         <th>Disabled</th>
                         <th>Magnitu</th>
+                        <th>Strip lede</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -200,6 +205,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                         </td>
                         <td><?= !empty($row['disabled']) ? 'yes' : 'no' ?></td>
                         <td><?= !isset($row['show_in_magnitu']) || !empty($row['show_in_magnitu']) ? 'on' : 'off' ?></td>
+                        <td><?= !empty($row['strip_listing_boilerplate']) ? 'on' : 'off' ?></td>
                         <td>
                             <?php if (!$satellite): ?>
                             <div class="admin-table-actions">
@@ -222,7 +228,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($subscriptions === []): ?>
-                    <tr class="data-table-empty"><td colspan="7">No subscriptions.</td></tr>
+                    <tr class="data-table-empty"><td colspan="8">No subscriptions.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

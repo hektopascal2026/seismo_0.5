@@ -322,6 +322,12 @@ $entryLoopIndex                 = 0;
                                 $body = strip_tags((string)($email['html_body'] ?? $email['body_html'] ?? ''));
                             }
                             $body = trim(preg_replace('/\s+/', ' ', $body ?? ''));
+                            $body = seismo_strip_email_listing_boilerplate(
+                                $body,
+                                $fromEmail,
+                                $subject,
+                                !empty($email['subscription_strip_listing_boilerplate'])
+                            );
                             if ($body === '') {
                                 $bodyPreview = '';
                             } else {

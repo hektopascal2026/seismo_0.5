@@ -29,6 +29,8 @@ declare(strict_types=1);
 namespace Seismo\Core\Scoring;
 
 use PDOException;
+use Seismo\Core\Mail\EmailListingBoilerplateStripper;
+use Seismo\Repository\EmailSubscriptionRepository;
 use Seismo\Repository\EntryScoreRepository;
 
 final class ScoringService
@@ -122,13 +124,19 @@ final class ScoringService
     private function rescoreEmails(array $recipe, int $version): int
     {
         $rows = $this->scores->getUnscoredEmails(self::BATCH_LIMIT);
-        $done = 0;
+        $done   = 0;
+        $subs   = (new EmailSubscriptionRepository(\getDbConnection()))->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
         foreach ($rows as $row) {
             $body = (string)($row['text_body'] ?? '');
             if ($body === '') {
                 $body = strip_tags((string)($row['html_body'] ?? ''));
             }
-            $result = RecipeScorer::score($recipe, (string)($row['subject'] ?? ''), $body, 'email');
+            $subject = (string)($row['subject'] ?? '');
+            $ui      = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
+            if ($body !== '' && !empty($ui['strip_listing_boilerplate'])) {
+                $body = EmailListingBoilerplateStripper::strip($body, $subject !== '' ? $subject : null);
+            }
+            $result = RecipeScorer::score($recipe, $subject, $body, 'email');
             if ($result === null) {
                 continue;
             }
