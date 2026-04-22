@@ -44,8 +44,9 @@ final class EmailSubscriptionRepository
         if ($at === false) {
             return false;
         }
+        $host = substr($from, $at + 1);
 
-        return substr($from, $at + 1) === $domain;
+        return $host === $domain || str_ends_with($host, '.' . $domain);
     }
 
     /**

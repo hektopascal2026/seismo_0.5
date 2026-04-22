@@ -23,6 +23,29 @@ final class EmailSubscriptionRepositoryTest extends TestCase
         ));
     }
 
+    public function testDomainMatchesSubdomainHost(): void
+    {
+        self::assertTrue(EmailSubscriptionRepository::matchesAddress(
+            'news@wirtschaftsnewsletter.blick.ch',
+            'domain',
+            'blick.ch'
+        ));
+        self::assertTrue(EmailSubscriptionRepository::matchesAddress(
+            'list@mail.example.com',
+            'domain',
+            'example.com'
+        ));
+    }
+
+    public function testDomainDoesNotMatchUnrelatedHostSharingSuffix(): void
+    {
+        self::assertFalse(EmailSubscriptionRepository::matchesAddress(
+            'a@notblick.ch',
+            'domain',
+            'blick.ch'
+        ));
+    }
+
     public function testDomainDoesNotMatchOtherDomain(): void
     {
         self::assertFalse(EmailSubscriptionRepository::matchesAddress(

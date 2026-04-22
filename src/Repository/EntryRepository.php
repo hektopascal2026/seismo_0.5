@@ -1366,7 +1366,8 @@ final class EntryRepository
             if ($param === '') {
                 return [];
             }
-            $whereSql = 'LOWER(TRIM(SUBSTRING_INDEX(COALESCE(e.from_email, \'\'), \'@\', -1))) = ?';
+            $hostExpr = 'LOWER(TRIM(SUBSTRING_INDEX(COALESCE(e.from_email, \'\'), \'@\', -1)))';
+            $whereSql  = '(' . $hostExpr . ' = ? OR ' . $hostExpr . ' LIKE CONCAT(\'%.\', ?))';
         }
 
         $table    = getEmailTableName();
@@ -1394,7 +1395,8 @@ final class EntryRepository
 
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$param]);
+            $bind = $matchType === 'email' ? [$param] : [$param, $param];
+            $stmt->execute($bind);
         } catch (PDOException $e) {
             if (PdoMysqlDiagnostics::isMissingTable($e)) {
                 return [];
