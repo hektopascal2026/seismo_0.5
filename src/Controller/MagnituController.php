@@ -311,7 +311,7 @@ final class MagnituController
         $scores = (new EntryScoreRepository($pdo))->getScoreCounts();
         $counts = $export->getEntryCounts();
 
-        self::respondJson([
+        $body = [
             'status'  => 'ok',
             'version' => SEISMO_VERSION,
             'entries' => [
@@ -331,7 +331,15 @@ final class MagnituController
             'last_sync_at'    => ($config->get('last_sync_at') !== null && $config->get('last_sync_at') !== '')
                 ? $config->get('last_sync_at')
                 : null,
-        ]);
+        ];
+        // Optional: satellite / branding (see bootstrap SEISMO_BRAND_ACCENT, seismo-generator).
+        // Magnitu v3 reads this for profile tab colour — must match client contract in sync.py.
+        $accent = seismoBrandAccent();
+        if ($accent !== null && $accent !== '') {
+            $body['accent_color'] = $accent;
+        }
+
+        self::respondJson($body);
     }
 
     // ------------------------------------------------------------------

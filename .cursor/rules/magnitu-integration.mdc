@@ -112,10 +112,12 @@ Seismo supports a **satellite mode** so a second, lightweight Seismo instance ca
     "scores":  {"total": N, "magnitu": N, "recipe": N},
     "recipe_version": <int>,
     "alert_threshold": <float>,
-    "last_sync_at": "<Y-m-d H:i:s>" | null
+    "last_sync_at": "<Y-m-d H:i:s>" | null,
+    "accent_color": "#rrggbb"
   }
   ```
-  **Magnitu v3** `sync.py` (`test_connection`) and `main.py` (`_sync_pull_impl`) consume `status`, `entries.total`, `entries.feed_items`, `entries.emails`, `entries.lex_items`, and **`entries.calendar_events`** (full sync pull). The `entries` object and its per-family keys must stay nested — renaming `entries` or flattening breaks clients. If you are changing `MagnituController::status()`, update the v3 client when counts or keys change.
+  The optional **`accent_color`** (same as `SEISMO_BRAND_ACCENT` in `config.local.php` when set) is for **Magnitu v3** tab theming; omit the key when unset. Magnitu `magnitu/accent_theme.py` validates hex strings.
+  **Magnitu v3** `sync.py` / `main.py` also consume `status`, `entries.total`, per-family `entries.*` keys, and **`entries.calendar_events`** (full sync). Keep the nested `entries` object stable. If you change `MagnituController::status()`, coordinate with the v3 client.
 - **0.4 subscription-based email hiding is NOT ported in 0.5.** v0.4 Magnitu responses filtered emails by `email_subscriptions.show_in_magnitu = 1`. v0.5 exposes every email row. Re-adding the filter is a product decision tracked in `docs/consolidation-plan.md`; do not sneak it back into a repository query without pairing it with a slice entry.
 - When changing Seismo's styleguide or CSS, be aware that **Magnitu v3**'s UI should track the same design system.
 - When adding new entry-source table queries (e.g. a new content type), wrap them with `entryTable()` inside the owning repository so satellites stay in sync. Never do entry-source SQL outside a repository — see `core-plugin-architecture.mdc` ("Repositories return raw data").
