@@ -30,7 +30,7 @@ Wizard steps (eventual, when implemented):
 3. Surface the per-plugin **throttle** (Fedlex 4h, ParlCh 4h, hardcoded in `getMinIntervalSeconds()`). The cron may run every 5 min; `RefreshAllService` will skip plugins inside their throttle window. Throttle skips appear in cron mail (stdout) but not in the diagnostics table.
 4. Validate that the chosen interpreter has the required PHP extensions (cURL, PDO MySQL, **ext-imap** if you use `core:mail` / master cron mail fetch) by running `php -m`.
 
-The web "Refresh all" button (`?action=refresh_all` from Diagnostics) is the manual override — it always passes `force=true` and bypasses throttles.
+The web "Refresh all" button (`?action=refresh_all`, posted from **Settings → Diagnostics** or the Timeline top bar) is the manual override — it always passes `force=true` and bypasses throttles.
 
 ### Wizard could later check
 

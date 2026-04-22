@@ -99,8 +99,8 @@ The runner passes the plugin's own block to `fetch()`. If a plugin outgrows this
 Plugin failures are **user-visible in Settings / diagnostics**, not via alerts or emails:
 
 - `RefreshAllService` records per-run status per plugin: `ok` / `skipped` / `error(message)` + timestamp.
-- The existing settings "feed diagnostics" area (0.5 version lives under the health/diagnostics surface) gets a **plugin status panel** listing every registered plugin with its last run status.
-- A red plugin is a red panel row — not a banner on the dashboard, not email. The admin looks at diagnostics when they suspect something is off.
+- The **Settings → Diagnostics** tab (`?action=settings&tab=diagnostics`) surfaces a **plugin status panel** listing every registered plugin with its last run status (complements `?action=health` for DB/schema checks).
+- A red plugin is a red panel row — not a banner on the dashboard, not email. The admin opens **Settings → Diagnostics** when they suspect something is off.
 - Exceptions are also `error_log`'d with the plugin identifier in the message so server logs remain the source of truth.
 
 ## Plugin registry
@@ -217,14 +217,14 @@ Hard rules:
 
 - **`getMinIntervalSeconds()` is the only throttle source of truth.** Hardcoded per plugin in v0.5 (Fedlex 4h, ParlCh 4h). No Settings UI for tuning until usage shows we need one.
 - **Throttle skips are NOT persisted to `plugin_run_log`.** A 5-minute master cron with N plugins on a 4h throttle would otherwise write `~288·N` rows/day of pure noise. The runner emits `[seismo] plugin <id> skipped: throttled — last successful run is fresher than <N>s.` to stdout (cron mail) instead. Diagnostics computes "next allowed run" from `last_ok + min_interval` against `now()`.
-- **Other skip reasons ARE persisted** (satellite mode, plugin disabled in config) so the diagnostics page reflects them.
+- **Other skip reasons ARE persisted** (satellite mode, plugin disabled in config) so **Settings → Diagnostics** reflects them.
 - **Web routes always pass `force=true`.** `?action=refresh_all` (master) and `?action=refresh_plugin&plugin_id=…` (single-plugin) bypass the throttle because the human is more important than the rate-limit cost. CLI cron always passes `force=false`.
 - **`lastSuccessfulRunAt` only counts `status='ok'`.** Don't use `error` rows to extend the throttle window — a broken upstream gets retried on every cron tick instead of being silenced. Don't write fake `ok` rows to silence a noisy plugin; pause it via `enabled = false` in its config block instead.
 - **CLI-only.** `refresh_cron.php` MUST refuse non-CLI requests (HTTP 403). A browser-discoverable cron URL is a DoS / rate-limit-cost vector.
 - **Satellite is a no-op.** `refresh_cron.php` exits 0 immediately when `isSatellite()` is true; the runner also short-circuits per plugin. Satellites read entries cross-DB from the mothership; they have no upstreams.
 - **`testPlugin($id, $peek)`** calls `fetch()` without persisting. Used by the Diagnostics "Test fetch (no save)" button and never writes a `plugin_run_log` row. Free feature given the no-SQL plugin contract.
 
-When adding a plugin: pick a sensible throttle (most APIs are happy with 4–24h refresh), document it in the plugin's class docblock, and confirm it shows up in `?action=diagnostics` after the first cron tick.
+When adding a plugin: pick a sensible throttle (most APIs are happy with 4–24h refresh), document it in the plugin's class docblock, and confirm it shows up in **Settings → Diagnostics** (`?action=settings&tab=diagnostics`; legacy `?action=diagnostics` redirects) after the first cron tick.
 
 ## When is something Core vs Plugin?
 

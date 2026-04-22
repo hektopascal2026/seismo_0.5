@@ -12,7 +12,7 @@
  * getMinIntervalSeconds() hasn't elapsed since the last successful run are
  * skipped silently (stdout only, no DB row). Anything else — success, error,
  * "satellite mode", "disabled in config" — is persisted to plugin_run_log
- * and visible at ?action=diagnostics.
+ * and visible at Settings → Diagnostics (?action=settings&tab=diagnostics).
  *
  * Hard rules:
  *   - CLI only. A browser-triggered run would be a DoS vector; we refuse.

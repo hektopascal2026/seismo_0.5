@@ -5,7 +5,7 @@
  * @var string $basePath
  * @var string $headerTitle
  * @var string|null $headerSubtitle
- * @var string $activeNav index|filter|about|magnitu|label|feeds|scraper|mail|lex|leg|diagnostics|settings|styleguide
+ * @var string $activeNav index|filter|about|magnitu|label|feeds|scraper|mail|lex|leg|settings|configuration|styleguide
  * @var string $csrfField
  */
 
@@ -38,7 +38,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap">
                         <?= $csrfField ?>
                         <input type="hidden" name="return_action" value="<?= e($timelineRefreshRet) ?>">
-                        <button type="submit" class="top-bar-btn top-bar-btn--text" title="<?= isSatellite() ? 'Fetch all sources on the mothership (remote refresh)' : 'Fetch all sources (same as Diagnostics → Refresh all)' ?>">Refresh</button>
+                        <button type="submit" class="top-bar-btn top-bar-btn--text" title="<?= isSatellite() ? 'Fetch all sources on the mothership (remote refresh)' : 'Fetch all sources (same as Settings → Diagnostics → Refresh all)' ?>">Refresh</button>
                     </form>
                 <?php endif; ?>
                 <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
@@ -63,12 +63,11 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <a href="<?= e($basePath) ?>/index.php?action=mail" class="nav-link<?= $activeNav === 'mail' ? ' active' : '' ?>">Mail</a>
             <a href="<?= e($basePath) ?>/index.php?action=lex" class="nav-link<?= $activeNav === 'lex' ? ' active' : '' ?>">Lex</a>
             <a href="<?= e($basePath) ?>/index.php?action=leg" class="nav-link<?= $activeNav === 'leg' ? ' active' : '' ?>">Leg</a>
-            <a href="<?= e($basePath) ?>/index.php?action=diagnostics" class="nav-link<?= $activeNav === 'diagnostics' ? ' active' : '' ?>">Diagnostics</a>
-            <a href="<?= e($basePath) ?>/index.php?action=setup" class="nav-link<?= $activeNav === 'setup' ? ' active' : '' ?>">Setup</a>
             <a href="<?= e($basePath) ?>/index.php?action=styleguide" class="nav-link<?= $activeNav === 'styleguide' ? ' active' : '' ?>">Styleguide</a>
             <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=settings" class="nav-link<?= $activeNav === 'settings' ? ' active' : '' ?>">Settings</a>
             <?php if (!isSatellite()): ?>
+            <a href="<?= e($basePath) ?>/index.php?action=configuration" class="nav-link<?= $activeNav === 'configuration' ? ' active' : '' ?>">Configuration</a>
             <a href="<?= e($basePath) ?>/index.php?action=about" class="nav-link<?= $activeNav === 'about' ? ' active' : '' ?>">About</a>
             <?php endif; ?>
         </nav>

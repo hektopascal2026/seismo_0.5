@@ -259,7 +259,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 </ul>
 
                 <h3 class="about-subheading">Reliability &amp; diagnostics</h3>
-                <p>Plugin throttles, last run status, and manual test-fetch live under <a href="<?= e($basePath) ?>/index.php?action=diagnostics">Diagnostics</a>. Use that screen when a source stops updating or cron misbehaves.</p>
+                <p>Plugin throttles, last run status, and manual test-fetch live under <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=diagnostics">Settings → Diagnostics</a>. Use that screen when a source stops updating or cron misbehaves.</p>
 
                 <h3 class="about-subheading">Live database snapshot</h3>
                 <?php if ($aboutStats !== null && $scoreCounts !== null): ?>

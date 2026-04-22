@@ -49,7 +49,7 @@ final class PluginRunLogRepository
             if (PdoMysqlDiagnostics::isMissingTable($e)) {
                 // Migration 002 not applied yet — don't take down the refresh,
                 // just emit to the PHP log. Admin will see the missing-table
-                // error on ?action=diagnostics if they open the page.
+                // error on Settings → Diagnostics if they open the page.
                 error_log('Seismo plugin_run_log: ' . $e->getMessage());
 
                 return;

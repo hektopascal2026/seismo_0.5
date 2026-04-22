@@ -28,8 +28,13 @@ $router->register(
     true
 );
 $router->register(
-    'setup',
+    'configuration',
     \Seismo\Controller\SetupController::class . '::show',
+    true
+);
+$router->register(
+    'setup',
+    \Seismo\Controller\SetupController::class . '::redirectLegacySetup',
     true
 );
 $router->register(
@@ -130,7 +135,7 @@ $router->register(
 $router->register(
     'diagnostics',
     \Seismo\Controller\DiagnosticsController::class . '::show',
-    false
+    true
 );
 $router->register(
     'login',
@@ -150,6 +155,21 @@ $router->register(
 $router->register(
     'settings_save',
     \Seismo\Controller\SettingsController::class . '::saveGeneral',
+    false
+);
+$router->register(
+    'settings_generate_migrate_key',
+    \Seismo\Controller\SettingsController::class . '::generateMigrateKey',
+    false
+);
+$router->register(
+    'settings_save_migrate_key',
+    \Seismo\Controller\SettingsController::class . '::saveMigrateKey',
+    false
+);
+$router->register(
+    'settings_save_admin_password',
+    \Seismo\Controller\SettingsController::class . '::saveAdminPassword',
     false
 );
 $router->register(

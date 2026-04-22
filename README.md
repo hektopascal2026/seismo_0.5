@@ -31,7 +31,7 @@ Scraper feeds use **`src/Core/Fetcher/ScraperFetchService.php`** for both **prev
 | Aspect | Behaviour |
 |--------|------------|
 | **Preview (Sources UI)** | POST `scraper_preview` from **`?action=scraper`**. Stateless dry-run: up to **5** successful articles, **no** random delay between page fetches. |
-| **Production** | Core fetcher **`core:scraper`** (Diagnostics refresh, full **Refresh**, **`refresh_cron.php`** via the same refresh pipeline as other core fetchers). Up to **20** articles per scraper **feed** per run. |
+| **Production** | Core fetcher **`core:scraper`** (Settings → Diagnostics refresh, full **Refresh**, **`refresh_cron.php`** via the same refresh pipeline as other core fetchers). Up to **20** articles per scraper **feed** per run. |
 | **Politeness** | In **link-following** mode (non-empty link pattern), a **random 1–3 second** `sleep` runs **before each article fetch after the first**, to reduce the risk of IP blocks. |
 | **HTTP** | Fetches go through **`BaseClient::getWebPage()`** with a **desktop Chrome–style User-Agent** and **browser-like `Accept` / `Accept-Language` headers** (and cURL content encoding where available). |
 | **Row shape** | Each item is normalised for **`FeedItemRepository`**: **`guid`** = article URL (truncated to 500 chars), **`content_hash`** = **`md5()`** of the extracted plain-text **`content`**, so upserts stay idempotent and duplicates are not multiplied by re-fetch. |
@@ -66,7 +66,7 @@ Use these for **LLM briefings**, **n8n**, **Raycast**, or **cron + curl** — th
 
 ### Operations & safety
 
-- **Master refresh** — Web **Refresh** (Timeline or Diagnostics) and **`refresh_cron.php`** share **`RefreshAllService::runAll()`** so cron and the UI stay aligned (plugins + core fetchers + retention hooks as implemented).
+- **Master refresh** — Web **Refresh** (Timeline or **Settings → Diagnostics**) and **`refresh_cron.php`** share **`RefreshAllService::runAll()`** so cron and the UI stay aligned (plugins + core fetchers + retention hooks as implemented).
 - **Retention** — Per-family policies (defaults e.g. 180 days for feeds/mail; Lex/Leg often unlimited); dry-run before destructive prune.
 - **Session auth** — **Off by default** (`SEISMO_ADMIN_PASSWORD_HASH` unset). Turn it on in `config.local.php` when the instance is exposed; Magnitu and export keys stay **Bearer**-based and independent.
 - **Migrations** — Versioned PHP classes under `src/Migration/`; run via CLI `php migrate.php` or **`?action=migrate`** with `SEISMO_MIGRATE_KEY` when SSH is unavailable.
@@ -108,7 +108,7 @@ composer install --no-dev --optimize-autoloader
 ### 2. Configure the database
 
 - Copy **`config.local.php.example`** to **`config.local.php`** and set **`DB_HOST`**, **`DB_NAME`**, **`DB_USER`**, **`DB_PASS`** (and optional **`DB_PORT`**).
-- **First install without a file yet:** open **`?action=setup`** in the browser — it tests credentials, then writes **`config.local.php`** or shows a **copy-paste** block if the directory is not writable (never loosen permissions to `0777`).
+- **First install without a file yet:** open **`?action=configuration`** in the browser — it tests credentials, then writes **`config.local.php`** or shows a **copy-paste** block if the directory is not writable (never loosen permissions to `0777`). Legacy **`?action=setup`** redirects here.
 
 ### 3. Run migrations
 
@@ -150,8 +150,10 @@ After the app runs, seed keys in **`system_config`** (Settings UI **Magnitu** ta
 | `?action=index` | Dashboard / timeline (**Refresh** runs full pipeline). |
 | `?action=health` | DB + schema check (degraded when session auth is on and you are logged out). |
 | `?action=about` | Short product / export overview in the browser. |
-| `?action=diagnostics` | Plugin + core fetcher status, throttles, manual refresh & dry-run test fetch. |
-| `?action=settings` | Global settings (Magnitu, retention, UI defaults). |
+| `?action=settings` | Global settings (Magnitu, **Mail / IMAP** on mothership, retention, satellites, **Diagnostics** tab, **General** tab for migrate key + admin password, UI defaults). |
+| `?action=configuration` | **Mothership:** database probe + starter `config.local.php` (or copy-paste). Public only while `config.local.php` is missing; then same as other pages. Legacy `?action=setup` redirects here. |
+| `?action=settings&tab=diagnostics` | Plugin + core fetcher status, throttles, manual refresh & dry-run test fetch (mothership; last tab under Settings). |
+| `?action=diagnostics` | **Legacy** URL — **303** redirect to `?action=settings&tab=diagnostics`. |
 | `?action=feeds` / `scraper` / `mail` | Module-owned **Items \| Sources** admin pattern. |
 | `?action=lex` / `leg` | Lex and Leg pages with per-source refresh & config. |
 

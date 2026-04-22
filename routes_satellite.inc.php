@@ -4,11 +4,12 @@
  * the Filter view remains registered and reachable by URL but is hidden from the nav on
  * satellites. In-app: highlights, in-app Label training, settings (General + Magnitu), Magnitu
  * Bearer API, remote “refresh mothership” POST, auth, health, migrate.
- * No feeds, Lex/Leg admin, diagnostics UI, retention, exports, or other
+ * No feeds, Lex/Leg admin, Settings → Diagnostics tab, retention, exports, or other
  * mothership-only surfaces.
  *
  * Satellite bundle pruning (seismo-generator) uses `satellite-prune.json` — when
- * adding mothership-only routes, update that manifest so generated uploads stay in sync.
+ * adding mothership-only routes or views (e.g. `settings_save_mail`, Settings → Mail
+ * partial `views/partials/settings_mail.php`), update that manifest so generated uploads stay in sync.
  *
  * @var \Seismo\Http\Router $router
  */
@@ -63,6 +64,21 @@ $router->register(
 $router->register(
     'settings_save',
     \Seismo\Controller\SettingsController::class . '::saveGeneral',
+    false
+);
+$router->register(
+    'settings_generate_migrate_key',
+    \Seismo\Controller\SettingsController::class . '::generateMigrateKey',
+    false
+);
+$router->register(
+    'settings_save_migrate_key',
+    \Seismo\Controller\SettingsController::class . '::saveMigrateKey',
+    false
+);
+$router->register(
+    'settings_save_admin_password',
+    \Seismo\Controller\SettingsController::class . '::saveAdminPassword',
     false
 );
 $router->register(

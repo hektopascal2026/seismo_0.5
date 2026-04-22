@@ -32,7 +32,7 @@ $imapExt = extension_loaded('imap');
         <div class="latest-entries-section">
             <h2 class="section-title">IMAP</h2>
             <p class="admin-intro">
-                Ingestion runs inside Seismo when you use <strong>Diagnostics → Refresh all now</strong> or the mothership’s
+                Ingestion runs inside Seismo when you use <strong>Settings → Diagnostics → Refresh all now</strong> or the mothership’s
                 <code>refresh_cron.php</code> CLI job. Messages are stored in the unified <code>emails</code> table.
                 Newsletter rules and subscriptions stay on the <a href="<?= e($basePath) ?>/index.php?action=mail">Mail</a> page.
             </p>

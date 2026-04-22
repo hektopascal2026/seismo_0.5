@@ -35,7 +35,7 @@ date_default_timezone_set('UTC');
 $__seismoLocalConfig = __DIR__ . '/config.local.php';
 $__webAction         = isset($_GET['action']) && is_string($_GET['action']) ? $_GET['action'] : '';
 $__setupWithoutFile  = PHP_SAPI !== 'cli'
-    && $__webAction === 'setup'
+    && ($__webAction === 'configuration' || $__webAction === 'setup')
     && !is_file($__seismoLocalConfig);
 
 if (!is_file($__seismoLocalConfig)) {
@@ -48,10 +48,10 @@ if (!is_file($__seismoLocalConfig)) {
         header('Content-Type: text/plain; charset=utf-8');
         die(
             "Missing config.local.php — copy config.local.php.example and fill in your database credentials.\n\n"
-            . "First-time install: open index.php?action=setup in your browser to generate a starter file and test the database (Slice 9 setup stub).\n"
+            . "First-time install: open index.php?action=configuration in your browser to generate a starter file and test the database.\n"
         );
     }
-    // Web `?action=setup` with no local config yet — placeholders only until
+    // Web `?action=configuration` (legacy: `setup`) with no local config yet — placeholders only until
     // SetupController writes a real file. Do not call getDbConnection() in this mode.
     define('DB_HOST', 'localhost');
     define('DB_NAME', '');

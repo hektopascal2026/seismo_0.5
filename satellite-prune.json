@@ -10,7 +10,7 @@
     "phpunit.xml.dist",
     "README-REORG.md",
     "views/about.php",
-    "views/diagnostics.php",
+    "views/partials/diagnostics_panel.php",
     "views/feeds.php",
     "views/lex.php",
     "views/leg.php",
@@ -20,6 +20,7 @@
     "views/styleguide.php",
     "views/partials/plugin_recent_runs.php",
     "views/partials/retention_panel.php",
+    "views/partials/settings_mail.php",
     "views/partials/settings_tab_satellites.php",
     "src/Controller/AboutController.php",
     "src/Controller/DiagnosticsController.php",
@@ -46,6 +47,7 @@
       "routes_mothership.inc.php",
       "refresh_cron.php",
       "views/lex.php",
+      "views/partials/settings_mail.php",
       "src/Controller/FeedController.php"
     ],
     "php_lint": [

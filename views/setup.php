@@ -21,7 +21,7 @@ declare(strict_types=1);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Setup — <?= e($headerTitle) ?></title>
+    <title>Configuration — <?= e($headerTitle) ?></title>
     <link rel="stylesheet" href="<?= e($basePath) ?>/assets/css/style.css">
     <?php if (!empty($accent)): ?>
     <style>:root { --seismo-accent: <?= e((string)$accent) ?>; }</style>
@@ -43,10 +43,14 @@ declare(strict_types=1);
         <div class="setup-content">
             <h1>Configuration helper</h1>
             <p class="admin-intro">
-                This stub (Slice&nbsp;9) tests your database credentials and builds a starter
-                <code>config.local.php</code>. If PHP cannot write to the install directory — common on shared hosting —
+                Tests your database credentials and builds a starter <code>config.local.php</code>.
+                If PHP cannot write to the install directory — common on shared hosting —
                 you will get a <strong>copy-and-paste</strong> block instead; save it via File Manager or SFTP.
                 Never use <code>chmod 0777</code> and never write secrets to <code>/tmp</code>.
+            </p>
+            <p class="admin-intro">
+                After <code>config.local.php</code> is in place and the app loads, set the <strong>web migration key</strong>
+                and optional <strong>session admin password</strong> under <strong>Settings → General</strong>.
             </p>
 
             <?php if ($formError !== null && $formError !== ''): ?>
@@ -100,7 +104,7 @@ declare(strict_types=1);
             <?php endif; ?>
 
             <h2>Database</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=setup" class="admin-form-card">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=configuration" class="admin-form-card">
                 <?= $csrfField ?>
                 <div class="admin-form-field">
                     <label>Host<br><input type="text" name="db_host" value="<?= e($old['db_host']) ?>" class="search-input" style="width:100%; max-width:28rem;"></label>
@@ -116,16 +120,6 @@ declare(strict_types=1);
                 </div>
                 <div class="admin-form-field">
                     <label>Password<br><input type="password" name="db_pass" value="<?= e($old['db_pass']) ?>" autocomplete="current-password" class="search-input" style="width:100%; max-width:28rem;"></label>
-                </div>
-
-                <h2>Optional</h2>
-                <div class="admin-form-field">
-                    <label><code>SEISMO_MIGRATE_KEY</code> (browser migrations)<br>
-                        <input type="text" name="migrate_key" value="<?= e($old['migrate_key']) ?>" class="search-input" style="width:100%; max-width:28rem;" placeholder="long random secret or leave blank"></label>
-                </div>
-                <div class="admin-form-field">
-                    <label>Admin password (stores <code>password_hash</code> only; leave blank to keep auth off)<br>
-                        <input type="password" name="admin_password" value="" class="search-input" style="width:100%; max-width:28rem;" autocomplete="new-password"></label>
                 </div>
 
                 <div class="admin-form-actions">

@@ -183,7 +183,7 @@ if (!function_exists('seismo_format_utc')) {
     /**
      * Format a UTC `DateTimeImmutable` in local (Zurich) time for view display.
      *
-     * Single entry point used by the Lex, Leg, and Diagnostics pages — keeps
+     * Single entry point used by the Lex, Leg, and Settings → Diagnostics UI — keeps
      * the "views are the only layer that converts to local time" rule in one
      * place. Uses {@see seismo_view_timezone()} (SEISMO_VIEW_TIMEZONE).
      */

@@ -1,9 +1,9 @@
 <?php
 /**
- * Per-plugin "Recent runs" collapsible table (Diagnostics page).
+ * Per-plugin "Recent runs" collapsible table (Settings → Diagnostics).
  *
  * Rendered once per plugin card (core and third-party) from
- * `views/diagnostics.php`. Extracted as a partial to keep the two
+ * `views/partials/diagnostics_panel.php`. Extracted as a partial to keep the two
  * otherwise-identical 30-line blocks in one place, matching the
  * partials pattern introduced in Slice 6.
  *

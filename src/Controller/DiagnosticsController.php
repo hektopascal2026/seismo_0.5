@@ -31,6 +31,9 @@ use Seismo\Service\RefreshAllService;
  * All POST endpoints require CSRF and run behind AuthGate (router enforces it
  * because `diagnostics`, `refresh_all`, `refresh_plugin`, `plugin_test` are
  * NOT on the AuthGate public whitelist).
+ *
+ * The diagnostics UI lives under **Settings → Diagnostics** (`?action=settings&tab=diagnostics`).
+ * {@see self::show()} redirects legacy `?action=diagnostics` bookmarks.
  */
 final class DiagnosticsController
 {
@@ -38,6 +41,24 @@ final class DiagnosticsController
     private const KEY_LAST_REFRESH_AT = 'last_refresh_at';
 
     public function show(): void
+    {
+        header('Location: ' . getBasePath() . '/index.php?action=settings&tab=diagnostics', true, 303);
+        exit;
+    }
+
+    /**
+     * Build view variables for {@see SettingsController} when `tab=diagnostics`.
+     * Consumes and clears {@see $_SESSION} `plugin_test_result` (one-shot peek).
+     *
+     * @return array{
+     *   diagStatus: array<string, array<string, mixed>>,
+     *   diagCoreStatus: array<string, array<string, mixed>>,
+     *   diagLoadError: ?string,
+     *   diagTestResult: ?array{id: string, count: int, error: ?string, items: list<array<string, mixed>>},
+     *   diagRunHistory: array<string, list<array{run_at: \DateTimeImmutable, status: string, item_count: int, error_message: ?string, duration_ms: int}>>,
+     * }
+     */
+    public static function prepareViewData(): array
     {
         $registry = new PluginRegistry();
         $plugins  = $registry->all();
@@ -111,17 +132,16 @@ final class DiagnosticsController
             ];
         }
 
-        // Keep `diagnostics` registered as NOT read-only so this unset persists
-        // (read-only routes call session_write_close() before the controller runs).
         $testResult = $_SESSION['plugin_test_result'] ?? null;
         unset($_SESSION['plugin_test_result']);
 
-        $basePath  = getBasePath();
-        $satellite = isSatellite();
-        $csrfField = CsrfToken::field();
-
-        require_once SEISMO_ROOT . '/views/helpers.php';
-        require SEISMO_ROOT . '/views/diagnostics.php';
+        return [
+            'diagStatus'     => $status,
+            'diagCoreStatus' => $coreStatus,
+            'diagLoadError'  => $loadError,
+            'diagTestResult' => is_array($testResult) ? $testResult : null,
+            'diagRunHistory' => $runHistory,
+        ];
     }
 
     public function refreshAll(): void
@@ -371,20 +391,27 @@ final class DiagnosticsController
             return 'filter';
         }
 
-        return 'diagnostics';
+        return 'settings_diagnostics';
     }
 
     private function redirectToTarget(string $action): void
     {
-        $targets = ['index', 'filter', 'diagnostics'];
-        $a       = in_array($action, $targets, true) ? $action : 'diagnostics';
-        header('Location: ' . getBasePath() . '/index.php?action=' . rawurlencode($a), true, 303);
+        $bp = getBasePath();
+        if ($action === 'index') {
+            header('Location: ' . $bp . '/index.php?action=index', true, 303);
+            exit;
+        }
+        if ($action === 'filter') {
+            header('Location: ' . $bp . '/index.php?action=filter', true, 303);
+            exit;
+        }
+        header('Location: ' . $bp . '/index.php?action=settings&tab=diagnostics', true, 303);
         exit;
     }
 
     private function redirectToDiagnostics(): void
     {
-        header('Location: ' . getBasePath() . '/index.php?action=diagnostics', true, 303);
+        header('Location: ' . getBasePath() . '/index.php?action=settings&tab=diagnostics', true, 303);
         exit;
     }
 }

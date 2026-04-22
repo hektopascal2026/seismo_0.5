@@ -109,7 +109,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 - **Leg** ported (ParlCh plugin under `src/Plugin/ParlCh/`) with `CalendarEventRepository` (transactional `upsertBatch`, satellite guards) and `CalendarConfigStore` (`calendar_config.json` mutable per deploy, `calendar_config.example.json` committed). `?action=leg` and legacy `?action=calendar` both resolve to `LegController::show`.
 - **Auth backbone (dormant by default).** `Seismo\Http\AuthGate`, `Seismo\Controller\AuthController`, `views/login.php`, `SEISMO_ADMIN_PASSWORD_HASH` switch in `config.local.php.example`. No behaviour change unless the admin opts in. See `auth-dormant-by-default.mdc`. `HealthController` degrades when auth is enabled and the visitor isn't logged in (DB status only, no PHP/MySQL versions).
 - **CSRF on every mutating POST.** `Seismo\Http\CsrfToken` (single rotating session-bound token, single-use rotation on success). Wired into: `toggle_favourite`, `refresh_fedlex`, `save_lex_ch`, `refresh_parl_ch`, `save_leg_parl_ch`, `refresh_all`, `refresh_plugin`, `plugin_test`, `login`, `logout`. Tokens render as `<?= CsrfToken::field() ?>`. Tokens are still emitted (and harmless) when auth is dormant.
-- **Diagnostics page.** New `?action=diagnostics` (under AuthGate). Lists every registered plugin with its latest `plugin_run_log` row, throttle interval, and "next allowed run" timestamp. Per-plugin **Refresh now** (force=true) and **Test fetch (no save)** buttons; master **Refresh all now** button. Test result peek (first 5 rows) returned as a one-shot session flash.
+- **Diagnostics (Settings tab).** **`?action=settings&tab=diagnostics`** on the mothership (under AuthGate). Legacy **`?action=diagnostics`** **303-redirects** here. Lists every registered plugin with its latest `plugin_run_log` row, throttle interval, and "next allowed run" timestamp. Per-plugin **Refresh now** (force=true) and **Test fetch (no save)** buttons; master **Refresh all now** button. Test result peek (first 5 rows) returned as a one-shot session flash.
 - **Definition of done — met.** `refresh_cron.php` and `?action=refresh_all` execute the same `RefreshAllService::runAll()`; Leg is included in both; a failing plugin logs to `plugin_run_log` and shows red in diagnostics while the rest of the pipeline keeps running; `SEISMO_ADMIN_PASSWORD_HASH` toggles login on/off; plugin **Test fetch** button shows first 5 items of a dry-run fetch; **all mutating POSTs require a valid CSRF token** regardless of auth state.
 
 ### Slice 4 — Remaining entry sources — **shipped**
@@ -154,7 +154,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 **Scope-fidelity notes for Slice 5a (per `slice-scope-fidelity.mdc`):**
 
 - **JSON sidecars are renamed, not deleted.** Migration 005 renames `lex_config.json` → `lex_config.json.migrated-v21` (same for calendar) so the admin keeps an on-disk sample to diff against the folded rows. Deletion is left to the admin; not speculative.
-- **Retention UI (state at 5a ship):** standalone `?action=retention` page, linked from Diagnostics. **Slice 6** folds this into `?action=settings&tab=retention`; GET `?action=retention` redirects there.
+- **Retention UI (state at 5a ship):** standalone `?action=retention` page, linked from the (then standalone) diagnostics surface. **Slice 6** folds this into `?action=settings&tab=retention`; GET `?action=retention` redirects there. **Later:** diagnostics itself moves to **`?action=settings&tab=diagnostics`** (see `README-REORG.md`).
 - **Preview / actual consistency is enforced by construction.** Every family repo routes both `prune()` and `dryRunPrune()` through a private `buildPruneWhere()` that pulls the keep-fragment from `RetentionPredicates::forEntryType()`. The two queries cannot diverge modulo rows inserted between the two calls.
 - `**MagnituConfigRepository` is deleted outright, not kept as a deprecated shim.** Every callsite in 0.5 has been renamed to `SystemConfigRepository`. The brief deploy-gap fallback from `system_config` to `magnitu_config` in `SystemConfigRepository::get()/set()` existed until **Slice 6**, which removed it — only `system_config` is used now (schema ≥ 21).
 - `**jus_banned_words` is stored under `lex:jus_banned_words`, not `plugin:jus_banned_words`.** It is a shared filter list, not a plugin block — routing it differently keeps `SystemConfigRepository::getAllPluginBlocks()` honest.
@@ -164,10 +164,10 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 - **Unified settings.** `?action=settings` with tabs **General** (default dashboard page size → `system_config` key `ui:dashboard_limit`) and **Retention** (embedded `views/partials/retention_panel.php`). POST `?action=settings_save` (CSRF).
 - **Retention URL.** GET `?action=retention` redirects to `?action=settings&tab=retention`; POST handlers unchanged. Standalone `views/retention.php` removed.
-- **Navigation drawer** (`views/partials/site_header.php`) on dashboard, Lex, Leg, Feeds, Scraper, Mail, About, Diagnostics, Setup, Settings, Styleguide — links use `getBasePath()`.
+- **Navigation drawer** (`views/partials/site_header.php`) on dashboard, Lex, Leg, Feeds, Scraper, Mail, About, Setup, Settings, Styleguide — links use `getBasePath()`. (**Diagnostics** is **Settings → Diagnostics**, not a top-level drawer item.)
 - **View timezone** — `SEISMO_VIEW_TIMEZONE` (default `Europe/Zurich`); `seismo_view_timezone()`; day headings + `seismo_format_utc()` use it.
 - `**SystemConfigRepository`** — legacy `magnitu_config` fallback **removed** (requires `system_config` / schema ≥ 21). `MigrationRunner::getCurrentVersion()` probes `magnitu_config` one last time and throws a clear RuntimeException if a pre-v21 schema is detected, so a deploy that skips Slice 5a fails loudly instead of re-running migrations against a populated database.
-- **Diagnostics** — last **8** runs per core/plugin from `plugin_run_log` in a single batch query (`PluginRunLogRepository::recentForPlugins()` — one round-trip via per-id `UNION ALL` legs); renders through `views/partials/plugin_recent_runs.php`.
+- **Diagnostics** — last **8** runs per core/plugin from `plugin_run_log` in a single batch query (`PluginRunLogRepository::recentForPlugins()` — one round-trip via per-id `UNION ALL` legs); renders through `views/partials/plugin_recent_runs.php` (embedded in **`views/partials/diagnostics_panel.php`** under **Settings → Diagnostics** today).
 - **Filter pills** — ~60s session cache for the three `SELECT DISTINCT` queries lives in `DashboardController` (not the repository, to keep `EntryRepository` SQL-only). Falls through to the raw repo call when the session isn't active.
 - `**?action=styleguide`** — minimal design reference page.
 - **Definition of done — met.** Gemini spot-check PASS (2026) plus follow-up remediation: filter-pill cache moved out of the repository, diagnostics batch query, `MigrationRunner` legacy-schema guard, `?action=retention` dropped from the readonly-session list (pure redirect since this slice), diagnostics `<details>` block extracted to a partial, `RetentionService::DEFAULT_POLICIES` adopted as SSoT for `$families` in `SettingsController`.
@@ -225,7 +225,7 @@ Port 0.4.4's **Module-owned management UI** pattern. Each content module keeps i
 
 - All mutating POSTs: `CsrfToken` + session auth (AuthGate) + satellite-refuse at the repository level (defence in depth per `core-plugin-architecture.mdc`).
 - Routes registered in `index.php`; read-only GETs flagged; `READONLY_KEEP_SESSION_FOR_CSRF` updated if the toggled views render forms on GET.
-- Per-module "Refresh now" lives on Diagnostics (already shipped Slice 3/6) — not duplicated onto the new admin tabs.
+- Per-module "Refresh now" lives on **Settings → Diagnostics** (already shipped Slice 3/6; URL `?action=settings&tab=diagnostics`) — not duplicated onto the new admin tabs.
 
 **Explicitly out of Slice 8:**
 
@@ -340,7 +340,7 @@ Recorded here so they don't get re-litigated:
 
 - **Dashboard filter pills:** ~~`EntryRepository::getFilterPillOptions()` runs three `SELECT DISTINCT` queries per request~~ — **Slice 6** adds a ~60s session cache for the merged options array. Cache lives in `DashboardController::getFilterPillOptionsCached()`; the repository method is still pure-SQL.
 - **Scraper / feed_items sort churn:** `FeedItemRepository::upsertFeedItems()` keeps the existing `published_date` when `content_hash` is unchanged so scraper re-runs do not float stale pages to the top of the dashboard.
-- **Diagnostics parity:** Core fetchers have per-id “Refresh now” on `?action=diagnostics` (same POST as plugins). A “Test fetch (no save)” path for RSS/scraper/mail is still deferred — not part of the `SourceFetcherInterface` test shape.
+- **Diagnostics parity:** Core fetchers have per-id “Refresh now” on **`?action=settings&tab=diagnostics`** (same POST as plugins). A “Test fetch (no save)” path for RSS/scraper/mail is still deferred — not part of the `SourceFetcherInterface` test shape.
 
 ## Open Decisions / Future Polish
 

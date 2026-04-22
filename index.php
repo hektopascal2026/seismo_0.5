@@ -54,8 +54,10 @@ $action = $__action;
 if ($action === 'login' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $router->register('login', \Seismo\Controller\AuthController::class . '::handleLogin', false);
 }
-if (!isSatellite() && $action === 'setup' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    $router->register('setup', \Seismo\Controller\SetupController::class . '::handlePost', false);
+if (!isSatellite()
+    && ($action === 'configuration' || $action === 'setup')
+    && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $router->register($action, \Seismo\Controller\SetupController::class . '::handlePost', false);
 }
 
 // Dormant-by-default auth gate — runs before dispatch. When

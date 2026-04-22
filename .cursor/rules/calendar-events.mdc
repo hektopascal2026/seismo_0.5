@@ -18,7 +18,7 @@ Events are treated like entries — scored by the recipe engine and **Magnitu v3
 - **Plugin (fetcher):** `Seismo\Plugin\ParlCh\ParlChPlugin` (`src/Plugin/ParlCh/ParlChPlugin.php`) — implements `SourceFetcherInterface`, **no SQL**. Returns normalised arrays for the `calendar_event` family.
 - **Repository:** `Seismo\Repository\CalendarEventRepository` (`src/Repository/CalendarEventRepository.php`) — the only place `calendar_events` SQL lives. `entryTable('calendar_events')` everywhere. Transactional `upsertBatch()`. `prune()` is a no-op (Leg unlimited per default retention policy). `upsertBatch()` / `prune()` throw if `isSatellite()`.
 - **Config:** `calendar_config.json` next to `bootstrap.php` (gitignored; `calendar_config.example.json` is the committed shape), read/written by `Seismo\Config\CalendarConfigStore`. Plugin blocks keyed by `SourceFetcherInterface::getConfigKey()`.
-- **Settings surface:** In 0.5, per-plugin settings are rendered inline on the Leg page (`views/leg.php`) and Diagnostics page. No separate settings page ported yet — the 0.4 `?action=settings&tab=leg` tab graduates in a later slice if still needed.
+- **Settings surface:** In 0.5, per-plugin settings are rendered inline on the Leg page (`views/leg.php`). Operational plugin/core status lives under **Settings → Diagnostics** (`?action=settings&tab=diagnostics`). No separate Leg-only settings tab ported yet — the 0.4 `?action=settings&tab=leg` tab graduates in a later slice if still needed.
 
 ## Data sources
 

@@ -1,8 +1,8 @@
 <?php
 /**
- * Settings — tabs: General, Magnitu, Mail (mothership), Retention, Satellites.
+ * Settings — tabs: General, Magnitu, Mail (mothership), Retention, Satellites, Diagnostics.
  *
- * @var string $tab 'general'|'magnitu'|'mail'|'retention'|'satellite'
+ * @var string $tab 'general'|'magnitu'|'mail'|'retention'|'satellite'|'diagnostics'
  * @var string $csrfField
  * @var string $basePath
  * @var int $dashboardLimitSaved
@@ -22,6 +22,17 @@
  * @var string $satellitesHighlightSlug
  * @var array<string, string|null> $mailConfig
  * @var bool $mailPasswordOnFile
+ * @var array<string, array<string, mixed>> $diagStatus
+ * @var array<string, array<string, mixed>> $diagCoreStatus
+ * @var ?string $diagLoadError
+ * @var ?array{id: string, count: int, error: ?string, items: list<array<string, mixed>>} $diagTestResult
+ * @var array<string, list<array{run_at: \DateTimeImmutable, status: string, item_count: int, error_message: ?string, duration_ms: int}>> $diagRunHistory
+ * @var bool $migrateKeyConfigured
+ * @var bool $configLocalWritable
+ * @var ?string $pendingMigrateKey
+ * @var ?string $migrateKeyPasteBlock
+ * @var ?string $adminPasswordPasteBlock
+ * @var bool $sessionAuthEnabled
  */
 
 declare(strict_types=1);
@@ -34,7 +45,7 @@ $accent = seismoBrandAccent();
 $headerTitle = 'Settings';
 $headerSubtitle = $satellite
     ? 'General & Magnitu (satellite)'
-    : 'Preferences, Magnitu, mail, retention & satellites';
+    : 'Preferences, Magnitu, mail, retention, satellites & diagnostics';
 $activeNav = 'settings';
 $dashboardLimitMax = \Seismo\Repository\EntryRepository::MAX_LIMIT;
 
@@ -75,6 +86,7 @@ $tabQs = static function (string $t) use ($basePath): string {
             <a href="<?= e($tabQs('mail')) ?>" class="<?= $tab === 'mail' ? 'active' : '' ?>">Mail</a>
             <a href="<?= e($tabQs('retention')) ?>" class="<?= $tab === 'retention' ? 'active' : '' ?>">Retention</a>
             <a href="<?= e($tabQs('satellite')) ?>" class="<?= $tab === 'satellite' ? 'active' : '' ?>">Satellites</a>
+            <a href="<?= e($tabQs('diagnostics')) ?>" class="<?= $tab === 'diagnostics' ? 'active' : '' ?>">Diagnostics</a>
             <?php endif; ?>
         </nav>
 
@@ -95,6 +107,11 @@ $tabQs = static function (string $t) use ($basePath): string {
                 <div class="message message-error"><?= e($pageError) ?></div>
             <?php endif; ?>
             <?php require __DIR__ . '/partials/settings_tab_satellites.php'; ?>
+        <?php elseif ($tab === 'diagnostics'): ?>
+            <?php if ($pageError !== null): ?>
+                <div class="message message-error"><?= e($pageError) ?></div>
+            <?php endif; ?>
+            <?php require __DIR__ . '/partials/diagnostics_panel.php'; ?>
         <?php else: ?>
             <?php if ($pageError !== null): ?>
                 <div class="message message-error"><?= e($pageError) ?></div>

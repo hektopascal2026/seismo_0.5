@@ -75,7 +75,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
         <?php endif; ?>
 
         <p class="message message-info">
-            <strong>Lex refresh:</strong> EU (<code>lex_eu</code>), Swiss Fedlex (<code>fedlex</code>), Germany (<code>recht_bund</code>), and France (<code>legifrance</code>) run from this page or from <a href="<?= e($basePath) ?>/index.php?action=diagnostics">Diagnostics</a> / cron (<code>Refresh all</code>).
+            <strong>Lex refresh:</strong> EU (<code>lex_eu</code>), Swiss Fedlex (<code>fedlex</code>), Germany (<code>recht_bund</code>), and France (<code>legifrance</code>) run from this page or from <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=diagnostics">Settings → Diagnostics</a> / cron (<code>Refresh all</code>).
             <strong>Parlament Medien</strong> (press) are <code>feed_items</code> — configure <code>parl_press</code> on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.
         </p>
 

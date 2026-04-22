@@ -9,6 +9,18 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Settings — Diagnostics tab (mothership UX)
+
+**Why.** A top-level **Diagnostics** drawer item sat awkwardly next to content modules (Lex, Leg, Feeds). Operators already open **Settings** for retention, mail, Magnitu, and satellites — plugin/core run status belongs in the same shell.
+
+**What moved.** Standalone `views/diagnostics.php` **removed**. UI lives in `views/partials/diagnostics_panel.php`, included from `views/settings.php` when `tab=diagnostics` (last tab after **Satellites**). `DiagnosticsController::prepareViewData()` supplies `SettingsController`; `DiagnosticsController::show()` **303-redirects** `?action=diagnostics` → `?action=settings&tab=diagnostics`. POST handlers (`refresh_all`, `refresh_plugin`, `plugin_test`) redirect back to the settings tab when no `return_action` is posted. `views/partials/site_header.php` — Diagnostics removed from the drawer. `satellite-prune.json` — prune `diagnostics_panel.php` (satellites have no Diagnostics tab). `routes_mothership.inc.php` — `diagnostics` registered **read-only** (redirect only).
+
+**New wiring.** Canonical URL: **`?action=settings&tab=diagnostics`**. Bookmarks to `?action=diagnostics` keep working.
+
+**Gotchas.** Slice 3 / 6 entries below still describe history at ship time where noted; this entry is the **current** surface. Historical gotcha “`diagnostics` not read-only for session unset” is **superseded**: the flash is consumed when the Diagnostics **settings** tab renders (`settings` stays in `Router::READONLY_KEEP_SESSION_FOR_CSRF`).
+
+---
+
 ## In-app About page (product copy + 0.4 history)
 
 **Why.** The developer README is now the primary onboarding doc; the running-site **About** should match the same product story and preserve the narrative operators knew from **0.4** (including Magnitu milestones and what moved in consolidation).
@@ -49,7 +61,7 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 **What moved.** `src/Service/CoreRunner.php` — `deleteAlienParlPressFeedItems()` now runs **before every** `parl_press` fetch, not only when `force=true` (web “Refresh all”); `refresh_cron.php` therefore removes legacy GUIDs that are not `parl_mm:` / `parl_sda:` on the same schedule as mothership ingest. `src/Core/Fetcher/ParlPressFetchService.php` — **`resolveParlPressSlug()`** falls back to the **`FileRef`** basename when **`Title`** is empty or a SharePoint placeholder; items whose resolved display title is still meaningless are **skipped** so corrupt `parl_mm:Untitled` rows are not written.
 
-**Gotchas.** After deploy, trigger **one** successful `core:parl_press` run (cron or Diagnostics / Timeline refresh); junk rows disappear on pre-clean, then the SharePoint list repopulates with proper titles.
+**Gotchas.** After deploy, trigger **one** successful `core:parl_press` run (cron or Settings → Diagnostics / Timeline refresh); junk rows disappear on pre-clean, then the SharePoint list repopulates with proper titles.
 
 ---
 
@@ -77,13 +89,13 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 **Why.** Operators needed a one-click refresh from the Timeline, an in-app explanation of sources and exports for non-developers, and an honest first-run path when `config.local.php` cannot be written by PHP. The 0.4 “AI view” must not disappear without a documented replacement.
 
-**What moved.** `views/partials/site_header.php` — Timeline **Refresh** POSTs to `?action=refresh_all` with CSRF + hidden `return_action=index` (only when `$showTimelineRefresh` is set from `DashboardController::show()`). `DiagnosticsController::refreshAll()` / shared POST guard redirect to `index` when that field is present, else Diagnostics. `AboutController` + `views/about.php` + `?action=about` + drawer link. `SetupController` + `views/setup.php` + `?action=setup` (GET read-only handler + POST overlay in `index.php` like `login`). `bootstrap.php` — missing `config.local.php` on **web** `?action=setup` only: define placeholder `DB_*`, skip `require`; other missing-config requests stay **503** with a pointer to `?action=setup`. `AuthGate::check()` — allow `setup` without session login **only** while the local config file is absent. `docs/consolidation-plan.md` — `ai_view` open decision marked resolved. `docs/setup-wizard-notes.md` — Slice 9 operational notes appended.
+**What moved.** `views/partials/site_header.php` — Timeline **Refresh** POSTs to `?action=refresh_all` with CSRF + hidden `return_action=index` (only when `$showTimelineRefresh` is set from `DashboardController::show()`). `DiagnosticsController::refreshAll()` / shared POST guard redirect to `index` when that field is present, else **Settings → Diagnostics**. `AboutController` + `views/about.php` + `?action=about` + drawer link. `SetupController` + `views/setup.php` + `?action=setup` (GET read-only handler + POST overlay in `index.php` like `login`). `bootstrap.php` — missing `config.local.php` on **web** `?action=setup` only: define placeholder `DB_*`, skip `require`; other missing-config requests stay **503** with a pointer to `?action=setup`. `AuthGate::check()` — allow `setup` without session login **only** while the local config file is absent. `docs/consolidation-plan.md` — `ai_view` open decision marked resolved. `docs/setup-wizard-notes.md` — Slice 9 operational notes appended.
 
 **New wiring.** `GET ?action=about` → `AboutController::show()`. `GET ?action=setup` → `SetupController::show()`; `POST ?action=setup` → `SetupController::handlePost()` (CSRF, PDO test, `file_put_contents` or copy-paste + Health link). Successful write → **303** to `?action=health`.
 
 **Test URLs.**
 
-- `?action=index` — **Refresh** in the top bar POSTs `refresh_all` with CSRF; expect a success flash on return to the Timeline (same behaviour as Diagnostics “Refresh all”, including satellite skip semantics).
+- `?action=index` — **Refresh** in the top bar POSTs `refresh_all` with CSRF; expect a success flash on return to the Timeline (same behaviour as **Settings → Diagnostics** “Refresh all”, including satellite skip semantics).
 - `?action=about` — product overview + export API as **0.4 AI view** replacement.
 - `?action=setup` — on a clone with `config.local.php` removed/renamed, form loads; submit valid DB credentials → green connection line, then either file written or copy-paste + **Health** link; never silent failure.
 
@@ -105,7 +117,7 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ## Core mail — in-process IMAP (`core:mail`)
 
-**Why.** Slice 4 left `core:mail` as a stub (“use CLI mail cron”). Master cron and Diagnostics **Refresh** must fetch into unified `emails` when IMAP is configured.
+**Why.** Slice 4 left `core:mail` as a stub (“use CLI mail cron”). Master cron and **Settings → Diagnostics** **Refresh** must fetch into unified `emails` when IMAP is configured.
 
 **What moved.** `src/Core/Fetcher/ImapMailFetchService.php` (IMAP connect, `imap_search`, MIME walk, optional `\\Seen` after persist), `src/Repository/EmailIngestRepository.php` (`upsertImapBatch` into `emails` via `entryTable()`), `CoreRunner::runMail()` + `RefreshAllService::boot()` wiring. `PluginRunResult::skipped()` gains an optional second flag to suppress `plugin_run_log` rows on cron when IMAP is absent (avoids log spam).
 
@@ -171,7 +183,7 @@ POST ?action=save_lex_eu | save_lex_ch | save_lex_de | save_lex_fr
 - After saving EU credentials defaults, **Refresh EUR-Lex** — flash reports row count; list shows `source=eu` when the EU pill is enabled.
 - **Refresh recht.bund** — requires a valid `https://www.recht.bund.de/...` RSS URL in `plugin:de`.
 - **Refresh Légifrance** — requires real PISTE `client_id` / `client_secret` and CGU subscription; leave secret blank on save to retain the previous secret.
-- `?action=diagnostics` — `lex_eu`, `recht_bund`, `legifrance` appear in the plugin table with throttle metadata from `getMinIntervalSeconds()`.
+- `?action=settings&tab=diagnostics` — `lex_eu`, `recht_bund`, `legifrance` appear in the plugin table with throttle metadata from `getMinIntervalSeconds()`.
 
 ---
 
@@ -233,12 +245,12 @@ all three redirect 303 → ?action=settings&tab=magnitu (flash via $_SESSION)
 |---|---|
 | Settings shell | `Seismo\Controller\SettingsController` — `?action=settings` with `tab=general\|retention`. General tab saves `ui:dashboard_limit` (1–200) via POST `?action=settings_save` (CSRF). Retention tab embeds `views/partials/retention_panel.php` (same policy grid + prune button as before). |
 | Retention URL | GET `?action=retention` **303-redirects** to `?action=settings&tab=retention`. POST handlers (`retention_preview`, `retention_save`, `retention_prune`) unchanged; they redirect back to the settings tab. Standalone `views/retention.php` **removed** — content lives in partials only. |
-| Navigation | `views/partials/site_header.php` — menu button toggles `.nav-drawer` (CSS already in `assets/css/style.css`). Links use `getBasePath()`: Timeline, Lex, Leg, Diagnostics, Settings, Styleguide. Included from `views/index.php`, `lex.php`, `leg.php`, `diagnostics.php`, `settings.php`, `styleguide.php`. |
+| Navigation | `views/partials/site_header.php` — menu button toggles `.nav-drawer` (CSS already in `assets/css/style.css`); links use `getBasePath()`. **Diagnostics** is **Settings → Diagnostics** today (not a top-level drawer item). |
 | Dashboard default limit | `DashboardController` resolves default `?limit=` when absent from `system_config` key `ui:dashboard_limit` via `SettingsController::KEY_DASHBOARD_LIMIT`; fallback **30** (`DEFAULT_LIMIT_FALLBACK`). |
 | View timezone | `SEISMO_VIEW_TIMEZONE` default in `bootstrap.php` (`Europe/Zurich`); optional override in `config.local.php`. `seismo_view_timezone()` in `bootstrap.php`. `views/helpers.php`: `seismo_magnitu_day_heading()` and `seismo_format_utc()` use it; `views/leg.php` “today” line uses it. |
 | SystemConfigRepository | Legacy **`magnitu_config` fallback removed** — only `system_config` is queried. Deployments must have Migration 005 applied (schema ≥ 21). `MigrationRunner.php` docblock updated accordingly. |
 | Filter pill cache | `DashboardController::getFilterPillOptionsCached()` memoises the output of `EntryRepository::getFilterPillOptions()` in `$_SESSION` for **60 seconds** when a session is active. The repository method itself stays SQL-only; review moved the session cache up one layer so the `EntryRepository` contract didn't grow a hidden `$_SESSION` dependency. |
-| Diagnostics | `DiagnosticsController` issues one batch query via `PluginRunLogRepository::recentForPlugins($ids, 8)` — a single round-trip with per-id `UNION ALL` legs that ride the `(plugin_id, run_at)` index, replacing the initial N+1 loop. `views/diagnostics.php` renders a **Recent runs** `<details>` block per row, delegating the inner markup to `views/partials/plugin_recent_runs.php` so the core and plugin loops no longer duplicate the same 30-line table. |
+| Diagnostics | `DiagnosticsController` issues one batch query via `PluginRunLogRepository::recentForPlugins($ids, 8)` — a single round-trip with per-id `UNION ALL` legs that ride the `(plugin_id, run_at)` index, replacing the initial N+1 loop. **Current UI:** `views/partials/diagnostics_panel.php` under **Settings → Diagnostics**; **Recent runs** `<details>` per row via `views/partials/plugin_recent_runs.php`. (At Slice 6 ship this lived in standalone `views/diagnostics.php`.) |
 | Migration safety | `MigrationRunner::getCurrentVersion()` keeps a one-off probe against `magnitu_config` purely as a **safety net**: on a hit it refuses to run and instructs the admin to deploy Slice 5a first and apply Migration 005. Prevents an admin who skips Slice 5a from silently re-running Migrations 001..004 against a populated database once the `SystemConfigRepository` fallback is gone. |
 | Styleguide | `Seismo\Controller\StyleguideController` + `views/styleguide.php` — `?action=styleguide`, minimal tokens/buttons/card sample for Magnitu alignment. |
 | Router | `index.php` registers `settings`, `settings_save`, `styleguide`. `Seismo\Http\Router::READONLY_KEEP_SESSION_FOR_CSRF` includes `settings` and `styleguide`. |
@@ -259,7 +271,7 @@ Dashboard GET ?action=index (no limit) → DashboardController::resolveDefaultLi
 
 - **`magnitu_config` fallback is gone.** If code is deployed against a DB that still has only the old table name and no `system_config`, `MigrationRunner::getCurrentVersion()` now throws a clear RuntimeException telling the admin to deploy Slice 5a first and apply Migration 005 — no silent re-run of earlier migrations against a populated database.
 - **Slice 5a README text** still describes the standalone retention page and legacy fallback where it documented the state at 5a ship time; Slice 6 is the current behaviour for those two points.
-- **Drawer links** intentionally omit separate “Feeds” / “Mail” / “About” routes — 0.5 has no dedicated pages for those yet; Timeline + Diagnostics cover refresh surfaces.
+- **Drawer links** intentionally omit separate “Feeds” / “Mail” / “About” routes — 0.5 has no dedicated pages for those yet; Timeline + **Settings → Diagnostics** cover refresh surfaces.
 - **Optional items** from the plan not implemented in this slice: FULLTEXT dashboard search, per-family retention toggles / “last pruned on DATE” readout, `ai_view` (no 0.5 implementation existed to retire).
 
 **Test URLs.**
@@ -267,7 +279,7 @@ Dashboard GET ?action=index (no limit) → DashboardController::resolveDefaultLi
 - `?action=settings` — General tab; change “Entries per page”, Save; reload `?action=index` without `limit` — count should match.
 - `?action=settings&tab=retention` — same retention grid as before; prune / save still work; `?action=retention` redirects here.
 - `?action=styleguide` — sample components.
-- `?action=diagnostics` — expand **Recent runs** under a plugin/core row.
+- `?action=settings&tab=diagnostics` — expand **Recent runs** under a plugin/core row.
 - `?action=health` — unchanged; requires `system_config` after fallback removal.
 
 ---
@@ -401,20 +413,20 @@ Retention run : refresh_cron.php
 | Scraper | `Seismo\Core\Fetcher\ScraperFetchService` + `FeedItemRepository::listFeedsForScraperRefresh()` (feeds with `source_type=scraper` or URL in `scraper_configs`). |
 | Feeds persistence | `Seismo\Repository\FeedItemRepository` — transactional `upsertFeedItems`, `prune()` stub (180d policy lands with RetentionService). |
 | `RefreshAllService::boot()` | Injects `CoreRunner` + `FeedItemRepository` + shared `PluginRunLogRepository`. |
-| Diagnostics | `views/diagnostics.php` — “Core fetchers” block above plugins; same `plugin_run_log` read model. |
+| Diagnostics | **Settings → Diagnostics** (`diagnostics_panel.php`) — “Core fetchers” block above plugins; same `plugin_run_log` read model. |
 | Dashboard filters | `Seismo\Repository\TimelineFilter` + GET params `fc`, `fk`, `lx`, `etag`. `EntryRepository` applies SQL filters per family; favourites view filters hydrated rows in PHP. `FavouriteController` whitelist extended for filter params. |
 | Composer | `simplepie/simplepie` (^1.9). |
 
 **Gotchas.**
 
 - **Supersedes D4 deferrals:** LexEu / LexLegifrance / LexRechtBund shipped in a later reorg entry (**not** in the original Slice 4 PR). **Parl MM is not a Lex plugin** — it is **`core:parl_press`** → `feed_items` (see topmost **Parlament Medien — Option 2** entry).
-- **`core:mail` (superseded stub note):** If IMAP is **not** configured or **ext-imap** is missing, the run is **skipped**; cron passes `persistToPluginRunLog = false` on that skip so `plugin_run_log` is not spammed. Forced web refresh still records the skip so Diagnostics stays honest.
+- **`core:mail` (superseded stub note):** If IMAP is **not** configured or **ext-imap** is missing, the run is **skipped**; cron passes `persistToPluginRunLog = false` on that skip so `plugin_run_log` is not spammed. Forced web refresh still records the skip so **Settings → Diagnostics** stays honest.
 - **Retention:** `FeedItemRepository::prune()` is callable; `RetentionService` (Slice 5a) will invoke family prunes — no automatic feed/email prune in this slice’s cron beyond plugin runs.
 
 **Test URLs.**
 
 - `?action=migrate&key=…` — expect schema **19** after deploy.
-- `?action=diagnostics` — Core fetchers block + plugins; Refresh all runs core + plugins.
+- `?action=settings&tab=diagnostics` — Core fetchers block + plugins; Refresh all runs core + plugins.
 - `?action=index&fk=substack` — feed-type filter pills on the merged timeline (Leg always included).
 - CLI: `php refresh_cron.php` — stdout includes `core:rss` / `core:parl_press` / `core:scraper` / `core:mail` lines.
 
@@ -427,13 +439,13 @@ Retention run : refresh_cron.php
 **What was wrong.**
 
 1. **`?action=logout` accepted GET and bypassed CSRF.** `AuthController::logout()` only enforced the CSRF check on `POST` — any `GET` (including a cross-origin `<img src=".../index.php?action=logout">`) would silently drop the session. Logout is a state-changing operation and belongs under the same "all mutating POSTs require CSRF" contract the slice committed to.
-2. **Logout button was only on the dashboard top-bar.** The Slice 3 entry below says "Top-bar action buttons added on Dashboard / Lex / Leg pages: Lex, Leg, Diag, plus Logout (POST + CSRF) when auth is enabled." In reality only `views/index.php` rendered the conditional logout form. Lex / Leg / Diagnostics showed no way to log out without retyping a URL.
+2. **Logout button was only on the dashboard top-bar.** The Slice 3 entry below says "Top-bar action buttons added on Dashboard / Lex / Leg pages: Lex, Leg, Diag, plus Logout (POST + CSRF) when auth is enabled." In reality only `views/index.php` rendered the conditional logout form. Lex / Leg / standalone Diagnostics (`views/diagnostics.php`, later removed) showed no way to log out without retyping a URL.
 
 **What moved.**
 
 - `Seismo\Controller\AuthController::logout()` now rejects any non-`POST` method and redirects home, *then* requires `CsrfToken::verifyRequest()`. Short comment in the controller explains why (third-party image/link GETs never carry the token).
-- `views/lex.php`, `views/leg.php`, `views/diagnostics.php` gain the same conditional logout form as `views/index.php`: shown only when `AuthGate::isEnabled() && AuthGate::isLoggedIn()`, POSTs to `?action=logout` with `$csrfField` (Lex/Leg — already passed by their controllers) or `CsrfToken::field()` direct (Diagnostics — already imports `CsrfToken`).
-- `views/diagnostics.php` also gains the missing **Lex** and **Leg** top-bar links so its nav shape matches the other pages.
+- `views/lex.php`, `views/leg.php`, `views/diagnostics.php` (standalone diagnostics page, **removed** when Diagnostics moved under Settings) gain the same conditional logout form as `views/index.php`: shown only when `AuthGate::isEnabled() && AuthGate::isLoggedIn()`, POSTs to `?action=logout` with `$csrfField` (Lex/Leg — already passed by their controllers) or `CsrfToken::field()` direct (Diagnostics — already imports `CsrfToken`).
+- That standalone diagnostics view also gained the missing **Lex** and **Leg** top-bar links so its nav shape matched the other pages.
 
 **Gotchas.**
 
@@ -443,12 +455,12 @@ Retention run : refresh_cron.php
 
 **Test URLs.**
 
-- When auth is **dormant** (`SEISMO_ADMIN_PASSWORD_HASH` unset): `?action=index`, `?action=lex`, `?action=leg`, `?action=diagnostics` all render without a Logout button. `GET ?action=logout` redirects home without side effects.
-- When auth is **enforced**: log in, then confirm each of those four pages shows the Logout button in its top-bar, and that clicking it ends the session and lands on the login form. Manually visiting `GET ?action=logout` (URL bar) should *not* log you out — it should bounce you back to the dashboard.
+- When auth is **dormant** (`SEISMO_ADMIN_PASSWORD_HASH` unset): `?action=index`, `?action=lex`, `?action=leg`, and (when it existed) standalone `?action=diagnostics` all rendered without a Logout button. `GET ?action=logout` redirects home without side effects.
+- When auth is **enforced**: log in, then confirm **index**, **lex**, **leg** (and historically standalone diagnostics) show the Logout button in the top-bar, and that clicking it ends the session and lands on the login form. Manually visiting `GET ?action=logout` (URL bar) should *not* log you out — it should bounce you back to the dashboard.
 
 ---
 
-## Slice 3 — Unified refresh pipeline, master cron, auth backbone, diagnostics (`?action=diagnostics`, `?action=refresh_all`, `?action=refresh_plugin`, `?action=plugin_test`, `?action=leg`, `?action=login`, `?action=logout`, `refresh_cron.php`)
+## Slice 3 — Unified refresh pipeline, master cron, auth backbone, diagnostics (`?action=settings&tab=diagnostics` today; legacy `?action=diagnostics`, `?action=refresh_all`, `?action=refresh_plugin`, `?action=plugin_test`, `?action=leg`, `?action=login`, `?action=logout`, `refresh_cron.php`)
 
 **Why.** Slice 2 shipped a Fedlex-only `PluginRunner`. Slice 3 generalises it into the runner the rest of the consolidation is built on, ports the remaining "scrapes a 3rd-party API" surface (Parlament.ch — Leg) onto the same plugin contract, and lands the operational scaffolding the cron + UI need: a structured run log, a single Master Cron entry, web refresh routes, a diagnostics page, the dormant auth backbone, and CSRF on every mutating POST. After Slice 3, *new plugins are one folder + one PluginRegistry line + one row in the diagnostics table* — no controller / no cron / no view changes per plugin.
 
@@ -470,7 +482,7 @@ Retention run : refresh_cron.php
 | (no equivalent) | `Seismo\Http\AuthGate` + `Seismo\Controller\AuthController` + `views/login.php`. Dormant unless `SEISMO_ADMIN_PASSWORD_HASH` is defined. `AuthGate::check($action)` runs before dispatch; whitelists `health`, `login`, `logout`, `migrate`, `magnitu_*`. |
 | (no equivalent) | `Seismo\Http\CsrfToken`. Wired into every mutating POST: `toggle_favourite`, `refresh_fedlex`, `save_lex_ch`, `refresh_parl_ch`, `save_leg_parl_ch`, `refresh_all`, `refresh_plugin`, `plugin_test`, `login`, `logout`. Single rotating session-bound token, single-use rotation on success. |
 | `?action=health` (full info, anyone) | `HealthController` degrades when auth is enabled and the visitor is not logged in: `dbStatus: ok|not ok` only. Full diagnostics require login. |
-| (no equivalent) | `Seismo\Controller\DiagnosticsController` + `views/diagnostics.php` at `?action=diagnostics`. One status row per registered plugin (latest run from `plugin_run_log`, throttle window, "next allowed run"), "Refresh all", "Refresh now (this plugin)", "Test fetch (no save)" buttons. Test result peek (first 5 rows) returned as a one-shot session flash. |
+| (no equivalent) | `Seismo\Controller\DiagnosticsController` + standalone `views/diagnostics.php` at `?action=diagnostics` (Slice 3 ship; **later** folded into **Settings → Diagnostics** — see newest entry above). One status row per registered plugin (latest run from `plugin_run_log`, throttle window, "next allowed run"), "Refresh all", "Refresh now (this plugin)", "Test fetch (no save)" buttons. Test result peek (first 5 rows) returned as a one-shot session flash. |
 | Nav was non-existent in 0.5 | Top-bar action buttons added on Dashboard / Lex / Leg pages: Lex, Leg, Diag, plus Logout (POST + CSRF) when auth is enabled. |
 
 Plugins registered for Slice 3: `fedlex` (LexFedlex, Slice 2) and `parl_ch` (ParlCh, this slice). Both use a 4-hour throttle.
@@ -506,7 +518,7 @@ Single-cron migration note: on the host, the existing 0.4 per-source crontab lin
 
 - **Throttled skips are not in `plugin_run_log`.** A 5-minute master cron with two plugins on a 4h throttle would otherwise write ~576 rows/day of pure noise. The "is throttled?" indicator in diagnostics is computed from `last_ok + min_interval` against `now()`, not by reading skipped rows.
 - **`PluginRunLogRepository::lastSuccessfulRunAt` only counts `status = 'ok'`.** Don't bump the throttle window via fake "ok" writes; the diagnostics page also reads from this column.
-- **`diagnostics` is registered as NOT read-only** so the controller's `unset($_SESSION['plugin_test_result'])` after rendering actually persists. Lex/Leg/Dashboard stay read-only.
+- **Session + test peek:** At Slice 3 ship, **`diagnostics`** was **not** read-only so `unset($_SESSION['plugin_test_result'])` after rendering persisted. **Current behaviour:** UI is **`?action=settings&tab=diagnostics`**; `GET ?action=diagnostics` **303-redirects** (read-only route). `DiagnosticsController::prepareViewData()` consumes the peek when the Diagnostics tab renders; `settings` remains in `READONLY_KEEP_SESSION_FOR_CSRF`.
 - **Login form's POST handler is overlay-registered** (`index.php` swaps the `login` action to `AuthController::handleLogin` only when `REQUEST_METHOD === POST`). Slightly unusual but keeps the route table flat.
 - **`AuthGate::check` runs before dispatch and after `Router::register` calls.** Whitelisted public actions: `health`, `login`, `logout`, `migrate`, `magnitu_*`. Anything else redirects to `?action=login` when auth is on.
 - **CSRF token rotates on accepted POST.** A user with two forms loaded simultaneously will see "session expired" on the second submit; this is acceptable for a single-user admin app and is the documented behaviour. If we ever want concurrent forms (Slice 6 polish), graduate to per-form tokens.
@@ -517,8 +529,8 @@ Single-cron migration note: on the host, the existing 0.4 per-source crontab lin
 
 **Test URLs.**
 
-- `?action=diagnostics` — lists Fedlex + ParlCh; "never run" until the first cron tick or a manual refresh.
-- `?action=refresh_all` (POST from diagnostics) — populates `plugin_run_log`; flash summary visible.
+- `?action=settings&tab=diagnostics` — lists Fedlex + ParlCh; "never run" until the first cron tick or a manual refresh. (`?action=diagnostics` redirects here.)
+- `?action=refresh_all` (POST from **Settings → Diagnostics**) — populates `plugin_run_log`; flash summary visible.
 - `?action=leg` — date-grouped Parlament CH list; refresh + settings forms work; legacy `?action=calendar` resolves to the same controller.
 - `?action=login` — only useful when `SEISMO_ADMIN_PASSWORD_HASH` is set in `config.local.php`. To generate a hash: `php -r "echo password_hash('yourpass', PASSWORD_DEFAULT) . PHP_EOL;"`.
 - `php refresh_cron.php` (manual SSH or Plesk "run task now") — produces stdout per plugin; rerunning within 4h shows throttle skip lines but no new DB rows for the skipped plugins.

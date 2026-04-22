@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use Seismo\Config\ConfigLocalDefinePatcher;
+use Seismo\Http\AuthGate;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -66,7 +68,7 @@ final class SettingsController
                 header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
                 exit;
             }
-        } elseif (!in_array($tab, ['general', 'magnitu', 'retention', 'satellite', 'mail'], true)) {
+        } elseif (!in_array($tab, ['general', 'magnitu', 'retention', 'satellite', 'mail', 'diagnostics'], true)) {
             $tab = 'general';
         }
 
@@ -102,6 +104,39 @@ final class SettingsController
 
         $mailConfig           = array_fill_keys(self::MAIL_CONFIG_KEYS, null);
         $mailPasswordOnFile   = false;
+
+        $migrateKeyConfigured      = false;
+        $configLocalWritable       = false;
+        $pendingMigrateKey         = null;
+        $migrateKeyPasteBlock      = null;
+        $adminPasswordPasteBlock   = null;
+        $sessionAuthEnabled        = AuthGate::isEnabled();
+
+        $diagStatus     = [];
+        $diagCoreStatus = [];
+        $diagLoadError  = null;
+        $diagTestResult = null;
+        $diagRunHistory = [];
+
+        if ($tab === 'general') {
+            $cfgPath = SEISMO_ROOT . '/config.local.php';
+            $migrateKeyConfigured = defined('SEISMO_MIGRATE_KEY')
+                && is_string(SEISMO_MIGRATE_KEY)
+                && SEISMO_MIGRATE_KEY !== '';
+            $configLocalWritable = is_file($cfgPath) && is_writable($cfgPath);
+            if (isset($_SESSION['settings_pending_migrate_key']) && is_string($_SESSION['settings_pending_migrate_key'])) {
+                $pendingMigrateKey = $_SESSION['settings_pending_migrate_key'];
+                unset($_SESSION['settings_pending_migrate_key']);
+            }
+            if (isset($_SESSION['settings_migrate_key_paste']) && is_string($_SESSION['settings_migrate_key_paste'])) {
+                $migrateKeyPasteBlock = $_SESSION['settings_migrate_key_paste'];
+                unset($_SESSION['settings_migrate_key_paste']);
+            }
+            if (isset($_SESSION['settings_admin_password_paste']) && is_string($_SESSION['settings_admin_password_paste'])) {
+                $adminPasswordPasteBlock = $_SESSION['settings_admin_password_paste'];
+                unset($_SESSION['settings_admin_password_paste']);
+            }
+        }
 
         if ($tab === 'mail') {
             try {
@@ -164,6 +199,20 @@ final class SettingsController
             } catch (\Throwable $e) {
                 error_log('Seismo settings satellites: ' . $e->getMessage());
                 $pageError = 'Could not load satellite registry. Check error_log for details.';
+            }
+        }
+
+        if ($tab === 'diagnostics') {
+            try {
+                $diagBundle     = DiagnosticsController::prepareViewData();
+                $diagStatus     = $diagBundle['diagStatus'];
+                $diagCoreStatus = $diagBundle['diagCoreStatus'];
+                $diagLoadError  = $diagBundle['diagLoadError'];
+                $diagTestResult = $diagBundle['diagTestResult'];
+                $diagRunHistory = $diagBundle['diagRunHistory'];
+            } catch (\Throwable $e) {
+                error_log('Seismo settings diagnostics: ' . $e->getMessage());
+                $pageError = 'Could not load diagnostics. Check error_log for details.';
             }
         }
 
@@ -292,6 +341,135 @@ final class SettingsController
         }
 
         $this->redirectGeneral();
+    }
+
+    public function generateMigrateKey(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectGeneralTab();
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectGeneralTab();
+            return;
+        }
+
+        $_SESSION['settings_pending_migrate_key'] = bin2hex(random_bytes(24));
+        $_SESSION['success'] = 'A random key was generated. Save it to config.local.php (button below), or paste the line manually.';
+        $this->redirectGeneralTab();
+    }
+
+    public function saveMigrateKey(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectGeneralTab();
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectGeneralTab();
+            return;
+        }
+
+        $key = trim((string)($_POST['migrate_key'] ?? ''));
+        if ($key === '') {
+            $_SESSION['error'] = 'Migrate key is empty.';
+            $this->redirectGeneralTab();
+
+            return;
+        }
+
+        $path = SEISMO_ROOT . '/config.local.php';
+        $result = ConfigLocalDefinePatcher::upsertStringDefine($path, 'SEISMO_MIGRATE_KEY', $key);
+        if ($result['ok']) {
+            $_SESSION['success'] = 'SEISMO_MIGRATE_KEY saved to config.local.php. Use ?action=migrate with your key (POST body or Bearer recommended).';
+            $this->redirectGeneralTab();
+
+            return;
+        }
+
+        $line = 'define(\'SEISMO_MIGRATE_KEY\', ' . var_export($key, true) . ');';
+        $_SESSION['settings_migrate_key_paste'] = $line . "\n";
+        $_SESSION['error'] = $result['error'] === 'not_writable'
+            ? 'Could not write config.local.php — paste the line below into the file manually.'
+            : 'Could not update config.local.php: ' . (string)$result['error'];
+        $this->redirectGeneralTab();
+    }
+
+    public function saveAdminPassword(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectGeneralTab();
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectGeneralTab();
+            return;
+        }
+
+        $new     = (string)($_POST['new_admin_password'] ?? '');
+        $confirm = (string)($_POST['new_admin_password_confirm'] ?? '');
+        $current = (string)($_POST['current_admin_password'] ?? '');
+
+        if ($new === '' || $confirm === '') {
+            $_SESSION['error'] = 'Enter and confirm the new password.';
+            $this->redirectGeneralTab();
+
+            return;
+        }
+        if ($new !== $confirm) {
+            $_SESSION['error'] = 'New password and confirmation do not match.';
+            $this->redirectGeneralTab();
+
+            return;
+        }
+        if (strlen($new) < 8) {
+            $_SESSION['error'] = 'Use at least 8 characters for the admin password.';
+            $this->redirectGeneralTab();
+
+            return;
+        }
+
+        if (AuthGate::isEnabled()) {
+            if ($current === '' || !password_verify($current, SEISMO_ADMIN_PASSWORD_HASH)) {
+                $_SESSION['error'] = 'Current password is incorrect.';
+                $this->redirectGeneralTab();
+
+                return;
+            }
+        }
+
+        $hash = password_hash($new, PASSWORD_DEFAULT);
+        if ($hash === false) {
+            $_SESSION['error'] = 'password_hash() failed — try again.';
+            $this->redirectGeneralTab();
+
+            return;
+        }
+
+        $path   = SEISMO_ROOT . '/config.local.php';
+        $result = ConfigLocalDefinePatcher::upsertStringDefine($path, 'SEISMO_ADMIN_PASSWORD_HASH', $hash);
+        if ($result['ok']) {
+            $_SESSION['success'] = 'SEISMO_ADMIN_PASSWORD_HASH saved to config.local.php. If you just enabled auth, log in when prompted on protected pages.';
+            $this->redirectGeneralTab();
+
+            return;
+        }
+
+        $line = 'define(\'SEISMO_ADMIN_PASSWORD_HASH\', ' . var_export($hash, true) . ');';
+        $_SESSION['settings_admin_password_paste'] = $line . "\n";
+        $_SESSION['error'] = $result['error'] === 'not_writable'
+            ? 'Could not write config.local.php — paste the line below manually.'
+            : 'Could not update config.local.php: ' . (string)$result['error'];
+        $this->redirectGeneralTab();
+    }
+
+    private function redirectGeneralTab(): void
+    {
+        header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
+        exit;
     }
 
     private function redirectGeneral(): void

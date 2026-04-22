@@ -35,7 +35,7 @@ Auth is controlled by a single constant in `config.local.php`:
 - `migrate` — only works when `SEISMO_MIGRATE_KEY` is set and `?key=` matches (shared-hosting users without CLI). Not session auth.
 - `magnitu_*` — machine-to-machine, uses Bearer tokens, never session auth.
 
-Everything else (dashboard, settings, refresh, plugin-test, diagnostics) requires login when the switch is on.
+Everything else (dashboard, module pages, **settings** — including the **Diagnostics** tab — and mutating refresh / plugin-test POSTs) requires login when the switch is on.
 
 ## CSRF when auth is on
 
