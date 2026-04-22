@@ -197,6 +197,10 @@ $sourcesQs = 'action=scraper&view=sources';
                             outCards.innerHTML = '';
                             return;
                         }
+                        if (data.csrf) {
+                            var csrfInp = form.querySelector('input[name="_csrf"]');
+                            if (csrfInp) csrfInp.value = data.csrf;
+                        }
                         if (!data.ok) {
                             if (outErr) {
                                 outErr.textContent = data.error || 'Preview failed.';
