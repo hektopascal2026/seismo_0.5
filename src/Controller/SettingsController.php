@@ -34,6 +34,25 @@ final class SettingsController
         'model_trained_at',
     ];
 
+    /**
+     * Keys persisted from Settings → Mail (mothership only). Matches
+     * {@see \Seismo\Service\CoreRunner::loadMailImapConfig()} / ImapMailFetchService.
+     *
+     * @var list<string>
+     */
+    private const MAIL_CONFIG_KEYS = [
+        'mail_imap_mailbox',
+        'mail_imap_username',
+        'mail_imap_password',
+        'mail_imap_host',
+        'mail_imap_port',
+        'mail_imap_flags',
+        'mail_imap_folder',
+        'mail_max_messages',
+        'mail_search_criteria',
+        'mail_mark_seen',
+    ];
+
     public function show(): void
     {
         $tab = (string)($_GET['tab'] ?? 'general');
@@ -47,7 +66,7 @@ final class SettingsController
                 header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
                 exit;
             }
-        } elseif (!in_array($tab, ['general', 'magnitu', 'retention', 'satellite'], true)) {
+        } elseif (!in_array($tab, ['general', 'magnitu', 'retention', 'satellite', 'mail'], true)) {
             $tab = 'general';
         }
 
@@ -80,6 +99,22 @@ final class SettingsController
         $satellitesRemoteRefreshKeyConfigured = false;
         $satellitesSuggestedRefreshKey        = '';
         $satellitesHighlightSlug              = '';
+
+        $mailConfig           = array_fill_keys(self::MAIL_CONFIG_KEYS, null);
+        $mailPasswordOnFile   = false;
+
+        if ($tab === 'mail') {
+            try {
+                foreach (self::MAIL_CONFIG_KEYS as $key) {
+                    $mailConfig[$key] = $config->get($key);
+                }
+                $pw = $config->get('mail_imap_password');
+                $mailPasswordOnFile = $pw !== null && $pw !== '';
+            } catch (\Throwable $e) {
+                error_log('Seismo settings mail: ' . $e->getMessage());
+                $pageError = 'Could not load mail settings. Check error_log for details.';
+            }
+        }
 
         if ($tab === 'retention') {
             try {
@@ -143,6 +178,91 @@ final class SettingsController
         require SEISMO_ROOT . '/views/settings.php';
     }
 
+    public function saveMail(): void
+    {
+        if (isSatellite()) {
+            $_SESSION['error'] = 'Satellite mode — mail fetch is configured on the mothership only.';
+            header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
+            exit;
+        }
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectMail();
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectMail();
+            return;
+        }
+
+        $mailbox  = trim((string)($_POST['mail_imap_mailbox'] ?? ''));
+        $username = trim((string)($_POST['mail_imap_username'] ?? ''));
+        $host     = trim((string)($_POST['mail_imap_host'] ?? ''));
+        $flags    = trim((string)($_POST['mail_imap_flags'] ?? ''));
+        $folder   = trim((string)($_POST['mail_imap_folder'] ?? ''));
+
+        $portRaw = trim((string)($_POST['mail_imap_port'] ?? ''));
+        $port    = $portRaw === '' ? 0 : (int)$portRaw;
+        if ($port < 0 || $port > 65535) {
+            $port = 0;
+        }
+
+        $maxRaw = trim((string)($_POST['mail_max_messages'] ?? ''));
+        $max    = $maxRaw === '' ? 50 : (int)$maxRaw;
+        if ($max < 1) {
+            $max = 1;
+        }
+        if ($max > 500) {
+            $max = 500;
+        }
+
+        $criteria = trim((string)($_POST['mail_search_criteria'] ?? ''));
+        if ($criteria === '') {
+            $criteria = 'UNSEEN';
+        }
+
+        $markSeen = isset($_POST['mail_mark_seen']) ? '1' : '0';
+
+        $newPassword = (string)($_POST['mail_imap_password'] ?? '');
+
+        try {
+            $cfg = new SystemConfigRepository(getDbConnection());
+            $cfg->set('mail_imap_username', $username);
+            $cfg->set('mail_max_messages', (string)$max);
+            $cfg->set('mail_search_criteria', $criteria);
+            $cfg->set('mail_mark_seen', $markSeen);
+
+            if ($newPassword !== '') {
+                $cfg->set('mail_imap_password', $newPassword);
+            }
+
+            if ($mailbox !== '') {
+                $cfg->set('mail_imap_mailbox', $mailbox);
+                $cfg->set('mail_imap_host', '');
+                $cfg->set('mail_imap_port', '');
+                $cfg->set('mail_imap_flags', '');
+                $cfg->set('mail_imap_folder', '');
+            } else {
+                $cfg->set('mail_imap_mailbox', '');
+                $cfg->set('mail_imap_host', $host);
+                if ($port > 0) {
+                    $cfg->set('mail_imap_port', (string)$port);
+                } else {
+                    $cfg->set('mail_imap_port', '');
+                }
+                $cfg->set('mail_imap_flags', $flags);
+                $cfg->set('mail_imap_folder', $folder);
+            }
+
+            $_SESSION['success'] = 'Mail settings saved.';
+        } catch (\Throwable $e) {
+            error_log('Seismo settings_save_mail: ' . $e->getMessage());
+            $_SESSION['error'] = 'Could not save mail settings.';
+        }
+
+        $this->redirectMail();
+    }
+
     public function saveGeneral(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -177,6 +297,12 @@ final class SettingsController
     private function redirectGeneral(): void
     {
         header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
+        exit;
+    }
+
+    private function redirectMail(): void
+    {
+        header('Location: ' . getBasePath() . '/index.php?action=settings&tab=mail', true, 303);
         exit;
     }
 

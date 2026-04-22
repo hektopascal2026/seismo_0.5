@@ -153,6 +153,11 @@ $router->register(
     false
 );
 $router->register(
+    'settings_save_mail',
+    \Seismo\Controller\SettingsController::class . '::saveMail',
+    false
+);
+$router->register(
     'settings_save_magnitu',
     \Seismo\Controller\MagnituAdminController::class . '::saveConfig',
     false
