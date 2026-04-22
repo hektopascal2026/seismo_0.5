@@ -9,6 +9,30 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Scraper: deleted sources no longer re-ingest on refresh (mothership)
+
+**Why.** Deleting a row in **Scraper → Sources** only removed it from `scraper_configs`. Matching `feeds` rows could remain with `source_type = 'scraper'`. `FeedItemRepository::listFeedsForScraperRefresh()` previously treated `source_type = 'scraper'` as enough to run **core:scraper**, even when the `scraper_configs` row was already gone — so **orphan** feeds still ingested (e.g. after **Settings → Diagnostics → Refresh all** on the mothership, or a **satellite** “Refresh” that calls `refresh_all_remote` on the mothership). Ingest looked like “deleted sources came back”.
+
+**What moved.** `src/Repository/FeedItemRepository.php` — `listFeedsForScraperRefresh()` now requires `EXISTS` an enabled `scraper_configs` row for the same URL (no more scrape-by-`source_type` alone). New `disableFeedsByUrl()` sets `feeds.disabled = 1` for a URL. `src/Controller/ScraperController.php` — `delete()` loads the row, deletes the config, then disables matching `feeds` for that URL.
+
+**New wiring.** Delete in the Scraper UI still mothership-only; refresh behaviour unchanged except orphan feeds are excluded. Satellite remains a **trigger** for mothership refresh, not a separate scraper path.
+
+**Gotchas.** Historical orphan `feeds` left before this fix are not auto-disabled; they simply stop being scraped. Operators can disable or remove stray rows under **Feeds** if the list is noisy. **Re-upload** `FeedItemRepository.php` and `ScraperController.php` with this change.
+
+---
+
+## Top bar: bold brand line (CSS + `<strong>`)
+
+**Why.** Relying on `font-weight` alone looked weak on some mobile browsers; the product title should read clearly bold next to the logo.
+
+**What moved.** `assets/css/style.css` — explicit `font-weight: 700` / `!important` on top-bar brand classes, remove smoothing that thins bold on Retina, mobile block reinforces weight. `views/partials/site_header.php` and `views/login.php` — main brand and page title use `<strong class="…">` where the full title matches the default brand or a page heading.
+
+**New wiring.** None beyond markup + CSS.
+
+**Gotchas.** None.
+
+---
+
 ## Settings — Diagnostics tab (mothership UX)
 
 **Why.** A top-level **Diagnostics** drawer item sat awkwardly next to content modules (Lex, Leg, Feeds). Operators already open **Settings** for retention, mail, Magnitu, and satellites — plugin/core run status belongs in the same shell.

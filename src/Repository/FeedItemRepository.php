@@ -58,9 +58,13 @@ final class FeedItemRepository
     }
 
     /**
-     * Feeds that should be scraped (explicit scraper type or listed in scraper_configs).
+     * Feeds that should be scraped: must have a **live** `scraper_configs` row
+     * (same URL, not disabled). Orphan `feeds` rows with `source_type = 'scraper'`
+     * but no config (e.g. after deleting a source in the Scraper UI) are **excluded** —
+     * otherwise refresh would still ingest them and look like "deleted sources came back".
+     *
      * Includes `scraper_link_pattern`, `scraper_date_selector`, and `scraper_exclude_selectors`
-     * from the first matching enabled `scraper_configs` row (same URL), for the unified scraper pipeline.
+     * from the first matching enabled `scraper_configs` row.
      *
      * @return list<array<string, mixed>>
      */
@@ -79,13 +83,36 @@ final class FeedItemRepository
                 WHERE sc4.url = f.url AND sc4.disabled = 0 ORDER BY sc4.id ASC LIMIT 1) AS scraper_exclude_selectors
             FROM {$feeds} f
             WHERE f.disabled = 0
-              AND (f.source_type = 'scraper' OR EXISTS (
+              AND EXISTS (
                 SELECT 1 FROM {$sc} sc0 WHERE sc0.url = f.url AND sc0.disabled = 0
-              ))
+              )
             ORDER BY f.id ASC
             LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
 
         return $this->selectOrEmpty($sql);
+    }
+
+    /**
+     * When a `scraper_configs` row is deleted, disable matching `feeds` rows with the
+     * same URL so they are not left as orphan scraper-type feeds that could
+     * confuse the Feeds UI or a future looser query.
+     * (URL match is the same key used in {@see listFeedsForScraperRefresh}.)
+     */
+    public function disableFeedsByUrl(string $url): int
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('FeedItemRepository::disableFeedsByUrl must not run on a satellite.');
+        }
+        $url = trim($url);
+        if ($url === '') {
+            return 0;
+        }
+        $table = entryTable('feeds');
+        $sql   = 'UPDATE ' . $table . ' SET disabled = 1 WHERE url = ?';
+        $stmt  = $this->pdo->prepare($sql);
+        $stmt->execute([$url]);
+
+        return $stmt->rowCount();
     }
 
     /**

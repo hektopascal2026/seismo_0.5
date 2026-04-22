@@ -7,6 +7,7 @@ namespace Seismo\Controller;
 use Seismo\Core\Fetcher\ScraperFetchService;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryRepository;
+use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\ScraperConfigRepository;
 use Seismo\Repository\SystemConfigRepository;
 
@@ -220,8 +221,21 @@ final class ScraperController
         }
 
         try {
-            $repo = new ScraperConfigRepository(getDbConnection());
+            $pdo  = getDbConnection();
+            $repo = new ScraperConfigRepository($pdo);
+            $row  = $repo->findById($id);
+            if ($row === null) {
+                $_SESSION['error'] = 'Scraper config not found.';
+                $this->redirect(['view' => 'sources']);
+
+                return;
+            }
+            $url = trim((string)($row['url'] ?? ''));
             $repo->delete($id);
+            if ($url !== '') {
+                $feedItems = new FeedItemRepository($pdo);
+                $feedItems->disableFeedsByUrl($url);
+            }
             $_SESSION['success'] = 'Scraper source deleted.';
         } catch (\Throwable $e) {
             error_log('Seismo scraper_delete: ' . $e->getMessage());

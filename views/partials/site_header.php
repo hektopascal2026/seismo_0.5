@@ -26,10 +26,10 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     <?php
                     $brandFull = seismoBrandTitle();
                     if (($headerTitle ?? '') === $brandFull) {
-                        echo '<span class="top-bar-brand-name">' . e(seismoBrandBase()) . '</span>';
+                        echo '<strong class="top-bar-brand-name">' . e(seismoBrandBase()) . '</strong>';
                         echo ' <span class="top-bar-brand-version">' . e(seismoBrandVersionLabel()) . '</span>';
                     } else {
-                        echo '<span class="top-bar-page-title">' . e((string)$headerTitle) . '</span>';
+                        echo '<strong class="top-bar-page-title">' . e((string)$headerTitle) . '</strong>';
                     }
                     ?>
                 </span>
