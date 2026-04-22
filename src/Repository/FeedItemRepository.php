@@ -59,8 +59,8 @@ final class FeedItemRepository
 
     /**
      * Feeds that should be scraped (explicit scraper type or listed in scraper_configs).
-     * Includes {@see scraper_link_pattern} / {@see scraper_date_selector} from the first
-     * matching enabled `scraper_configs` row (same URL), for the unified scraper pipeline.
+     * Includes `scraper_link_pattern`, `scraper_date_selector`, and `scraper_exclude_selectors`
+     * from the first matching enabled `scraper_configs` row (same URL), for the unified scraper pipeline.
      *
      * @return list<array<string, mixed>>
      */
@@ -74,7 +74,9 @@ final class FeedItemRepository
             (SELECT sc2.link_pattern FROM {$sc} sc2
                 WHERE sc2.url = f.url AND sc2.disabled = 0 ORDER BY sc2.id ASC LIMIT 1) AS scraper_link_pattern,
             (SELECT sc3.date_selector FROM {$sc} sc3
-                WHERE sc3.url = f.url AND sc3.disabled = 0 ORDER BY sc3.id ASC LIMIT 1) AS scraper_date_selector
+                WHERE sc3.url = f.url AND sc3.disabled = 0 ORDER BY sc3.id ASC LIMIT 1) AS scraper_date_selector,
+            (SELECT sc4.exclude_selectors FROM {$sc} sc4
+                WHERE sc4.url = f.url AND sc4.disabled = 0 ORDER BY sc4.id ASC LIMIT 1) AS scraper_exclude_selectors
             FROM {$feeds} f
             WHERE f.disabled = 0
               AND (f.source_type = 'scraper' OR EXISTS (

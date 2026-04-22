@@ -89,12 +89,13 @@ final class ScraperController
         try {
             $repo = new ScraperConfigRepository(getDbConnection());
             $payload = [
-                'name'           => (string)($_POST['name'] ?? ''),
-                'url'            => (string)($_POST['url'] ?? ''),
-                'link_pattern'   => (string)($_POST['link_pattern'] ?? ''),
-                'date_selector'  => (string)($_POST['date_selector'] ?? ''),
-                'category'       => (string)($_POST['category'] ?? 'scraper'),
-                'disabled'       => ((string)($_POST['disabled'] ?? '0')) === '1',
+                'name'                => (string)($_POST['name'] ?? ''),
+                'url'                 => (string)($_POST['url'] ?? ''),
+                'link_pattern'        => (string)($_POST['link_pattern'] ?? ''),
+                'date_selector'       => (string)($_POST['date_selector'] ?? ''),
+                'exclude_selectors'   => (string)($_POST['exclude_selectors'] ?? ''),
+                'category'            => (string)($_POST['category'] ?? 'scraper'),
+                'disabled'            => ((string)($_POST['disabled'] ?? '0')) === '1',
             ];
             if ($id > 0) {
                 $repo->update($id, $payload);
@@ -144,13 +145,20 @@ final class ScraperController
         $url = trim((string)($_POST['url'] ?? ''));
         $linkPattern = trim((string)($_POST['link_pattern'] ?? ''));
         $dateSelector = trim((string)($_POST['date_selector'] ?? ''));
+        $excludeSelectors = trim((string)($_POST['exclude_selectors'] ?? ''));
         $category = trim((string)($_POST['category'] ?? 'scraper'));
         if ($category === '') {
             $category = 'scraper';
         }
 
         $fetcher  = new ScraperFetchService();
-        $result   = $fetcher->preview($url, $linkPattern, ScraperFetchService::PREVIEW_MAX_ITEMS, $dateSelector);
+        $result   = $fetcher->preview(
+            $url,
+            $linkPattern,
+            ScraperFetchService::PREVIEW_MAX_ITEMS,
+            $dateSelector,
+            $excludeSelectors
+        );
         $warnings = $result['warnings'] ?? [];
         if (empty($result['ok']) || !empty($result['error'])) {
             echo json_encode([

@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use DOMDocument;
 use DOMElement;
+use DOMNode;
 use DOMNodeList;
 use DOMXPath;
 
@@ -19,9 +20,14 @@ use DOMXPath;
 final class ScraperContentExtractor
 {
     /**
+     * @param string $excludeSelectors One selector per line (same limited CSS / XPath
+     *                                 grammar as the date field). Matched elements are
+     *                                 removed from the document before heuristics and
+     *                                 built-in noise stripping.
+     *
      * @return array{title: string, content: string}
      */
-    public static function extractReadableContent(string $html): array
+    public static function extractReadableContent(string $html, string $excludeSelectors = ''): array
     {
         $html = self::normaliseEncodingPrefix($html);
         $prev  = libxml_use_internal_errors(true);
@@ -34,6 +40,9 @@ final class ScraperContentExtractor
         }
 
         $title = self::titleFromDocument($dom);
+        if (trim($excludeSelectors) !== '') {
+            self::removeElementsMatchingExcludeSelectors($dom, $excludeSelectors);
+        }
         self::removeNoiseElements($dom);
 
         $best = '';
@@ -79,8 +88,9 @@ final class ScraperContentExtractor
     /**
      * First matching value as UTC `Y-m-d H:i:s`, or null.
      * Selector: limited CSS, raw XPath (starts with `/`), or `//...`.
+     * Excludes: matched elements are removed from the document before the date node is chosen.
      */
-    public static function extractPublishedDate(string $html, string $dateSelector): ?string
+    public static function extractPublishedDate(string $html, string $dateSelector, string $excludeSelectors = ''): ?string
     {
         $dateSelector = trim($dateSelector);
         if ($dateSelector === '') {
@@ -97,6 +107,12 @@ final class ScraperContentExtractor
             return null;
         }
 
+        if (trim($excludeSelectors) !== '') {
+            self::removeElementsMatchingExcludeSelectors($dom, $excludeSelectors);
+        }
+
+        $htmlForFallback = $dom->saveHTML() ?: $html;
+
         $xpQuery = self::dateSelectorToXPath($dateSelector);
         if ($xpQuery === null) {
             return null;
@@ -105,12 +121,12 @@ final class ScraperContentExtractor
         $xp = new DOMXPath($dom);
         $list = @$xp->query($xpQuery);
         if ($list === false || !($list instanceof DOMNodeList) || $list->length === 0) {
-            return self::tryGermanDateStrings($html);
+            return self::tryGermanDateStrings($htmlForFallback);
         }
 
         $node = $list->item(0);
         if ($node === null) {
-            return self::tryGermanDateStrings($html);
+            return self::tryGermanDateStrings($htmlForFallback);
         }
         if ($node instanceof DOMElement) {
             $attrOrder = ['datetime', 'content', 'data-date', 'data-datetime', 'date'];
@@ -129,7 +145,7 @@ final class ScraperContentExtractor
             return $p;
         }
 
-        return self::tryGermanDateStrings($html);
+        return self::tryGermanDateStrings($htmlForFallback);
     }
 
     private static function tryGermanDateStrings(string $html): ?string
@@ -159,6 +175,87 @@ final class ScraperContentExtractor
         $dt = (new DateTimeImmutable('@' . $ts))->setTimezone(new DateTimeZone('UTC'));
 
         return $dt->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * Remove all elements matched by one selector per line (empty lines and
+     * `#` line comments ignored). Reuses the same limited selector grammar as
+     * {@see extractPublishedDate()}. Deeper nodes are removed first so parent/child
+     * overlaps remain consistent.
+     */
+    private static function removeElementsMatchingExcludeSelectors(DOMDocument $dom, string $raw): void
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return;
+        }
+        $lines   = preg_split('/\R/u', $raw) ?: [];
+        $capped  = array_slice($lines, 0, 50);
+        $toCheck = [];
+        foreach ($capped as $line) {
+            $line = trim($line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            if (mb_strlen($line) > 500) {
+                $line = mb_substr($line, 0, 500);
+            }
+            $toCheck[] = $line;
+        }
+        if ($toCheck === []) {
+            return;
+        }
+
+        $xp     = new DOMXPath($dom);
+        $candidates = [];
+        foreach ($toCheck as $one) {
+            $q = self::dateSelectorToXPath($one);
+            if ($q === null) {
+                continue;
+            }
+            $list = @$xp->query($q);
+            if ($list === false || !($list instanceof DOMNodeList)) {
+                continue;
+            }
+            for ($i = 0; $i < $list->length; $i++) {
+                $n = $list->item($i);
+                if ($n instanceof DOMElement) {
+                    $candidates[] = $n;
+                }
+            }
+        }
+        if ($candidates === []) {
+            return;
+        }
+
+        usort(
+            $candidates,
+            static function (DOMElement $a, DOMElement $b): int {
+                return self::nodeDepthToRoot($b) <=> self::nodeDepthToRoot($a);
+            }
+        );
+        $seen = [];
+        foreach ($candidates as $el) {
+            $id = spl_object_id($el);
+            if (isset($seen[$id])) {
+                continue;
+            }
+            if ($el->parentNode === null) {
+                continue;
+            }
+            $seen[$id] = true;
+            $el->parentNode->removeChild($el);
+        }
+    }
+
+    private static function nodeDepthToRoot(DOMNode $n): int
+    {
+        $d = 0;
+        for ($c = $n; $c->parentNode !== null; $c = $c->parentNode) {
+            ++$d;
+        }
+
+        return $d;
     }
 
     private static function dateSelectorToXPath(string $s): ?string

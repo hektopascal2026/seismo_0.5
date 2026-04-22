@@ -106,6 +106,10 @@ $sourcesQs = 'action=scraper&view=sources';
                 </div>
                 <p class="admin-hint">Date: simple CSS (tag, .class, #id, meta[…]) or raw XPath. Preview uses the same extractor as the planned 0.4 port.</p>
                 <div class="admin-form-field">
+                    <label>Exclude selectors <textarea name="exclude_selectors" class="search-input" style="width:100%; min-height:5rem; font-family: inherit;" rows="4" placeholder="One per line: .breadcrumb, #page-footer, nav.breadcrumbs"><?= e((string)($editRow['exclude_selectors'] ?? '')) ?></textarea></label>
+                </div>
+                <p class="admin-hint">Elements matching these selectors are removed from the page <strong>before</strong> text is extracted (same CSS / XPath rules as the date field). Use for breadcrumbs, footers, and chrome that would otherwise be merged into the body. Lines starting with <code>#</code> are comments.</p>
+                <div class="admin-form-field">
                     <label>Category <input type="text" name="category" class="search-input" style="width:100%; max-width:24rem;" value="<?= e((string)($editRow['category'] ?? 'scraper')) ?>"></label>
                 </div>
                 <div class="admin-form-field">

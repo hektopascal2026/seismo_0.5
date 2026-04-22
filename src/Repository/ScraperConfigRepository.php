@@ -55,6 +55,7 @@ final class ScraperConfigRepository
      *   url: string,
      *   link_pattern?: string|null,
      *   date_selector?: string|null,
+     *   exclude_selectors?: string|null,
      *   category?: string|null,
      *   disabled?: int|bool,
      * } $data
@@ -68,14 +69,15 @@ final class ScraperConfigRepository
             throw new \InvalidArgumentException('Scraper name and URL are required.');
         }
         $t   = entryTable('scraper_configs');
-        $sql = "INSERT INTO {$t} (name, url, link_pattern, date_selector, category, disabled)
-            VALUES (?, ?, ?, ?, ?, ?)";
+        $sql = "INSERT INTO {$t} (name, url, link_pattern, date_selector, exclude_selectors, category, disabled)
+            VALUES (?, ?, ?, ?, ?, ?, ?)";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             $name,
             $url,
             $data['link_pattern'] ?? null,
             $data['date_selector'] ?? null,
+            $data['exclude_selectors'] ?? null,
             $data['category'] ?? 'scraper',
             !empty($data['disabled']) ? 1 : 0,
         ]);
@@ -111,6 +113,7 @@ final class ScraperConfigRepository
             url = ?,
             link_pattern = ?,
             date_selector = ?,
+            exclude_selectors = ?,
             category = ?,
             disabled = ?
             WHERE id = ?";
@@ -120,6 +123,7 @@ final class ScraperConfigRepository
             $url,
             $data['link_pattern'] ?? $existing['link_pattern'],
             $data['date_selector'] ?? $existing['date_selector'],
+            $data['exclude_selectors'] ?? $existing['exclude_selectors'] ?? null,
             $data['category'] ?? $existing['category'],
             $disabled,
             $id,

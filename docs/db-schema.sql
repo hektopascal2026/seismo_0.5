@@ -290,14 +290,15 @@ CREATE TABLE IF NOT EXISTS magnitu_config (
 -- Web-page scraper targets (rows produce feed_items when scraped).
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS scraper_configs (
-    id            INT AUTO_INCREMENT PRIMARY KEY,
-    name          VARCHAR(255) NOT NULL,
-    url           VARCHAR(500) NOT NULL UNIQUE,
-    link_pattern  VARCHAR(500) DEFAULT NULL,
-    date_selector VARCHAR(500) DEFAULT NULL,
-    category      VARCHAR(100) DEFAULT 'scraper',
-    disabled      TINYINT(1)   DEFAULT 0,
-    created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    id                 INT AUTO_INCREMENT PRIMARY KEY,
+    name               VARCHAR(255) NOT NULL,
+    url                VARCHAR(500) NOT NULL UNIQUE,
+    link_pattern       VARCHAR(500)   DEFAULT NULL,
+    date_selector      VARCHAR(500)   DEFAULT NULL,
+    exclude_selectors  MEDIUMTEXT     DEFAULT NULL,
+    category           VARCHAR(100)   DEFAULT 'scraper',
+    disabled           TINYINT(1)     DEFAULT 0,
+    created_at         TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_url      (url),
     INDEX idx_disabled (disabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

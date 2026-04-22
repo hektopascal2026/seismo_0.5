@@ -10,7 +10,8 @@ use Seismo\Service\Http\BaseClient;
 
 /**
  * Unified scraper pipeline: listing + optional substring link mode, same-host, readability
- * extraction, date_selector, `guid` = article URL, `content_hash` = md5(content).
+ * extraction, optional `date_selector` and multiline `exclude_selectors` (strip DOM chrome
+ * before text extraction), `guid` = article URL, `content_hash` = md5(content).
  * Preview and CoreRunner share {@see self::fetchScraperFeedItems()}.
  */
 final class ScraperFetchService
@@ -47,7 +48,8 @@ final class ScraperFetchService
         string $pageUrl,
         string $linkPattern,
         int $maxItems = self::PREVIEW_MAX_ITEMS,
-        string $dateSelector = ''
+        string $dateSelector = '',
+        string $excludeSelectors = ''
     ): array {
         $pageUrl = trim($pageUrl);
         if ($pageUrl === '' || !$this->isNavigableHttpUrl($pageUrl)) {
@@ -58,6 +60,7 @@ final class ScraperFetchService
             $pageUrl,
             trim($linkPattern),
             trim($dateSelector),
+            trim($excludeSelectors),
             $maxItems,
             false
         );
@@ -102,15 +105,17 @@ final class ScraperFetchService
         string $listingUrl,
         string $linkPattern,
         string $dateSelector,
+        string $excludeSelectors,
         int $maxArticles,
         bool $delayBetweenArticleFetches
     ): array {
         $warnings  = [];
-        $listingUrl = trim($listingUrl);
-        $linkPattern = trim($linkPattern);
-        $dateSel    = trim($dateSelector);
-        $dsOpt      = $dateSel === '' ? null : $dateSel;
-        $maxArticles = max(1, $maxArticles);
+        $listingUrl     = trim($listingUrl);
+        $linkPattern    = trim($linkPattern);
+        $dateSel        = trim($dateSelector);
+        $exSel          = trim($excludeSelectors);
+        $dsOpt          = $dateSel === '' ? null : $dateSel;
+        $maxArticles    = max(1, $maxArticles);
 
         if ($listingUrl === '' || !$this->isNavigableHttpUrl($listingUrl)) {
             return ['items' => [], 'warnings' => [], 'fatal_error' => 'Invalid listing URL.'];
@@ -118,7 +123,7 @@ final class ScraperFetchService
 
         if ($linkPattern === '') {
             try {
-                $row = $this->buildArticleRow($listingUrl, $dsOpt);
+                $row = $this->buildArticleRow($listingUrl, $dsOpt, $exSel);
 
                 return ['items' => [$row], 'warnings' => [], 'fatal_error' => null];
             } catch (\Throwable $e) {
@@ -152,7 +157,7 @@ final class ScraperFetchService
             }
             ++$attempt;
             try {
-                $row = $this->buildArticleRow($targetUrl, $dsOpt);
+                $row = $this->buildArticleRow($targetUrl, $dsOpt, $exSel);
                 $items[] = $row;
             } catch (\Throwable $e) {
                 $warnings[] = 'Failed to fetch ' . $targetUrl . ': ' . $e->getMessage();
@@ -165,10 +170,10 @@ final class ScraperFetchService
     /**
      * @return array<string, mixed> one feed_items-shaped row: guid=URL, content_hash=md5(content)
      */
-    private function buildArticleRow(string $pageUrl, ?string $dateSelector): array
+    private function buildArticleRow(string $pageUrl, ?string $dateSelector, string $excludeSelectors = ''): array
     {
         $html = $this->fetchHtmlBody($pageUrl);
-        $read = ScraperContentExtractor::extractReadableContent($html);
+        $read = ScraperContentExtractor::extractReadableContent($html, $excludeSelectors);
         $content = trim($read['content'] ?? '');
         if ($content === '') {
             throw new \RuntimeException('No readable text extracted for ' . $pageUrl);
@@ -182,7 +187,7 @@ final class ScraperFetchService
         }
         $published = null;
         if ($dateSelector !== null && $dateSelector !== '') {
-            $published = ScraperContentExtractor::extractPublishedDate($html, $dateSelector);
+            $published = ScraperContentExtractor::extractPublishedDate($html, $dateSelector, $excludeSelectors);
         }
         if ($published === null) {
             $published = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');

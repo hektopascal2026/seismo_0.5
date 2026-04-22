@@ -233,12 +233,14 @@ final class CoreRunner
                         continue;
                     }
                     try {
-                        $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
-                        $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
-                        $out         = $this->scraper->fetchScraperFeedItems(
+                        $linkPattern    = trim((string)($feed['scraper_link_pattern'] ?? ''));
+                        $dateSel        = trim((string)($feed['scraper_date_selector'] ?? ''));
+                        $excludeSels    = trim((string)($feed['scraper_exclude_selectors'] ?? ''));
+                        $out            = $this->scraper->fetchScraperFeedItems(
                             $url,
                             $linkPattern,
                             $dateSel,
+                            $excludeSels,
                             ScraperFetchService::PRODUCTION_MAX_ARTICLES,
                             true
                         );
