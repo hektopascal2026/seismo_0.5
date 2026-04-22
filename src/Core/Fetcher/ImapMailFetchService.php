@@ -221,6 +221,11 @@ final class ImapMailFetchService
             }
         }
 
+        // 0.4 fetch_mail.php parity: derive readable plain from HTML when there is no text/plain.
+        if (trim($plain) === '' && $html !== '') {
+            $plain = EmailHtmlPlainText::fromHtml($html);
+        }
+
         $plain = $this->capBody($plain);
         $html  = $this->capBody($html);
 
