@@ -159,23 +159,37 @@ $entryLoopIndex                 = 0;
                             elseif ($lexSource === 'de') $lexLinkLabel = 'recht.bund.de →';
                             elseif ($lexSource === 'ch') $lexLinkLabel = 'Fedlex →';
                             elseif ($lexSource === 'fr') $lexLinkLabel = 'Légifrance →';
-                            else $lexLinkLabel = 'EUR-Lex →';
+                            else {
+                                $lexLinkLabel = 'EUR-Lex →';
+                            }
+
+                            $celexForParl = (string)($lexItem['celex'] ?? '');
+                            $isParlSwissLex = (bool) preg_match('/^parl_(mm|sda):/i', $celexForParl)
+                                || in_array($lexSource, ['parl_mm', 'parl_sda'], true);
+                            if ($isParlSwissLex) {
+                                $lexLinkLabel = 'parlament.ch →';
+                            }
 
                             $lexDesc = trim($lexItem['description'] ?? '');
                             $lexPreview = mb_substr($lexDesc, 0, 300);
                             if (mb_strlen($lexDesc) > 300) $lexPreview .= '...';
                             $lexHasMore = mb_strlen($lexDesc) > 300;
-                            $isEuLexCard = ($lexSource === 'eu');
+                            $isEuLexCard = ($lexSource === 'eu' && !$isParlSwissLex);
+                            $useLexJurisdictionHeader = $isParlSwissLex || $isEuLexCard;
                         ?>
                         <div class="entry-card">
-                            <?php if ($isEuLexCard): ?>
+                            <?php if ($useLexJurisdictionHeader): ?>
                             <div class="entry-header entry-header--lex-eu">
                                 <span class="entry-tag entry-tag--lex-doc"><?= htmlspecialchars($lexDocType) ?></span>
                                 <div class="entry-header--lex-eu-right">
                                     <?php if ($relevanceScore !== null): ?>
                                         <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
                                     <?php endif; ?>
+                                    <?php if ($isParlSwissLex): ?>
+                                    <span class="entry-lex-ch-mark" title="Bundeshaus Medien (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
+                                    <?php else: ?>
                                     <span class="entry-lex-eu-mark" title="EUR-Lex (EU)"><span class="entry-lex-eu-mark__flag" aria-hidden="true">🇪🇺</span><span class="entry-lex-eu-mark__text">EU</span></span>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             <?php else: ?>

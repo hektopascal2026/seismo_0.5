@@ -340,16 +340,27 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                             $sourceLabel = 'EU';
                             $linkLabel = 'EUR-Lex →';
                         }
-                        $isEuLexRow = ($source === 'eu');
+                        $celexRow = (string)($item['celex'] ?? '');
+                        $isParlSwissLex = (bool) preg_match('/^parl_(mm|sda):/i', $celexRow)
+                            || in_array($source, ['parl_mm', 'parl_sda'], true);
+                        if ($isParlSwissLex) {
+                            $linkLabel = 'parlament.ch →';
+                        }
+                        $isEuOnlyRow = ($source === 'eu' && !$isParlSwissLex);
+                        $useLexJurisdictionRow = $isParlSwissLex || $isEuOnlyRow;
                         $docType = (string)($item['document_type'] ?? 'Legislation');
                         $itemUrl = (string)($item['eurlex_url'] ?? '#');
                     ?>
                     <div class="entry-card">
-                        <?php if ($isEuLexRow): ?>
+                        <?php if ($useLexJurisdictionRow): ?>
                         <div class="entry-header entry-header--lex-eu">
                             <span class="entry-tag entry-tag--lex-doc"><?= e($docType) ?></span>
                             <div class="entry-header--lex-eu-right">
+                                <?php if ($isParlSwissLex): ?>
+                                <span class="entry-lex-ch-mark" title="Bundeshaus Medien (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
+                                <?php else: ?>
                                 <span class="entry-lex-eu-mark" title="EUR-Lex (EU)"><span class="entry-lex-eu-mark__flag" aria-hidden="true">🇪🇺</span><span class="entry-lex-eu-mark__text">EU</span></span>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <?php else: ?>

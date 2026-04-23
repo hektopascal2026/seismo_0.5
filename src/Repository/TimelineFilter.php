@@ -17,9 +17,16 @@ namespace Seismo\Repository;
  * When a dimension is fully off, `excludeAll*` flags short-circuit SQL so
  * untagged emails and NULL-category feeds cannot leak through exclusion lists.
  *
+ * A `filters[...]` array that includes at least one of `feed` / `lex` / `email` /
+ * `calendar` / `jus` also selects the **native** branch, even when
+ * `filter_form=1` is missing (e.g. shared `?action=index&filters[lex][]=ch_bge`
+ * or the search bar preserving `filters` without the hidden). Otherwise
+ * `fromQueryArray` would run and **ignore** `filters`, showing an unfiltered
+ * timeline (Lex pills appeared to have no effect while feeds still loaded).
+ *
  * **Legacy per-pill OFF lists:** `efc` / `elx` / `eet` are comma-separated tokens
  * that are turned **off** (excluded from SQL). `ecal=1` / `ejus=1` hide Leg / Jus.
- * Parsed when the native `filter_form` / `none` branch does not apply.
+ * Parsed when the native `filter_form` / `none` / `filters` branch does not apply.
  *
  * **Legacy inclusion** (`fc`, `fk`, `lx`, `etag`) is still parsed for old links.
  *
@@ -166,8 +173,9 @@ final class TimelineFilter
     }
 
     /**
-     * Build filter state from `$_GET` using native `filters[…]` arrays when present,
-     * then `none=1`, then legacy query keys.
+     * Build filter state from `$_GET` using native `filters[…]` when `filter_form=1`
+     * **or** when `filters` uses native keys (`feed`, `lex`, …), then `none=1`, then
+     * legacy query keys.
      *
      * @param array<string, mixed> $get Typically $_GET
      * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $pillOpts
@@ -184,7 +192,32 @@ final class TimelineFilter
             return self::fromNativeFilterForm($get, $pillOpts);
         }
 
+        $filtersGet = $get['filters'] ?? null;
+        if (self::getFiltersInQueryLooksNative($filtersGet)) {
+            return self::fromNativeFilterForm($get, $pillOpts);
+        }
+
         return self::fromQueryArray($get);
+    }
+
+    /**
+     * True when `$_GET['filters']` is shaped like the filter-page form
+     * (so it should be parsed with {@see fromNativeFilterForm} even if
+     * `filter_form=1` is missing).
+     *
+     * @param mixed $filters Value of `$get['filters']`
+     */
+    public static function getFiltersInQueryLooksNative(mixed $filters): bool
+    {
+        if (!is_array($filters) || $filters === []) {
+            return false;
+        }
+
+        return array_key_exists('feed', $filters)
+            || array_key_exists('lex', $filters)
+            || array_key_exists('email', $filters)
+            || array_key_exists('calendar', $filters)
+            || array_key_exists('jus', $filters);
     }
 
     /**

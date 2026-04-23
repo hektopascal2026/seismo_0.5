@@ -9,6 +9,8 @@
 
 declare(strict_types=1);
 
+use Seismo\Repository\TimelineFilter;
+
 $inlineTimeline = !empty($inlineTimeline);
 $currentView    = $currentView ?? 'newest';
 ?>
@@ -21,6 +23,8 @@ $currentView    = $currentView ?? 'newest';
                 $ff = $_GET['filter_form'] ?? null;
                 if (is_scalar($ff) && trim((string)$ff) !== '') {
                     echo '<input type="hidden" name="filter_form" value="' . e((string)$ff) . '">';
+                } elseif (TimelineFilter::getFiltersInQueryLooksNative($_GET['filters'] ?? null)) {
+                    echo '<input type="hidden" name="filter_form" value="1">';
                 }
                 $noneP = $_GET['none'] ?? null;
                 if (is_scalar($noneP) && trim((string)$noneP) !== '') {

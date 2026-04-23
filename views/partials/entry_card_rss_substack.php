@@ -38,7 +38,7 @@ $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-subs
                                         $parlIsSda = strncmp((string)($item['guid'] ?? ''), 'parl_sda:', 9) === 0
                                             || $parlCat === 'parl_sda';
                                     ?>
-                                    <span class="entry-tag entry-tag--parl"><?= $parlIsSda ? '🏛 SDA' : '🏛 Parl MM' ?></span>
+                                    <span class="entry-tag entry-tag--parl"><?= $parlIsSda ? '🇨🇭 SDA' : '🇨🇭 Parl MM' ?></span>
                                     <?php if ($parlCommission !== ''): ?>
                                         <span class="entry-tag entry-tag--meta"><?= htmlspecialchars($parlCommission) ?></span>
                                     <?php endif; ?>
