@@ -5,7 +5,7 @@
  *
  * Expects the same outer scope as the original dashboard loop branch:
  * - $itemWrapper (type `feed` or `substack`)
- * - $relevanceScore, $predictedLabel, $scoreBadgeClass, $showAlertBadge
+ * - $relevanceScore, $predictedLabel, $scoreBadgeClass
  * - $favouriteEntryType, $favouriteEntryId, $isFavourite, $searchQuery, $returnQuery, $showFavourites, $csrfField
  *
  * @var array<string, mixed> $itemWrapper
@@ -47,9 +47,6 @@ $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-subs
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
-                                <?php if (!empty($showAlertBadge)): ?>
-                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">

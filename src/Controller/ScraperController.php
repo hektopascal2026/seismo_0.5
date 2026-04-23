@@ -279,12 +279,10 @@ final class ScraperController
         $searchQuery   = '';
         $returnQuery   = 'action=scraper&view=sources';
         $showFavourites = false;
-        $alertThreshold = 0.75;
         $csrfField     = '';
         $relevanceScore = null;
         $predictedLabel = null;
         $scoreBadgeClass = '';
-        $showAlertBadge  = false;
         $favouriteEntryType = 'feed_item';
         $favouriteEntryId   = 0;
         $isFavourite        = false;

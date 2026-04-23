@@ -340,10 +340,19 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                             $sourceLabel = 'EU';
                             $linkLabel = 'EUR-Lex →';
                         }
+                        $isEuLexRow = ($source === 'eu');
                         $docType = (string)($item['document_type'] ?? 'Legislation');
                         $itemUrl = (string)($item['eurlex_url'] ?? '#');
                     ?>
                     <div class="entry-card">
+                        <?php if ($isEuLexRow): ?>
+                        <div class="entry-header entry-header--lex-eu">
+                            <span class="entry-tag entry-tag--lex-doc"><?= e($docType) ?></span>
+                            <div class="entry-header--lex-eu-right">
+                                <span class="entry-lex-eu-mark" title="EUR-Lex (EU)"><span class="entry-lex-eu-mark__flag" aria-hidden="true">🇪🇺</span><span class="entry-lex-eu-mark__text">EU</span></span>
+                            </div>
+                        </div>
+                        <?php else: ?>
                         <div class="entry-header">
                             <?php if ($showSourceTag): ?>
                                 <span class="entry-tag entry-tag--lex-source">
@@ -354,6 +363,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                                 <?= e($docType) ?>
                             </span>
                         </div>
+                        <?php endif; ?>
                         <h3 class="entry-title">
                             <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener">
                                 <?= e((string)($item['title'] ?? '')) ?>

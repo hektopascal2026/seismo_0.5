@@ -18,7 +18,6 @@
  * @var int $hiddenPastRows   Rows the current filter is hiding (i.e. past-dated)
  * @var string $csrfField Hidden CSRF inputs (LegController)
  * @var array<string, array<string, mixed>> $legEntryScores `entry_type:entry_id` → `entry_scores` row
- * @var float $alertThreshold Magnitu alert threshold (0.0–1.0) from `system_config`
  */
 
 declare(strict_types=1);
@@ -260,7 +259,6 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                             $legRel = null;
                         }
                         $legPred = is_array($legScoreRow) ? ($legScoreRow['predicted_label'] ?? null) : null;
-                        $legShowAlert = $legRel !== null && $legRel >= (float)$alertThreshold;
                         $legBadgeClass = '';
                         if ($legRel !== null) {
                             $legPct = (int)round($legRel * 100);
@@ -283,9 +281,6 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                             <?php endif; ?>
                             <?php if ($legRel !== null): ?>
                                 <span class="magnitu-badge <?= e($legBadgeClass) ?>" title="<?= e((string)$legPred) ?> (<?= round($legRel * 100) ?>%)"><?= round($legRel * 100) ?></span>
-                            <?php endif; ?>
-                            <?php if ($legShowAlert): ?>
-                                <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                             <?php endif; ?>
                             <?php if ($statusRaw !== 'scheduled'): ?>
                                 <?php

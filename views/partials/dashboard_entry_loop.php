@@ -53,8 +53,6 @@ $entryLoopIndex                 = 0;
                         $favouriteEntryType = $itemWrapper['entry_type'] ?? '';
                         $favouriteEntryId = (int)($itemWrapper['entry_id'] ?? 0);
                         $isFavourite = !empty($itemWrapper['is_favourite']);
-                        $showAlertBadge = isset($alertThreshold) && $relevanceScore !== null
-                            && $relevanceScore >= (float)$alertThreshold;
                     ?>
                     <?php if ($showDaySeparators): ?>
                         <?php
@@ -167,18 +165,28 @@ $entryLoopIndex                 = 0;
                             $lexPreview = mb_substr($lexDesc, 0, 300);
                             if (mb_strlen($lexDesc) > 300) $lexPreview .= '...';
                             $lexHasMore = mb_strlen($lexDesc) > 300;
+                            $isEuLexCard = ($lexSource === 'eu');
                         ?>
                         <div class="entry-card">
+                            <?php if ($isEuLexCard): ?>
+                            <div class="entry-header entry-header--lex-eu">
+                                <span class="entry-tag entry-tag--lex-doc"><?= htmlspecialchars($lexDocType) ?></span>
+                                <div class="entry-header--lex-eu-right">
+                                    <?php if ($relevanceScore !== null): ?>
+                                        <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
+                                    <?php endif; ?>
+                                    <span class="entry-lex-eu-mark" title="EUR-Lex (EU)"><span class="entry-lex-eu-mark__flag" aria-hidden="true">🇪🇺</span><span class="entry-lex-eu-mark__text">EU</span></span>
+                                </div>
+                            </div>
+                            <?php else: ?>
                             <div class="entry-header">
                                 <span class="entry-tag entry-tag--lex-source"><?= $lexSourceEmoji ?> <?= $lexSourceLabel ?></span>
                                 <span class="entry-tag entry-tag--lex-doc"><?= htmlspecialchars($lexDocType) ?></span>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
                                 <?php endif; ?>
-                                <?php if (!empty($showAlertBadge)): ?>
-                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
-                                <?php endif; ?>
                             </div>
+                            <?php endif; ?>
                             <h3 class="entry-title">
                                 <?php if ($lexHasUrl): ?>
                                     <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener">
@@ -258,9 +266,6 @@ $entryLoopIndex                 = 0;
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
-                                <?php if (!empty($showAlertBadge)): ?>
-                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
@@ -351,9 +356,6 @@ $entryLoopIndex                 = 0;
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
-                                <?php if (!empty($showAlertBadge)): ?>
-                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">

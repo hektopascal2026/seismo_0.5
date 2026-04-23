@@ -18,7 +18,7 @@ declare(strict_types=1);
 /** @var string $emptyTimelineHint 'default'|'favourites'|'search'|'filters' */
 /** @var string $csrfField CSRF hidden input HTML from DashboardController::show() */
 /** @var \Seismo\Repository\TimelineFilter $timelineFilter */
-/** @var float $alertThreshold Magnitu alert threshold for “!” pill on cards (Slice 7a) */
+/** @var float $alertThreshold Magnitu alert threshold (used e.g. by Highlights; timeline score badges stay numeric) */
 
 $basePath = getBasePath();
 $accent   = seismoBrandAccent();

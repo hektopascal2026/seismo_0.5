@@ -9,7 +9,6 @@ use Seismo\Http\CsrfToken;
 use Seismo\Plugin\PluginLanguage;
 use Seismo\Repository\CalendarEventRepository;
 use Seismo\Repository\EntryScoreRepository;
-use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\RefreshAllService;
 
 /**
@@ -38,19 +37,9 @@ final class LegController
         $totalRows        = 0;
         $hiddenPastRows   = 0;
         $legEntryScores   = [];
-        $alertThreshold   = 0.75;
 
         try {
             $pdo = getDbConnection();
-            try {
-                $cfg = new SystemConfigRepository($pdo);
-                $th  = $cfg->get('alert_threshold');
-                if ($th !== null && $th !== '' && is_numeric($th)) {
-                    $alertThreshold = max(0.0, min(1.0, (float)$th));
-                }
-            } catch (\Throwable $e) {
-                // keep default
-            }
             $calendarCfg = (new CalendarConfigStore())->load();
             $enabledSources = array_values(array_filter(
                 CalendarEventRepository::LEG_PAGE_SOURCES,

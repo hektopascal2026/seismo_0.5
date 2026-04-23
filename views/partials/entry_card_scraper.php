@@ -4,7 +4,7 @@
  *
  * Expects the same outer scope as the original {@see dashboard_entry_loop.php} branch:
  * - $itemWrapper (type scraper), with score / entry_type / entry_id / is_favourite
- * - $relevanceScore, $predictedLabel, $scoreBadgeClass, $showAlertBadge
+ * - $relevanceScore, $predictedLabel, $scoreBadgeClass
  * - $favouriteEntryType, $favouriteEntryId, $isFavourite
  * - $csrfField, $returnQuery, $searchQuery, $showFavourites
  *
@@ -31,9 +31,6 @@ $scraperHasMore = mb_strlen($scraperContent) > 200;
                                 <span class="entry-tag entry-tag--scraper">🌐 <?= htmlspecialchars((string)($item['feed_name'] ?? 'Scraper')) ?></span>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars((string)($predictedLabel ?? '')) ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
-                                <?php if (!empty($showAlertBadge)): ?>
-                                    <span class="magnitu-alert-pill" title="Score at or above alert threshold">!</span>
                                 <?php endif; ?>
                             </div>
                             <h3 class="entry-title">
