@@ -51,7 +51,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     <form id="seismo-timeline-refresh-form" method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap">
                         <?= $csrfField ?>
                         <input type="hidden" name="return_action" value="<?= e($timelineRefreshRet) ?>">
-                        <button type="submit" class="top-bar-btn top-bar-btn--text" title="<?= isSatellite() ? 'Fetch all sources on the mothership (remote refresh)' : 'Fetch all sources (same as Settings → Diagnostics → Refresh all)' ?>">Refresh</button>
+                        <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="Refresh" title="<?= isSatellite() ? 'Fetch all sources on the mothership (remote refresh)' : 'Fetch all sources (same as Settings → Diagnostics → Refresh all)' ?>">Refresh</button>
                     </form>
                 <?php endif; ?>
                 <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
@@ -63,28 +63,28 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             </div>
         </div>
         <?php if (!empty($showTimelineRefresh) && ($activeNav === 'index' || $activeNav === 'filter')): ?>
-        <div id="seismo-refresh-overlay" class="seismo-refresh-overlay" style="display: none;" aria-hidden="true">
-            <div class="seismo-refresh-overlay__panel" role="status">
-                <div class="seismo-refresh-overlay__spinner" aria-hidden="true"></div>
-                <p class="seismo-refresh-overlay__text">Refreshing sources, please wait&hellip;</p>
-            </div>
-        </div>
         <script>
         (function() {
             var form = document.getElementById('seismo-timeline-refresh-form');
-            var overlay = document.getElementById('seismo-refresh-overlay');
-            if (!form || !overlay) return;
-            function showOverlay() {
-                overlay.style.display = 'flex';
-                overlay.setAttribute('aria-hidden', 'false');
+            if (!form) return;
+            var button = form.querySelector('button[type=submit]');
+            if (!button) return;
+            var defaultLabel = (button.getAttribute('data-refresh-label') || 'Refresh');
+            function setButtonLoading() {
+                button.disabled = true;
+                button.classList.add('is-refreshing');
+                button.setAttribute('aria-busy', 'true');
+                button.innerHTML = 'Refreshing<span class="loading-dots" aria-hidden="true"></span>';
             }
-            function hideOverlay() {
-                overlay.style.display = 'none';
-                overlay.setAttribute('aria-hidden', 'true');
+            function setButtonDefault() {
+                button.disabled = false;
+                button.classList.remove('is-refreshing');
+                button.removeAttribute('aria-busy');
+                button.textContent = defaultLabel;
             }
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
-                showOverlay();
+                setButtonLoading();
                 var fd = new FormData(form);
                 fd.set('ajax', '1');
                 fetch(form.getAttribute('action') || form.action, {
@@ -112,7 +112,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                         throw new Error(err);
                     })
                     .catch(function(err) {
-                        hideOverlay();
+                        setButtonDefault();
                         var msg = (err && err.message) ? err.message : 'Refresh request failed.';
                         window.alert(msg);
                     });

@@ -455,48 +455,53 @@ textarea.search-input.setup-code-preview {
     margin: 0;
 }
 
-/* Full-screen mask while master refresh runs (AJAX; avoids blocking the tab on navigation) */
-.seismo-refresh-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
-    padding: 20px;
+/* Timeline Refresh (AJAX): width locked so idle/loading do not shift the top bar */
+.top-bar-btn--timeline-refresh {
+    min-width: 12.5ch;
+    box-sizing: border-box;
 }
 
-.seismo-refresh-overlay__panel {
-    max-width: 22rem;
-    border: 2px solid #000000;
-    background: #ffffff;
-    color: #000000;
-    padding: 1.5rem 1.75rem;
-    text-align: center;
-    box-shadow: 4px 4px 0 #000000;
+.top-bar-btn--timeline-refresh.is-refreshing {
+    cursor: wait;
+    opacity: 0.7;
 }
 
-.seismo-refresh-overlay__spinner {
-    width: 2.5rem;
-    height: 2.5rem;
-    margin: 0 auto 1rem;
-    border: 3px solid #000000;
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: seismo-refresh-spin 0.7s linear infinite;
+/* Animated ellipsis on the in-button loading state (max-width + overflow: reliable vs. animating `content`) */
+.loading-dots {
+    display: inline-block;
+    overflow: hidden;
+    vertical-align: -0.04em;
+    max-width: 0;
+    animation: seismo-dots-ellipsis 1.2s steps(4, end) infinite;
 }
 
-.seismo-refresh-overlay__text {
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.4;
-    margin: 0;
+.loading-dots::after {
+    content: '...';
+    display: inline-block;
 }
 
-@keyframes seismo-refresh-spin {
-    to {
-        transform: rotate(360deg);
+@keyframes seismo-dots-ellipsis {
+    0% {
+        max-width: 0;
+    }
+    25% {
+        max-width: 0.4em;
+    }
+    50% {
+        max-width: 0.65em;
+    }
+    75% {
+        max-width: 1.05em;
+    }
+    100% {
+        max-width: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .loading-dots {
+        animation: none;
+        max-width: 1.05em;
     }
 }
 
