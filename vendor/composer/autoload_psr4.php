@@ -7,6 +7,9 @@ $baseDir = dirname($vendorDir);
 
 return array(
     'SimplePie\\' => array($vendorDir . '/simplepie/simplepie/src'),
+    'Seismo\\Tests\\' => array($baseDir . '/tests'),
     'Seismo\\' => array($baseDir . '/src'),
+    'PhpParser\\' => array($vendorDir . '/nikic/php-parser/lib/PhpParser'),
     'EasyRdf\\' => array($vendorDir . '/easyrdf/easyrdf/lib'),
+    'DeepCopy\\' => array($vendorDir . '/myclabs/deep-copy/src/DeepCopy'),
 );

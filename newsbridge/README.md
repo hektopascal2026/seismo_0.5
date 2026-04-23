@@ -1,27 +1,53 @@
-# Newsbridge (static RSS for Seismo)
+# Newsbridge (v0.4 / gaia parity)
 
-This directory holds **config + generated** RSS files that Seismo ingests as normal RSS `feeds` (same as before when they lived under staging).
+The four aggregate feeds Seismo reads as normal RSS are built here from **NewsAPI.org** (same `streams.php` logic as the historical gaia + v0.4 staging `newsbridge`).
 
-1. **Copy** `config.example.json` to `config.json` and set:
-   - Your public base URL in each `self_link` and in `channel.link` (use `getBasePath()`-style paths on your host, e.g. `https://www.example.org/seismo/`).
-   - The `sources` arrays: same RSS URLs you used on staging (or your curated list).
+Output files: **`feeds/top-ch.xml`**, **`feeds/ch-en.xml`**, **`feeds/ch-de.xml`**, **`feeds/ch-fr.xml`**.
 
-2. **Run once (or on cron):**
-   ```bash
-   php /path/to/seismo_0.5/newsbridge/newsbridge_cron.php
-   ```
-   This writes `newsbridge/feeds/*.xml` next to this repo.
+## Setup
 
-3. **In Seismo → Feeds**, set each of the four feed rows to the **new** URLs, e.g.:
-   - `https://<host>/seismo/newsbridge/feeds/top-ch.xml`
-   - … `ch-en.xml`, `ch-de.xml`, `ch-fr.xml`  
-   Remove any `/seismo-staging/newsbridge/` URLs.
+1. **NewsAPI key** — [newsapi.org](https://newsapi.org) (free tier is enough for light use; check their limits).
 
-4. **Cron** (separate from `refresh_cron.php`):
-   ```cron
-   */20 * * * * /usr/bin/php /path/to/seismo_0.5/newsbridge/newsbridge_cron.php
-   ```
+2. **Copy** `config.example.php` → **`config.local.php`** (gitignored) and set at least:
+   - `newsapi_key`
+   - `cron_token` — long random string for the HTTP cron URL
+   - `site_base_url` — public URL of this folder, **no trailing slash**, e.g. `https://www.hektopascal.org/seismo/newsbridge`  
+     (So feed URLs are `https://…/seismo/newsbridge/feeds/top-ch.xml`.)
 
-`config.json` is gitignored; ship `config.example.json` in the repo.
+3. **PHP extensions** (most shared hosts have these): `curl`, `pdo_sqlite`, `dom`.
 
-Optional `language` per output: `de`, `fr`, `en` (heuristic filter on title+description+content) or `any`/omit. Prefer tuning **sources** per file for predictable results.
+## Run (generate XML)
+
+- **CLI** (no token):
+  ```bash
+  php /path/to/seismo/newsbridge/newsbridge_cron.php
+  ```
+
+- **HTTP** (same as old staging — Plesk “URL cron”):
+  ```text
+  https://<host>/seismo/newsbridge/cron.php?token=YOUR_CRON_TOKEN
+  ```
+
+- **Diagnose** News API from the server:
+  ```text
+  https://<host>/seismo/newsbridge/cron.php?token=…&diagnose=1
+  ```
+
+SQLite cache and logs: `newsbridge/data/` (auto-created).
+
+## Seismo → Feeds
+
+Point the four `feeds.url` entries at (adjust host + base path):
+
+- `…/newsbridge/feeds/top-ch.xml`
+- `…/newsbridge/feeds/ch-en.xml`
+- `…/newsbridge/feeds/ch-de.xml`
+- `…/newsbridge/feeds/ch-fr.xml`
+
+## Editing streams
+
+Change **`streams.php`** (swiss domains for `top-ch`, or the `q` / `language` queries for the language feeds). Not editable from the Seismo UI — same as gaia.
+
+## Optional: `config.example.json` + `Seismo\Service\NewsbridgeGenerator`
+
+A separate, experimental **RSS-merge** path (merge plain RSS URLs into XML) lives in the main app; it is **not** the v0.4 News API pipeline. Use the files above for parity with staging.

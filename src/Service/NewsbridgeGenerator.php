@@ -29,7 +29,10 @@ final class NewsbridgeGenerator
         if (!is_file($configPath) || !is_readable($configPath)) {
             return [
                 'written' => [],
-                'errors'  => ['Config not found or not readable: ' . $configPath],
+                'errors'  => [
+                    'Config not found or not readable: ' . $configPath
+                    . ' — copy `newsbridge/config.example.json` to `newsbridge/config.json` (in the Seismo install root).',
+                ],
                 'stats'   => [],
             ];
         }
