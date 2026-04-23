@@ -33,6 +33,7 @@
  * @var ?string $migrateKeyPasteBlock
  * @var ?string $adminPasswordPasteBlock
  * @var bool $sessionAuthEnabled
+ * @var bool $navLeadingThrottleOn Settings → General: main nav / settings tab leading-edge click throttle
  */
 
 declare(strict_types=1);

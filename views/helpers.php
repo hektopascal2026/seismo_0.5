@@ -224,3 +224,32 @@ if (!function_exists('seismo_strip_email_listing_boilerplate')) {
         return \Seismo\Core\Mail\EmailListingBoilerplateStripper::strip($body, $s);
     }
 }
+
+if (!function_exists('seismo_ui_nav_leading_throttle_ms')) {
+    /**
+     * Milliseconds to lock other main-nav / settings-tab links after a navigation
+     * click (0 = off). Read from `system_config` key {@see \Seismo\Controller\SettingsController::KEY_NAV_LEADING_THROTTLE}
+     * via {@see \Seismo\Repository\SystemConfigRepository} — no raw SQL here.
+     */
+    function seismo_ui_nav_leading_throttle_ms(): int
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        try {
+            $repo = new \Seismo\Repository\SystemConfigRepository(getDbConnection());
+            $raw  = $repo->get(\Seismo\Controller\SettingsController::KEY_NAV_LEADING_THROTTLE) ?? '0';
+        } catch (\Throwable) {
+            return $cached = 0;
+        }
+        if ($raw === '1' || $raw === 'true' || $raw === 'yes' || $raw === 'on') {
+            return $cached = 500;
+        }
+        if (is_numeric($raw) && (int)$raw > 0) {
+            return $cached = min(10000, max(100, (int)$raw));
+        }
+
+        return $cached = 0;
+    }
+}

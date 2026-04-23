@@ -20,6 +20,12 @@ final class SettingsController
     public const KEY_DASHBOARD_LIMIT = 'ui:dashboard_limit';
 
     /**
+     * When `1`, main nav / settings tab clicks use a short leading-edge throttle
+     * (see {@see seismo_ui_nav_leading_throttle_ms()} in helpers).
+     */
+    public const KEY_NAV_LEADING_THROTTLE = 'ui:nav_leading_throttle';
+
+    /**
      * `system_config` keys rendered on the Magnitu tab. Kept here (not in the
      * partial) so the controller stays the single place that decides which
      * columns the view needs — the view is a dumb renderer.
@@ -83,6 +89,9 @@ final class SettingsController
         if ($rawLimit !== null && $rawLimit !== '' && ctype_digit($rawLimit)) {
             $dashboardLimitSaved = max(1, min($maxLimit, (int)$rawLimit));
         }
+
+        $rawNavThrottle = $config->get(self::KEY_NAV_LEADING_THROTTLE);
+        $navLeadingThrottleOn = $rawNavThrottle === '1' || $rawNavThrottle === 'true';
 
         $pageError = null;
         $rows      = [];
@@ -331,9 +340,12 @@ final class SettingsController
         }
         $n = max(1, min(\Seismo\Repository\EntryRepository::MAX_LIMIT, $n));
 
+        $navThrottle = (string)($_POST['nav_leading_throttle'] ?? '0') === '1';
+
         try {
             $config = new SystemConfigRepository(getDbConnection());
             $config->set(self::KEY_DASHBOARD_LIMIT, (string)$n);
+            $config->set(self::KEY_NAV_LEADING_THROTTLE, $navThrottle ? '1' : '0');
             $_SESSION['success'] = 'Settings saved.';
         } catch (\Throwable $e) {
             error_log('Seismo settings_save: ' . $e->getMessage());

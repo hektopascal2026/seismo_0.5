@@ -12,6 +12,7 @@
  * @var ?string $migrateKeyPasteBlock
  * @var ?string $adminPasswordPasteBlock
  * @var bool $sessionAuthEnabled
+ * @var bool $navLeadingThrottleOn
  */
 
 declare(strict_types=1);
@@ -28,6 +29,13 @@ declare(strict_types=1);
                     <input type="number" id="dashboard_limit" name="dashboard_limit" min="1" max="<?= (int)$dashboardLimitMax ?>"
                            value="<?= (int)$dashboardLimitSaved ?>"
                            class="search-input" style="width:7rem;">
+                </div>
+                <div class="admin-form-field">
+                    <input type="hidden" name="nav_leading_throttle" value="0">
+                    <label>
+                        <input type="checkbox" name="nav_leading_throttle" value="1" <?= !empty($navLeadingThrottleOn) ? 'checked' : '' ?>>
+                        Throttle rapid navigation (500ms lock after each main-menu or Settings tab click; reduces duplicate full-page requests on slow or strict hosts; first click is never delayed)
+                    </label>
                 </div>
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success">Save</button>

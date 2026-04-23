@@ -13,6 +13,11 @@ declare(strict_types=1);
 
 use Seismo\Http\AuthGate;
 
+if (!function_exists('seismo_ui_nav_leading_throttle_ms')) {
+    require_once __DIR__ . '/../helpers.php';
+}
+$seismoNavLeadThrottleMs = seismo_ui_nav_leading_throttle_ms();
+
 $activeNav = $activeNav ?? 'index';
 $filterNavQs = $filterNavQs ?? 'action=filter';
 ?>
@@ -91,3 +96,40 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             });
         })();
         </script>
+        <?php if ($seismoNavLeadThrottleMs > 0): ?>
+        <script>
+        (function() {
+            var lockUntil = 0;
+            var ms = <?= (int) $seismoNavLeadThrottleMs ?>;
+            document.addEventListener('click', function(e) {
+                if (e.defaultPrevented) {
+                    return;
+                }
+                if (e.button !== 0) {
+                    return;
+                }
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+                    return;
+                }
+                var t = e.target;
+                if (!t || !t.closest) {
+                    return;
+                }
+                var a = t.closest('a[href]');
+                if (!a) {
+                    return;
+                }
+                if (!a.matches('#seismo-nav-drawer a[href], .settings-tabs a[href]')) {
+                    return;
+                }
+                var now = Date.now();
+                if (now < lockUntil) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    return;
+                }
+                lockUntil = now + ms;
+            }, true);
+        })();
+        </script>
+        <?php endif; ?>
