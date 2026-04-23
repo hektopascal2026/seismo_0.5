@@ -146,16 +146,22 @@ final class DiagnosticsController
 
     public function refreshAll(): void
     {
-        if (!$this->guardPost()) {
+        $ajax = $this->wantsJsonRefreshResponse();
+        if (!$this->assertPostWithCsrfForRefresh($ajax)) {
             return;
         }
 
+        set_time_limit(300);
         $pdo = getDbConnection();
         $config = new SystemConfigRepository($pdo);
         $last = $config->get(self::KEY_LAST_REFRESH_AT);
         if ($last !== null && $last !== '' && ctype_digit($last) && (time() - (int)$last) < 60) {
             $remaining = 60 - (time() - (int)$last);
-            $_SESSION['error'] = "Please wait {$remaining}s before refreshing again.";
+            $msg = "Please wait {$remaining}s before refreshing again.";
+            $_SESSION['error'] = $msg;
+            if ($ajax) {
+                $this->jsonRefreshResponse(200, false, $msg, $msg);
+            }
             $this->redirectAfterRefresh();
 
             return;
@@ -166,7 +172,11 @@ final class DiagnosticsController
             $results = RefreshAllService::boot($pdo)->runAll(true);
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics refresh_all: ' . $e->getMessage());
-            $_SESSION['error'] = 'Refresh all failed: ' . $e->getMessage();
+            $msg = 'Refresh all failed: ' . $e->getMessage();
+            $_SESSION['error'] = $msg;
+            if ($ajax) {
+                $this->jsonRefreshResponse(200, false, $msg, $msg);
+            }
             $this->redirectAfterRefresh();
 
             return;
@@ -183,15 +193,62 @@ final class DiagnosticsController
                 $errCount++;
             }
         }
-        $_SESSION['success'] = sprintf(
+        $summary = sprintf(
             'Refresh all: %d ok (%d items), %d error, %d skipped.',
             $okCount,
             $itemsTotal,
             $errCount,
             count($results) - $okCount - $errCount
         );
+        $_SESSION['success'] = $summary;
+        if ($ajax) {
+            $this->jsonRefreshResponse(200, true, $summary, null);
+        }
 
         $this->redirectAfterRefresh();
+    }
+
+    private function wantsJsonRefreshResponse(): bool
+    {
+        return isset($_POST['ajax']) && (string) $_POST['ajax'] === '1';
+    }
+
+    private function assertPostWithCsrfForRefresh(bool $ajax): bool
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            if ($ajax) {
+                $this->jsonRefreshResponse(405, false, 'Method not allowed', 'Method not allowed');
+            }
+            header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
+            exit;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            if ($ajax) {
+                $this->jsonRefreshResponse(403, false, 'Session expired — please try again.', 'Session expired — please try again.');
+            }
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectAfterRefresh();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param 'success'|null $message User-visible summary when ok; when not ok, used as error text if $error is null
+     */
+    private function jsonRefreshResponse(int $http, bool $ok, ?string $message, ?string $error): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code($http);
+        $errOut = $error ?? ($ok ? null : $message);
+        echo json_encode([
+            'ok'      => $ok,
+            'message' => $ok ? $message : null,
+            'error'   => $ok ? null : $errOut,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
     }
 
     /**

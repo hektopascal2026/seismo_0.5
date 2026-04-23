@@ -48,7 +48,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     $timelineRefreshRet = $timelineRefreshReturnAction ?? 'index';
                     ?>
                 <?php if (!empty($showTimelineRefresh) && ($activeNav === 'index' || $activeNav === 'filter')): ?>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap">
+                    <form id="seismo-timeline-refresh-form" method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap">
                         <?= $csrfField ?>
                         <input type="hidden" name="return_action" value="<?= e($timelineRefreshRet) ?>">
                         <button type="submit" class="top-bar-btn top-bar-btn--text" title="<?= isSatellite() ? 'Fetch all sources on the mothership (remote refresh)' : 'Fetch all sources (same as Settings → Diagnostics → Refresh all)' ?>">Refresh</button>
@@ -62,6 +62,64 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                 <?php endif; ?>
             </div>
         </div>
+        <?php if (!empty($showTimelineRefresh) && ($activeNav === 'index' || $activeNav === 'filter')): ?>
+        <div id="seismo-refresh-overlay" class="seismo-refresh-overlay" style="display: none;" aria-hidden="true">
+            <div class="seismo-refresh-overlay__panel" role="status">
+                <div class="seismo-refresh-overlay__spinner" aria-hidden="true"></div>
+                <p class="seismo-refresh-overlay__text">Refreshing sources, please wait&hellip;</p>
+            </div>
+        </div>
+        <script>
+        (function() {
+            var form = document.getElementById('seismo-timeline-refresh-form');
+            var overlay = document.getElementById('seismo-refresh-overlay');
+            if (!form || !overlay) return;
+            function showOverlay() {
+                overlay.style.display = 'flex';
+                overlay.setAttribute('aria-hidden', 'false');
+            }
+            function hideOverlay() {
+                overlay.style.display = 'none';
+                overlay.setAttribute('aria-hidden', 'true');
+            }
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                showOverlay();
+                var fd = new FormData(form);
+                fd.set('ajax', '1');
+                fetch(form.getAttribute('action') || form.action, {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json, text/plain, */*' }
+                })
+                    .then(function(r) { return r.text().then(function(t) { return { r: r, t: t }; }); })
+                    .then(function(v) {
+                        var data;
+                        try {
+                            data = v.t ? JSON.parse(v.t) : null;
+                        } catch (e2) {
+                            throw new Error('Server did not return JSON. If this persists, check Diagnostics or server logs (HTTP ' + v.r.status + ').');
+                        }
+                        if (!data) {
+                            throw new Error('Empty response (HTTP ' + v.r.status + ').');
+                        }
+                        if (data.ok === true) {
+                            window.location.reload();
+                            return;
+                        }
+                        var err = (typeof data.error === 'string' && data.error !== '') ? data.error : 'Refresh could not be completed.';
+                        throw new Error(err);
+                    })
+                    .catch(function(err) {
+                        hideOverlay();
+                        var msg = (err && err.message) ? err.message : 'Refresh request failed.';
+                        window.alert(msg);
+                    });
+            });
+        })();
+        </script>
+        <?php endif; ?>
 
         <nav id="seismo-nav-drawer" class="nav-drawer" aria-label="Main navigation" aria-hidden="true">
             <a href="<?= e($basePath) ?>/index.php?action=index" class="nav-link<?= $activeNav === 'index' ? ' active' : '' ?>">Timeline</a>

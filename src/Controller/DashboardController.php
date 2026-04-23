@@ -172,15 +172,28 @@ final class DashboardController
 
             return;
         }
+        $ajax = isset($_POST['ajax']) && (string) $_POST['ajax'] === '1';
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
             header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
             exit;
         }
         if (!CsrfToken::verifyRequest()) {
-            $_SESSION['error'] = 'Session expired — please try again.';
+            $msg = 'Session expired — please try again.';
+            $_SESSION['error'] = $msg;
+            if ($ajax) {
+                header('Content-Type: application/json; charset=utf-8');
+                http_response_code(403);
+                echo json_encode(
+                    [
+                        'ok'      => false,
+                        'message' => null,
+                        'error'   => $msg,
+                    ],
+                    JSON_UNESCAPED_UNICODE
+                );
+                exit;
+            }
             $this->redirectAfterRemoteRefresh();
-
-            return;
         }
 
         $mother = trim((string)SEISMO_MOTHERSHIP_URL);
@@ -188,7 +201,7 @@ final class DashboardController
         if ($mother === '' || $key === '') {
             $_SESSION['error'] = 'Remote refresh is not configured on this satellite (SEISMO_MOTHERSHIP_URL / SEISMO_REMOTE_REFRESH_KEY).';
 
-            $this->redirectAfterRemoteRefresh();
+            $this->endRemoteRefreshOrJson($ajax);
 
             return;
         }
@@ -203,7 +216,7 @@ final class DashboardController
         if ($status === 0 && $body === '') {
             $_SESSION['error'] = 'Could not reach the mothership for refresh (network or TLS error).';
 
-            $this->redirectAfterRemoteRefresh();
+            $this->endRemoteRefreshOrJson($ajax);
 
             return;
         }
@@ -215,7 +228,7 @@ final class DashboardController
                 ? 'Mothership refresh failed (HTTP ' . $status . ').'
                 : 'Mothership returned a non-JSON response.';
 
-            $this->redirectAfterRemoteRefresh();
+            $this->endRemoteRefreshOrJson($ajax);
 
             return;
         }
@@ -244,7 +257,29 @@ final class DashboardController
             $_SESSION['error'] = $err !== '' ? 'Mothership: ' . $err : 'Refresh finished with errors.';
         }
 
-        $this->redirectAfterRemoteRefresh();
+        $this->endRemoteRefreshOrJson($ajax);
+    }
+
+    /**
+     * After building flash in {@see self::refreshRemote()}, either JSON (timeline AJAX)
+     * or 303 redirect.
+     */
+    private function endRemoteRefreshOrJson(bool $ajax): void
+    {
+        if (!$ajax) {
+            $this->redirectAfterRemoteRefresh();
+        }
+        $success = $_SESSION['success'] ?? null;
+        $error = $_SESSION['error'] ?? null;
+        $ok = ! (is_string($error) && $error !== '');
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(200);
+        echo json_encode([
+            'ok'      => $ok,
+            'message' => is_string($success) ? $success : null,
+            'error'   => is_string($error) ? $error : null,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
     }
 
     /**
