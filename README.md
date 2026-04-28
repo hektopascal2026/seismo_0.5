@@ -59,6 +59,19 @@ Third-party adapters live under `src/Plugin/` and share the **`lex_items`** tabl
 - **Magnitu v3** — Bearer `magnitu_*` actions: entry export, score ingest, labels, recipe round-trip, status. Contract is shared between repos; do not change JSON shapes without updating the Python client.
 - **Satellite mode** — optional second instance reads **entry** tables from a **mothership** database on the same MySQL server while keeping **scores, labels, and config** local (multi-topic Magnitu profiles).
 
+#### Magnitu highlights, Label training, and satellites
+
+The **Magnitu highlights** view (`?action=magnitu`) shows highly scored entries using the same entry cards as the timeline, including an optional **star** (favourite). **Stars** are stored in **`entry_favourites`** and are **always local** to the Seismo instance you are using (mothership or satellite). They are **not** exported or imported by Magnitu; there is no `magnitu_*` endpoint for favourites.
+
+**Training labels** used by Magnitu (`investigation_lead`, `important`, `background`, `noise`) are edited on the in-app **Label** tab (`?action=label`). Those rows live in **`magnitu_labels`** on the same instance. Magnitu v3 pulls and pushes them with **`magnitu_labels`** GET/POST, authenticated with that instance’s Magnitu API key.
+
+For a **satellite** tied to a Magnitu profile:
+
+1. Use **seismo-generator** (sibling repo) to build the deployable tree; it prints the satellite **base URL** and **dedicated API key** to paste into **that** profile in Magnitu.
+2. In Magnitu, **pull entries** always uses the **global** mothership connection (shared article pool). **Pull labels** and **push** (scores, recipe, labels) use the profile’s **satellite URL + API key** when both are set, so label work and model output round-trip to **that** satellite only — not mixed with another host. Magnitu rejects an incomplete pair (URL without key or the reverse).
+
+Authoritative HTTP details: **`.cursor/rules/magnitu-integration.mdc`**.
+
 ### Export API (machine-readable)
 
 - **`?action=export_briefing`** — Markdown digest for a time window (Bearer **`export:api_key`**, distinct from the Magnitu write key).
