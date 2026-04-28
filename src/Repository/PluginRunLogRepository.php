@@ -42,7 +42,7 @@ final class PluginRunLogRepository
                 $pluginId,
                 $result->status,
                 $result->count,
-                $result->status === 'ok' ? null : $result->message,
+                ($result->status === 'ok') ? null : $result->message,
                 $durationMs,
             ]);
         } catch (PDOException $e) {
@@ -59,14 +59,14 @@ final class PluginRunLogRepository
     }
 
     /**
-     * Timestamp (UTC) of the most recent `ok` run for $pluginId, or null.
-     * Used by the throttle check. `error` / `skipped` rows are deliberately
-     * ignored so a broken upstream gets retried on every cron tick instead
-     * of being silenced for the throttle interval.
+     * Timestamp (UTC) of the most recent successful run (`ok` or `warn`) for
+     * $pluginId, or null. Used by the throttle check. `error` / `skipped`
+     * rows are deliberately ignored so a broken upstream gets retried on
+     * every cron tick instead of being silenced for the throttle interval.
      */
     public function lastSuccessfulRunAt(string $pluginId): ?DateTimeImmutable
     {
-        $sql = 'SELECT MAX(run_at) FROM plugin_run_log WHERE plugin_id = ? AND status = \'ok\'';
+        $sql = 'SELECT MAX(run_at) FROM plugin_run_log WHERE plugin_id = ? AND status IN (\'ok\', \'warn\')';
 
         try {
             $stmt = $this->pdo->prepare($sql);

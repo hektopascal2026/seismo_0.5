@@ -30,15 +30,15 @@ use Seismo\Repository\PluginRunLogRepository;
  * It may fire every 5 minutes (Plesk default granularity). We do NOT want every
  * plugin hitting its upstream every 5 minutes, so runAll() consults each
  * plugin's {@see SourceFetcherInterface::getMinIntervalSeconds()} and skips
- * plugins whose last `ok` run in `plugin_run_log` is fresher than that.
+ * plugins whose last successful run (`ok` or `warn`) in `plugin_run_log` is fresher than that.
  *
  * Throttle skips use {@see PluginRunResult::throttleSkipped()} — they are **not**
  * persisted to `plugin_run_log` (cron stdout only). User-initiated refresh paths
  * call with `$force = true` to bypass the throttle.
  *
- * Rows ARE persisted for every non-throttle outcome (ok, error, skipped-because-
- * satellite, skipped-because-disabled-in-config). Those are the rows diagnostics
- * displays.
+ * Rows ARE persisted for every non-throttle outcome (ok, warn, error, skipped-
+ * because-satellite, skipped-because-disabled-in-config). Those are the rows
+ * diagnostics displays.
  *
  * Slice 4: {@see CoreRunner} runs first (RSS/Substack, scraper, IMAP mail),
  * then registered plugins. Same `runAll()` entry point for web + CLI cron.

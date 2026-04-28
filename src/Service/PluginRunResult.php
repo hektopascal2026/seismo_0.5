@@ -25,6 +25,37 @@ final class PluginRunResult
     }
 
     /**
+     * Core batch fetchers (RSS, Parl. press, scraper): aggregate outcome from
+     * per-feed tries. All failed → {@see error()}; some failed → `warn`; none
+     * failed → `ok`. Empty batch (`$sourcesAttempted === 0`) → `ok`.
+     */
+    public static function batchFeeds(int $itemCount, int $sourcesAttempted, int $sourcesFailed): self
+    {
+        if ($sourcesAttempted < 0 || $sourcesFailed < 0) {
+            throw new \InvalidArgumentException('batchFeeds: counts must be non-negative.');
+        }
+        if ($sourcesFailed > $sourcesAttempted) {
+            throw new \InvalidArgumentException('batchFeeds: failed cannot exceed attempted.');
+        }
+        if ($sourcesAttempted === 0 || $sourcesFailed === 0) {
+            return new self('ok', $itemCount);
+        }
+        if ($sourcesFailed === $sourcesAttempted) {
+            return new self(
+                'error',
+                $itemCount,
+                sprintf('All %d source(s) failed.', $sourcesFailed)
+            );
+        }
+
+        return new self(
+            'warn',
+            $itemCount,
+            sprintf('%d of %d sources failed.', $sourcesFailed, $sourcesAttempted)
+        );
+    }
+
+    /**
      * @param bool $persistToPluginRunLog When false, cron/diagnostics will not
      *        write a `plugin_run_log` row (e.g. IMAP not configured — avoid
      *        log spam every cron tick).

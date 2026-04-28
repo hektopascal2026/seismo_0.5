@@ -101,7 +101,7 @@ final class DiagnosticsController
             $row = $latest[$id] ?? null;
             $minInterval = (int)$meta['min_interval'];
             $nextAllowed = null;
-            if ($row !== null && $row['status'] === 'ok' && $minInterval > 0) {
+            if ($row !== null && in_array($row['status'], ['ok', 'warn'], true) && $minInterval > 0) {
                 $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
             }
             $coreStatus[$id] = [
@@ -122,7 +122,7 @@ final class DiagnosticsController
             $minInterval = $plugin->getMinIntervalSeconds();
 
             $nextAllowed = null;
-            if ($row !== null && $row['status'] === 'ok' && $minInterval > 0) {
+            if ($row !== null && in_array($row['status'], ['ok', 'warn'], true) && $minInterval > 0) {
                 $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
             }
 
@@ -210,22 +210,28 @@ final class DiagnosticsController
         }
 
         $okCount = 0;
+        $warnCount = 0;
         $errCount = 0;
         $itemsTotal = 0;
         foreach ($results as $r) {
             if ($r->isOk()) {
                 $okCount++;
                 $itemsTotal += $r->count;
+            } elseif ($r->status === 'warn') {
+                $warnCount++;
+                $itemsTotal += $r->count;
             } elseif ($r->status === 'error') {
                 $errCount++;
             }
         }
+        $skipped = count($results) - $okCount - $warnCount - $errCount;
         $summary = sprintf(
-            'Refresh all: %d ok (%d items), %d error, %d skipped.',
+            'Refresh all: %d ok, %d partial (%d items), %d error, %d skipped.',
             $okCount,
+            $warnCount,
             $itemsTotal,
             $errCount,
-            count($results) - $okCount - $errCount
+            $skipped
         );
         $_SESSION['success'] = $summary;
         if ($ajax) {
@@ -340,13 +346,19 @@ final class DiagnosticsController
         }
 
         $hasErrors = false;
+        $hasWarn = false;
         $messages = [];
         foreach ($results as $id => $r) {
             if ($r->status === 'error') {
                 $hasErrors = true;
             }
+            if ($r->status === 'warn') {
+                $hasWarn = true;
+            }
             if ($r->isOk()) {
                 $messages[] = $id . ': ok (' . $r->count . ' items)';
+            } elseif ($r->status === 'warn') {
+                $messages[] = $id . ': partial (' . $r->count . ' items) — ' . (string)($r->message ?? '');
             } elseif ($r->status === 'skipped') {
                 $messages[] = $id . ': skipped — ' . (string)($r->message ?? '');
             } else {
@@ -357,6 +369,7 @@ final class DiagnosticsController
         $elapsedMs = (int)round((microtime(true) - $startedAt) * 1000);
         echo json_encode([
             'ok' => !$hasErrors,
+            'partial' => $hasWarn,
             'messages' => $messages,
             'elapsed_ms' => $elapsedMs,
         ]);
@@ -394,6 +407,13 @@ final class DiagnosticsController
 
         if ($result->isOk()) {
             $_SESSION['success'] = sprintf('Refresh %s: %d row(s) processed.', $id, $result->count);
+        } elseif ($result->status === 'warn') {
+            $_SESSION['success'] = sprintf(
+                'Refresh %s: %d row(s) processed. %s',
+                $id,
+                $result->count,
+                $result->message ?? ''
+            );
         } elseif ($result->status === 'skipped') {
             $_SESSION['error'] = 'Refresh ' . $id . ' skipped: ' . ($result->message ?? '');
         } else {

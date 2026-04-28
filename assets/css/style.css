@@ -968,6 +968,12 @@ textarea.search-input.setup-code-preview {
     color: #990000;
 }
 
+.diag-inline-warn {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #856404;
+}
+
 .diag-actions {
     margin-top: 10px;
 }

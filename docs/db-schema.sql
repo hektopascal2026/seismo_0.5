@@ -360,7 +360,7 @@ CREATE TABLE IF NOT EXISTS plugin_run_log (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     plugin_id     VARCHAR(64) NOT NULL,
     run_at        DATETIME    NOT NULL,
-    status        ENUM('ok','skipped','error') NOT NULL,
+    status        ENUM('ok','skipped','error','warn') NOT NULL,
     item_count    INT         NOT NULL DEFAULT 0,
     error_message TEXT        DEFAULT NULL,
     duration_ms   INT         NOT NULL DEFAULT 0,

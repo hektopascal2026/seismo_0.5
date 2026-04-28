@@ -89,6 +89,8 @@ final class CoreRunner
 
         $start = (int)(microtime(true) * 1000);
         $total = 0;
+        $attempted = 0;
+        $failed = 0;
         try {
             $offset = 0;
             $page   = 200;
@@ -103,12 +105,14 @@ final class CoreRunner
                     if ($id <= 0 || $url === '') {
                         continue;
                     }
+                    $attempted++;
                     try {
                         $items = $this->rss->fetchFeedItems($url);
                         $n = $this->feeds->upsertFeedItems($id, $items);
                         $total += $n;
                         $this->feeds->touchFeedSuccess($id);
                     } catch (\Throwable $e) {
+                        $failed++;
                         error_log('Seismo core:rss feed ' . $id . ': ' . $e->getMessage());
                         $this->feeds->touchFeedFailure($id, $e->getMessage());
                     }
@@ -118,7 +122,7 @@ final class CoreRunner
                 }
                 $offset += $page;
             }
-            $r = PluginRunResult::ok($total);
+            $r = PluginRunResult::batchFeeds($total, $attempted, $failed);
         } catch (\Throwable $e) {
             error_log('Seismo core:rss: ' . $e->getMessage());
             $r = PluginRunResult::error($e->getMessage());
@@ -145,6 +149,8 @@ final class CoreRunner
 
         $start = (int)(microtime(true) * 1000);
         $total = 0;
+        $attempted = 0;
+        $failed = 0;
         try {
             $offset = 0;
             $page   = 50;
@@ -158,6 +164,7 @@ final class CoreRunner
                     if ($id <= 0) {
                         continue;
                     }
+                    $attempted++;
                     try {
                         // Always strip legacy rows (e.g. SimplePie against the SharePoint URL stored
                         // "Untitled" per item). Cron uses force=false — alien cleanup must not be web-only.
@@ -182,6 +189,7 @@ final class CoreRunner
                         }
                         $this->feeds->touchFeedSuccess($id);
                     } catch (\Throwable $e) {
+                        $failed++;
                         error_log('Seismo core:parl_press feed ' . $id . ': ' . $e->getMessage());
                         $this->feeds->touchFeedFailure($id, $e->getMessage());
                     }
@@ -191,7 +199,7 @@ final class CoreRunner
                 }
                 $offset += $page;
             }
-            $r = PluginRunResult::ok($total);
+            $r = PluginRunResult::batchFeeds($total, $attempted, $failed);
         } catch (\Throwable $e) {
             error_log('Seismo core:parl_press: ' . $e->getMessage());
             $r = PluginRunResult::error($e->getMessage());
@@ -218,6 +226,8 @@ final class CoreRunner
 
         $start = (int)(microtime(true) * 1000);
         $total = 0;
+        $attempted = 0;
+        $failed = 0;
         try {
             $offset = 0;
             $page   = 200;
@@ -232,6 +242,7 @@ final class CoreRunner
                     if ($id <= 0 || $url === '') {
                         continue;
                     }
+                    $attempted++;
                     try {
                         $linkPattern    = trim((string)($feed['scraper_link_pattern'] ?? ''));
                         $dateSel        = trim((string)($feed['scraper_date_selector'] ?? ''));
@@ -255,6 +266,7 @@ final class CoreRunner
                         $total += $n;
                         $this->feeds->touchFeedSuccess($id);
                     } catch (\Throwable $e) {
+                        $failed++;
                         error_log('Seismo core:scraper feed ' . $id . ': ' . $e->getMessage());
                         $this->feeds->touchFeedFailure($id, $e->getMessage());
                     }
@@ -264,7 +276,7 @@ final class CoreRunner
                 }
                 $offset += $page;
             }
-            $r = PluginRunResult::ok($total);
+            $r = PluginRunResult::batchFeeds($total, $attempted, $failed);
         } catch (\Throwable $e) {
             error_log('Seismo core:scraper: ' . $e->getMessage());
             $r = PluginRunResult::error($e->getMessage());

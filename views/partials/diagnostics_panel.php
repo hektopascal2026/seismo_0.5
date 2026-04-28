@@ -29,9 +29,18 @@ $diagCardClass = static function (?array $row): string {
 
     return match ($row['status']) {
         'ok'      => 'entry-card--diag-ok',
+        'warn'    => 'entry-card--diag-warn',
         'error'   => 'entry-card--diag-error',
         'skipped' => 'entry-card--diag-skipped',
         default   => 'entry-card--diag-warn',
+    };
+};
+
+/** Human label for plugin_run_log status on diagnostics cards / tables. */
+$diagRunStatusLabel = static function (string $status): string {
+    return match ($status) {
+        'warn' => 'partial',
+        default => $status,
     };
 };
 
@@ -188,11 +197,12 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
         <?php if ($diagCoreStatus !== []): ?>
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Core fetchers (<?= count($diagCoreStatus) ?>)</h2>
-            <p class="admin-intro">RSS (incl. Substack), Parliament press (<code>core:parl_press</code>), scraper, and mail runs share <code>plugin_run_log</code> under synthetic ids (<code>core:*</code>). They run automatically with “Refresh all now” and CLI cron.</p>
-            <?php foreach ($diagCoreStatus as $id => $s): ?>
+            <p class="admin-intro">RSS (incl. Substack), Parliament press (<code>core:parl_press</code>), scraper, and mail runs share <code>plugin_run_log</code> under synthetic ids (<code>core:*</code>). They run automatically with “Refresh all now” and CLI cron. For RSS / Parl. press / scraper, the card is <strong>green</strong> only when every enabled source in that batch succeeded; <strong>yellow</strong> (<em>partial</em>) when some failed; <strong>red</strong> when all tried sources failed (or the runner threw).</p>
+                <?php foreach ($diagCoreStatus as $id => $s): ?>
                 <?php
                     $cardClass = $diagCardClass($s['last']);
-                    $lastStatus = $s['last']['status'] ?? 'never run';
+                    $lastStatus = $s['last'] === null ? 'never run' : (string)($s['last']['status'] ?? '');
+                    $lastStatusLabel = $s['last'] === null ? 'never run' : $diagRunStatusLabel($lastStatus);
                     $lastWhen   = $s['last'] !== null ? seismo_format_utc($s['last']['run_at']) : null;
                     $nextWhen   = $s['next_allowed'] !== null ? seismo_format_utc($s['next_allowed']) : null;
                 ?>
@@ -206,7 +216,7 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                         <span class="entry-tag entry-tag--meta">
                             throttle: <?= $s['min_interval'] > 0 ? e((string)round($s['min_interval'] / 60)) . ' min' : 'none' ?>
                         </span>
-                        <span class="entry-tag entry-tag--surface entry-tag--emphasis">last: <?= e($lastStatus) ?></span>
+                        <span class="entry-tag entry-tag--surface entry-tag--emphasis">last: <?= e($lastStatusLabel) ?></span>
                         <?php if ($s['is_throttled']): ?>
                             <span class="entry-tag entry-tag--warn-pill">throttled</span>
                         <?php endif; ?>
@@ -223,7 +233,12 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                             <?php endif; ?>
                         <?php endif; ?>
                         <?php if (!empty($s['last']['error_message'])): ?>
-                            <div class="diag-inline-error">error: <?= e((string)$s['last']['error_message']) ?></div>
+                            <?php
+                            $isPartialRun = (($s['last']['status'] ?? '') === 'warn');
+                            $runMsgClass = $isPartialRun ? 'diag-inline-warn' : 'diag-inline-error';
+                            $runMsgLabel = $isPartialRun ? 'partial' : 'error';
+                            ?>
+                            <div class="<?= e($runMsgClass) ?>"><?= e($runMsgLabel) ?>: <?= e((string)$s['last']['error_message']) ?></div>
                         <?php endif; ?>
                     </div>
                     <div class="entry-actions diag-actions">
@@ -251,7 +266,8 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                 <?php foreach ($diagStatus as $id => $s): ?>
                     <?php
                         $cardClass = $diagCardClass($s['last']);
-                        $lastStatus = $s['last']['status'] ?? 'never run';
+                        $lastStatus = $s['last'] === null ? 'never run' : (string)($s['last']['status'] ?? '');
+                        $lastStatusLabel = $s['last'] === null ? 'never run' : $diagRunStatusLabel($lastStatus);
                         $lastWhen   = $s['last'] !== null ? seismo_format_utc($s['last']['run_at']) : null;
                         $nextWhen   = $s['next_allowed'] !== null ? seismo_format_utc($s['next_allowed']) : null;
                     ?>
@@ -268,7 +284,7 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                                 throttle: <?= $s['min_interval'] > 0 ? e((string)round($s['min_interval'] / 60)) . ' min' : 'none' ?>
                             </span>
                             <span class="entry-tag entry-tag--surface entry-tag--emphasis">
-                                last: <?= e($lastStatus) ?>
+                                last: <?= e($lastStatusLabel) ?>
                             </span>
                             <?php if ($s['is_throttled']): ?>
                                 <span class="entry-tag entry-tag--warn-pill">throttled</span>
@@ -287,8 +303,13 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                                 <?php endif; ?>
                             <?php endif; ?>
                             <?php if (!empty($s['last']['error_message'])): ?>
-                                <div class="diag-inline-error">
-                                    error: <?= e((string)$s['last']['error_message']) ?>
+                                <?php
+                                $isPartialRun = (($s['last']['status'] ?? '') === 'warn');
+                                $runMsgClass = $isPartialRun ? 'diag-inline-warn' : 'diag-inline-error';
+                                $runMsgLabel = $isPartialRun ? 'partial' : 'error';
+                                ?>
+                                <div class="<?= e($runMsgClass) ?>">
+                                    <?= e($runMsgLabel) ?>: <?= e((string)$s['last']['error_message']) ?>
                                 </div>
                             <?php endif; ?>
                         </div>

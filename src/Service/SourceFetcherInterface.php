@@ -46,8 +46,9 @@ interface SourceFetcherInterface
     /**
      * Minimum seconds between successful runs for this plugin.
      *
-     * RefreshAllService::runAll() skips the plugin when the last `ok` row in
-     * plugin_run_log is newer than now - getMinIntervalSeconds(). Throttle
+     * RefreshAllService::runAll() skips the plugin when the last successful
+     * row (`ok` or `warn`) in plugin_run_log is newer than now -
+     * getMinIntervalSeconds(). Throttle
      * skips are NOT persisted to plugin_run_log (see Master Cron pattern in
      * core-plugin-architecture.mdc) — they only appear on cron stdout.
      *

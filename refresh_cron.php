@@ -9,7 +9,7 @@
  *
  * The script is a thin shell around RefreshAllService::runAll(). Per-plugin
  * throttling lives inside the service: plugins whose
- * getMinIntervalSeconds() hasn't elapsed since the last successful run are
+ * getMinIntervalSeconds() hasn't elapsed since the last successful run (`ok` or `warn`) are
  * skipped silently (stdout only, no DB row). Anything else — success, error,
  * "satellite mode", "disabled in config" — is persisted to plugin_run_log
  * and visible at Settings → Diagnostics (?action=settings&tab=diagnostics).
@@ -95,7 +95,7 @@ foreach ($results as $id => $result) {
         '[seismo] plugin %-10s %-8s %s%s',
         $id,
         $result->status,
-        $result->status === 'ok' ? ('count=' . $result->count) : '',
+        ($result->status === 'ok' || $result->status === 'warn') ? ('count=' . $result->count) : '',
         $result->message !== null ? ' msg=' . $result->message : ''
     );
     $log($line . "\n");

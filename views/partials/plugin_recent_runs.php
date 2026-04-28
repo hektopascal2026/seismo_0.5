@@ -31,7 +31,10 @@ if ($hist === []) {
         <?php foreach ($hist as $h): ?>
             <tr>
                 <td><?= e((string)seismo_format_utc($h['run_at'], 'Y-m-d H:i:s')) ?></td>
-                <td><?= e($h['status']) ?></td>
+                <td><?= e(match ($h['status']) {
+                    'warn' => 'partial',
+                    default => $h['status'],
+                }) ?></td>
                 <td><?= (int)$h['item_count'] ?></td>
                 <td><?= (int)$h['duration_ms'] ?></td>
             </tr>
