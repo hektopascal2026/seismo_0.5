@@ -68,10 +68,6 @@ declare(strict_types=1);
                         <div class="magnitu-stat-label">Training labels</div>
                     </div>
                 </div>
-                <p class="magnitu-field-hint magnitu-field-hint--tight">
-                    <strong>Training labels</strong> are rows in <code>magnitu_labels</code> (in-app <a href="<?= e($basePath) ?>/index.php?action=label">Label</a> tab and Magnitu sync).
-                    Stars on the timeline are favourites, not training data.
-                </p>
 
                 <?php if (!empty($magnituConfig['last_sync_at'])): ?>
                     <?php
