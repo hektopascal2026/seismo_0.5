@@ -53,7 +53,7 @@ $activeNav      = 'magnitu';
         <p class="admin-intro">
             Feed, email, and Lex entries whose current score is Magnitu-sourced and at or above your
             <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=magnitu">alert threshold</a>.
-            Sorted newest-first. <a href="<?= e($basePath) ?>/index.php?action=index">← Timeline</a>
+            Sorted by most recently scored. <a href="<?= e($basePath) ?>/index.php?action=index">← Timeline</a>
         </p>
 
         <?php if ($dashboardError !== null): ?>

@@ -185,13 +185,11 @@ final class EntryRepository
     }
 
     /**
-     * Dashboard "Magnitu highlights": rows scored by Magnitu at or above the
-     * configured alert threshold. Hydrates feed / email / lex / Leg; sorts
-     * newest-first by unified timeline `date`.
+     * Dashboard "Magnitu highlights": entries whose current score is Magnitu-sourced
+     * and at/above the configured alert threshold.
      *
-     * Candidate rows are capped (recent `scored_at` first) so this stays
-     * bounded on large `entry_scores` tables — a pragmatic trade vs scanning
-     * every qualifying row on shared hosts.
+     * This list must not silently drop scored rows: page directly from
+     * `entry_scores` (ORDER BY scored_at) and hydrate only the current window.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -200,7 +198,6 @@ final class EntryRepository
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
         $alertThreshold = max(0.0, min(1.0, $alertThreshold));
-        $cap            = min(500, self::MAX_LIMIT * 3);
         try {
             $stmt = $this->pdo->prepare(
                 'SELECT entry_type, entry_id, relevance_score, predicted_label, explanation, score_source
@@ -208,8 +205,8 @@ final class EntryRepository
                  WHERE score_source = \'magnitu\'
                    AND relevance_score >= ?
                    AND entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
-                 ORDER BY scored_at DESC
-                 LIMIT ' . (int)$cap
+                 ORDER BY scored_at DESC, id DESC
+                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset
             );
             $stmt->execute([$alertThreshold]);
             /** @var array<int, array<string, mixed>> $scoreRows */
@@ -218,17 +215,19 @@ final class EntryRepository
             return [];
         }
 
-        return $this->hydrateTimelineFromMagnituScoreRows($scoreRows, $limit, $offset);
+        return $this->hydrateTimelineFromMagnituScoreRowsPreservingOrder($scoreRows);
     }
 
     /**
      * @param array<int, array<string, mixed>> $scoreRows
      * @return array<int, array<string, mixed>>
      */
-    private function hydrateTimelineFromMagnituScoreRows(array $scoreRows, int $limit, int $offset): array
+    private function hydrateTimelineFromMagnituScoreRowsPreservingOrder(array $scoreRows): array
     {
         /** @var array<string, array<string, mixed>> $best */
         $best = [];
+        /** @var list<string> $orderedKeys */
+        $orderedKeys = [];
         foreach ($scoreRows as $row) {
             $t = (string)($row['entry_type'] ?? '');
             $id = (int)($row['entry_id'] ?? 0);
@@ -238,6 +237,9 @@ final class EntryRepository
             $k = $t . ':' . $id;
             if (!isset($best[$k]) || (float)$row['relevance_score'] > (float)$best[$k]['relevance_score']) {
                 $best[$k] = $row;
+            }
+            if (!in_array($k, $orderedKeys, true)) {
+                $orderedKeys[] = $k;
             }
         }
         if ($best === []) {
@@ -300,8 +302,17 @@ final class EntryRepository
             }
         }
 
-        $this->sortMergedTimeline($items, false);
-        $items = array_slice($items, $offset, $limit);
+        // Preserve the DB ordering (scored_at DESC, id DESC) so paging is stable
+        // and never depends on the entry family's own timestamp granularity.
+        $rank = array_flip($orderedKeys);
+        usort(
+            $items,
+            static function (array $a, array $b) use ($rank): int {
+                $ka = (string)($a['entry_type'] ?? '') . ':' . (string)($a['entry_id'] ?? '');
+                $kb = (string)($b['entry_type'] ?? '') . ':' . (string)($b['entry_id'] ?? '');
+                return ($rank[$ka] ?? PHP_INT_MAX) <=> ($rank[$kb] ?? PHP_INT_MAX);
+            }
+        );
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
 
