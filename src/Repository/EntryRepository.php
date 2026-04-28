@@ -64,12 +64,12 @@ final class EntryRepository
     public const MAX_LIMIT = 200;
 
     /**
-     * When merging feeds + mail + lex + calendar, each family's SELECT is capped
-     * at this × (limit + offset) (then {@see MAX_LIMIT}) so the global sort has
-     * enough candidates: dense RSS and date-only Lex timestamps no longer
-     * squeeze other families off the first page (see {@see getLatestTimeline()}).
+     * Leg (`calendar_events`) merge window into the blended dashboard feed.
+     * Rows with `event_date` older than this are omitted so very old dossiers do
+     * not crowd out feeds/Lex unless the Leg pill is excluded via
+     * {@see TimelineFilter::excludeCalendar} (explicit user toggle).
      */
-    private const MERGED_TIMELINE_FETCH_FANOUT = 4;
+    private const CALENDAR_MERGE_LOOKBACK_DAYS = 400;
 
     /** Unified `emails` table (Slice 4 migration) — ordering preference. */
     private const EMAIL_DATE_COLUMNS = ['date_utc', 'date_received', 'created_at', 'date_sent'];
@@ -88,12 +88,10 @@ final class EntryRepository
     /**
      * Merged newest-first timeline across every entry family.
      *
-     * **Paging caveat.** Per-source fetches are capped by
-     * {@see mergePerSourceFetchCap()} (roughly `MERGED_TIMELINE_FETCH_FANOUT` ×
-     * `(limit + offset)`, bounded by `MAX_LIMIT`). If one family dumps its
-     * whole per-source window into the most recent day while a quieter family
-     * has rows further back, deep `offset` paging can still miss quieter
-     * interleavings that were never fetched.
+     * **Paging caveat.** Per-source fetches use {@see mergePerSourceFetchCap()}
+     * ({@see MAX_LIMIT} newest rows **per family** before merge). The final page
+     * is still sliced from the globally sorted pool — relevance sort pushes
+     * unscored rows after Magnitu-scored ones (see Settings → sort-by-relevance).
      *
      * Slice 1 has no pagination UI, so `DashboardController` clamps
      * `MAX_OFFSET = 0` in practice. When paging UI returns we'll switch to
@@ -107,9 +105,9 @@ final class EntryRepository
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
 
-        // Per-source fetch size: fan out so merge+global sort can interleave
-        // families; $limit + $offset alone under-fills when one family floods
-        // the recent window (see class docblock).
+        // Pull the widest bounded slice per SQL family so newcomers are not dropped
+        // inside a family before the global merge/sort/slice — except where
+        // TimelineFilter / hidden rows / Feed disabled excludes them.
         $perSource = $this->mergePerSourceFetchCap($limit, $offset);
         $f        = $filter;
 
@@ -313,6 +311,9 @@ final class EntryRepository
     /**
      * After {@see attachScores()}, order the merged multi-family window either
      * by entry date (default) or by relevance score then date (Magnitu setting).
+     * In relevance mode, items without `relevance_score` are treated as `-1.0`
+     * so they appear after higher-scored rows (disable sort-by-relevance in
+     * Settings for strictly newest-first across unscored ingestion).
      *
      * @param array<int, array<string, mixed>> $items
      */
@@ -594,17 +595,19 @@ final class EntryRepository
     }
 
     /**
-     * Leg rows merged into the main timeline — same bounded past tail as 0.4
-     * `controllers/dashboard.php` (`CURDATE − 14 days` or NULL), so archived
-     * Geschäfte do not overwhelm the blended feed when Lex/feeds dominate.
+     * Leg rows merged into the main timeline. Uses {@see CALENDAR_MERGE_LOOKBACK_DAYS}
+     * so older `event_date` dossiers remain eligible (explicit opt-out via
+     * TimelineFilter excludes Leg entirely). Rows are capped by `$limit`; user
+     * turns Leg off via dashboard filters, not this window.
      *
      * @return array<int, array<string, mixed>>
      */
     private function fetchCalendarEvents(int $limit): array
     {
+        $days = (int)self::CALENDAR_MERGE_LOOKBACK_DAYS;
         $sql = 'SELECT * FROM ' . entryTable('calendar_events') . '
                 WHERE event_date IS NULL
-                   OR event_date >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+                   OR event_date >= DATE_SUB(CURDATE(), INTERVAL ' . $days . ' DAY)
                 ORDER BY event_date DESC
                 LIMIT ' . (int)$limit;
         return $this->selectOrEmpty($sql);
@@ -2115,15 +2118,13 @@ final class EntryRepository
     }
 
     /**
-     * Rows pulled per entry family before merge — widens enough for a fair blend.
-     *
-     * @return int-positive
+     * Newest-first rows per SQL family merged into {@see getLatestTimeline()}
+     * and {@see searchTimeline()} — fixed at {@see MAX_LIMIT} before global sort so
+     * “just ingested” items are not squeezed out intra-family before merge.
      */
-    private function mergePerSourceFetchCap(int $limit, int $offset): int
+    private function mergePerSourceFetchCap(int $_limit, int $_offset): int
     {
-        $w = $limit + max(0, $offset);
-
-        return min(self::MAX_LIMIT, max($w, $w * self::MERGED_TIMELINE_FETCH_FANOUT));
+        return self::MAX_LIMIT;
     }
 
     /**
