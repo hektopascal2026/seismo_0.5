@@ -27,10 +27,16 @@ final class SourceHealthRepository
     {
         $staleDays = max(1, min(365, $staleDays));
         $t         = entryTable('feeds');
+        $tItems    = entryTable('feed_items');
         $stmt      = $this->pdo->query(
-            "SELECT id, title, source_type, url, disabled, last_fetched, last_error, last_error_at, consecutive_failures
-               FROM {$t}
-              ORDER BY id ASC"
+            "SELECT f.id, f.title, f.source_type, f.url, f.disabled, f.last_fetched, f.last_error, f.last_error_at, f.consecutive_failures,
+                    (
+                        SELECT MAX(fi.cached_at)
+                          FROM {$tItems} fi
+                         WHERE fi.feed_id = f.id AND fi.hidden = 0
+                    ) AS last_entry_added_at
+               FROM {$t} f
+              ORDER BY f.id ASC"
         );
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
@@ -44,8 +50,9 @@ final class SourceHealthRepository
             $lastErr  = trim((string)($row['last_error'] ?? ''));
             $broken   = !$disabled && ($failures > 0 || $lastErr !== '');
 
-            $lastFetched = $this->parseDbDateTime((string)($row['last_fetched'] ?? ''));
-            $stale       = !$disabled && !$broken
+            $lastFetched    = $this->parseDbDateTime((string)($row['last_fetched'] ?? ''));
+            $lastEntryAdded = $this->parseDbDateTime((string)($row['last_entry_added_at'] ?? ''));
+            $stale          = !$disabled && !$broken
                 && ($lastFetched === null || $lastFetched < $cutoff);
 
             if ($disabled) {
@@ -60,19 +67,21 @@ final class SourceHealthRepository
 
             $sourceType = strtolower(trim((string)($row['source_type'] ?? '')));
             $out[]      = [
-                'id'                  => (int)$row['id'],
-                'title'               => (string)($row['title'] ?? ''),
-                'source_type'        => $sourceType,
-                'source_kind_label'   => self::feedKindLabel($sourceType),
-                'url'                 => (string)($row['url'] ?? ''),
-                'disabled'            => $disabled,
-                'status'              => $status,
-                'last_fetched'        => $lastFetched,
-                'last_fetched_raw'    => $row['last_fetched'],
-                'last_error'          => $lastErr,
-                'last_error_at'       => $row['last_error_at'],
-                'consecutive_failures'=> $failures,
-                'sort_rank'           => self::feedSortRank($status),
+                'id'                    => (int)$row['id'],
+                'title'                 => (string)($row['title'] ?? ''),
+                'source_type'           => $sourceType,
+                'source_kind_label'     => self::feedKindLabel($sourceType),
+                'url'                   => (string)($row['url'] ?? ''),
+                'disabled'              => $disabled,
+                'status'                => $status,
+                'last_fetched'          => $lastFetched,
+                'last_fetched_raw'      => $row['last_fetched'],
+                'last_entry_added'      => $lastEntryAdded,
+                'last_entry_added_raw'  => $row['last_entry_added_at'],
+                'last_error'            => $lastErr,
+                'last_error_at'         => $row['last_error_at'],
+                'consecutive_failures'  => $failures,
+                'sort_rank'             => self::feedSortRank($status),
             ];
         }
 

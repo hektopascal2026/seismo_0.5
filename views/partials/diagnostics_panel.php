@@ -77,6 +77,7 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                 <strong>Stale</strong> means no successful fetch (feeds, by <code>last_fetched</code>) or no matching message
                 ingested into the mail store in the last <strong><?= (int)$diagSourceHealthStaleDays ?></strong> days.
                 <strong>Broken</strong> applies to feeds only: enabled source with consecutive failures or a stored fetch error.
+                For feeds, <strong>Last entry</strong> is when the newest non-hidden item was stored (<code>cached_at</code>).
             </p>
             <?php if ($diagSourceHealthError !== null): ?>
                 <div class="message message-error"><?= e($diagSourceHealthError) ?></div>
@@ -108,6 +109,7 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                                 <th scope="col">Status</th>
                                 <th scope="col">Kind</th>
                                 <th scope="col">Title</th>
+                                <th scope="col">Last entry</th>
                                 <th scope="col">Last fetch</th>
                                 <th scope="col">Error / note</th>
                                 <th scope="col"></th>
@@ -117,6 +119,10 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                             <?php foreach ($diagSourceHealthFeeds as $fr): ?>
                                 <?php
                                 $st = $diagSourceHealthStatus((string)($fr['status'] ?? ''));
+                                $leRaw = $fr['last_entry_added_raw'] ?? null;
+                                $leShown = ($leRaw !== null && (string)$leRaw !== '')
+                                    ? date('d.m.Y H:i', strtotime((string)$leRaw))
+                                    : 'never';
                                 $lfRaw = $fr['last_fetched_raw'] ?? null;
                                 $lfShown = ($lfRaw !== null && (string)$lfRaw !== '')
                                     ? date('d.m.Y H:i', strtotime((string)$lfRaw))
@@ -132,6 +138,7 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                                     <td><span class="<?= e($st['class']) ?>" role="status"><?= e($st['label']) ?></span></td>
                                     <td><?= e((string)($fr['source_kind_label'] ?? '')) ?></td>
                                     <td><?= e((string)($fr['title'] ?? '')) ?></td>
+                                    <td class="diag-source-health-mono"><?= e($leShown) ?></td>
                                     <td class="diag-source-health-mono"><?= e($lfShown) ?></td>
                                     <td class="diag-source-health-note"><?= e($note) ?></td>
                                     <td><a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a></td>
