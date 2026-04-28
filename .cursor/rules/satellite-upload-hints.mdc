@@ -1,0 +1,33 @@
+---
+description: After deployable fixes, report which paths to upload to mothership vs satellite (satellite-prune.json).
+alwaysApply: true
+---
+
+# Satellite vs mothership uploads after fixes
+
+When a change is merged or handed off for **production deploy**, assume the operator may ship **multiple hosts**: full **mothership** installs and trimmed **satellite** installs (built by sibling **seismo-generator**, which archives Seismo then prunes).
+
+## Source of truth
+
+- **`satellite-prune.json`** at the repo root lists paths **removed** from generated satellite bundles (`remove_dirs`, `remove_files`). Anything **not** excluded there is part of the default satellite tree unless it lives under a **removed directory** (e.g. **`src/Plugin/`** is wholesale removed).
+
+## Required assistant behavior
+
+After implementing or summarizing fixes that touch **PHP, views, assets, or migrations**:
+
+1. **Mothership**: list **all changed repo-relative paths** the operator should deploy (or “full tree at commit X”) — migrations / `migrate.php` / cron only apply on the mothership unless release notes say otherwise.
+
+2. **Satellite**: compute the **minimal upload set** for a pruned satellite:
+   - Drop any changed file whose path matches **`remove_dirs`** (prefix match) or **`remove_files`** (exact).
+   - If a change touches **only** pruned paths, state clearly: **`Satellite: no file uploads required`** (satellite inherits entry data via DB; timeline/UI fixes often need only **`src/Repository/EntryRepository.php`** and similar shared files).
+
+3. If unsure whether a class is mothership-only, check **`routes_satellite.inc.php`** vs **`routes_mothership.inc.php`** and whether **`src/Plugin/`** applies.
+
+## Closing format (concise)
+
+End with a short block, e.g.:
+
+- **Mothership (upload)**:`…`
+- **Satellite (upload)**:`…` or **none**
+
+Regenerating via seismo-generator is **optional**; only mention it when a **full satellite bundle** refresh is appropriate, not for every typo fix.
