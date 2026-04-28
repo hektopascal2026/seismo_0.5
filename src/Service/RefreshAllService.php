@@ -244,20 +244,7 @@ final class RefreshAllService
      */
     private function recipeRescoreAfterIngest(): void
     {
-        try {
-            $raw = $this->systemConfig->get('recipe_json');
-            if ($raw === null || $raw === '') {
-                return;
-            }
-            $recipe = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
-            if (!is_array($recipe)) {
-                return;
-            }
-            $scorer = new ScoringService($this->entryScores);
-            $scorer->rescoreAll($recipe);
-        } catch (\Throwable $e) {
-            error_log('Seismo recipe rescore after refresh: ' . $e->getMessage());
-        }
+        ScoringService::rescoreStoredRecipeBestEffortForRepos($this->systemConfig, $this->entryScores);
     }
 
     /**

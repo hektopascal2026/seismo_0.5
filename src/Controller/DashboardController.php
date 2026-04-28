@@ -12,6 +12,7 @@ namespace Seismo\Controller;
 
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryRepository;
+use Seismo\Core\Scoring\ScoringService;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Repository\TimelineFilter;
 
@@ -247,6 +248,9 @@ final class DashboardController
                 ? 'Mothership: ' . $err
                 : 'Mothership refresh failed (HTTP ' . $status . ').';
         } elseif ($ok) {
+            if (function_exists('isSatellite') && isSatellite()) {
+                ScoringService::rescoreStoredRecipeBestEffort(getDbConnection());
+            }
             $msgs = $json['messages'] ?? [];
             $summary = is_array($msgs) && $msgs !== []
                 ? implode(' ', array_map(static fn ($m): string => (string)$m, $msgs))

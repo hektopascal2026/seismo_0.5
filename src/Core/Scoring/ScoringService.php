@@ -28,10 +28,12 @@ declare(strict_types=1);
 
 namespace Seismo\Core\Scoring;
 
+use PDO;
 use PDOException;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
 use Seismo\Repository\EmailSubscriptionRepository;
 use Seismo\Repository\EntryScoreRepository;
+use Seismo\Repository\SystemConfigRepository;
 
 final class ScoringService
 {
@@ -188,6 +190,43 @@ final class ScoringService
         } catch (PDOException $e) {
             error_log('ScoringService ' . $entryType . ' rescore: ' . $e->getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Load `recipe_json` from system_config and run {@see rescoreAll()} — best-effort;
+     * logs errors. Safe for satellites (unlike {@see RefreshAllService}, pruned from bundles).
+     */
+    public static function rescoreStoredRecipeBestEffort(PDO $pdo): void
+    {
+        self::rescoreStoredRecipeBestEffortForRepos(
+            new SystemConfigRepository($pdo),
+            new EntryScoreRepository($pdo),
+        );
+    }
+
+    /**
+     * Same as {@see rescoreStoredRecipeBestEffort()}, reusing repo instances (mothership ingest).
+     *
+     * @internal
+     */
+    public static function rescoreStoredRecipeBestEffortForRepos(
+        SystemConfigRepository $systemConfig,
+        EntryScoreRepository $entryScores,
+    ): void {
+        try {
+            $raw = $systemConfig->get('recipe_json');
+            if ($raw === null || $raw === '') {
+                return;
+            }
+            $recipe = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($recipe)) {
+                return;
+            }
+            $scorer = new self($entryScores);
+            $scorer->rescoreAll($recipe);
+        } catch (\Throwable $e) {
+            error_log('Seismo recipe rescore after refresh: ' . $e->getMessage());
         }
     }
 }
