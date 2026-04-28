@@ -27,6 +27,19 @@ final class MagnituLabelRepository
     {
     }
 
+    /** Count of rows in `magnitu_labels` (training labels on this instance). */
+    public function count(): int
+    {
+        try {
+            $stmt = $this->pdo->query('SELECT COUNT(*) AS c FROM magnitu_labels');
+            $row  = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return max(0, (int)($row['c'] ?? 0));
+        } catch (PDOException $e) {
+            return 0;
+        }
+    }
+
     /**
      * Upsert one label. Returns 'inserted' or 'updated'.
      *

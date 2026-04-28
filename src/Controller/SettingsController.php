@@ -11,6 +11,7 @@ use Seismo\Config\ConfigLocalDefinePatcher;
 use Seismo\Http\AuthGate;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryScoreRepository;
+use Seismo\Repository\MagnituLabelRepository;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\RetentionService;
 
@@ -100,9 +101,10 @@ final class SettingsController
 
         // Magnitu tab variables — default to empty so the view can always
         // reference them unconditionally when $tab === 'magnitu'.
-        $magnituConfig     = array_fill_keys(self::MAGNITU_CONFIG_KEYS, null);
-        $magnituScoreStats = ['total' => 0, 'magnitu' => 0, 'recipe' => 0];
-        $seismoApiUrl      = '';
+        $magnituConfig            = array_fill_keys(self::MAGNITU_CONFIG_KEYS, null);
+        $magnituScoreStats        = ['total' => 0, 'magnitu' => 0, 'recipe' => 0];
+        $magnituTrainingLabelCount = 0;
+        $seismoApiUrl             = '';
 
         $satellitesRegistry                   = [];
         $satellitesMothershipUrl              = '';
@@ -175,8 +177,9 @@ final class SettingsController
                 foreach (self::MAGNITU_CONFIG_KEYS as $key) {
                     $magnituConfig[$key] = $config->get($key);
                 }
-                $magnituScoreStats = (new EntryScoreRepository($pdo))->getScoreCounts();
-                $seismoApiUrl      = self::deriveSeismoApiUrl($basePath);
+                $magnituScoreStats        = (new EntryScoreRepository($pdo))->getScoreCounts();
+                $magnituTrainingLabelCount = (new MagnituLabelRepository($pdo))->count();
+                $seismoApiUrl             = self::deriveSeismoApiUrl($basePath);
             } catch (\Throwable $e) {
                 error_log('Seismo settings magnitu: ' . $e->getMessage());
                 $pageError = 'Could not load Magnitu state. Check error_log for details.';

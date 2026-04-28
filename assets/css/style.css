@@ -1169,10 +1169,25 @@ textarea.search-input.setup-code-preview {
     gap: 12px;
 }
 
+.magnitu-stats-grid--four {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 900px) {
+    .magnitu-stats-grid--four {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 640px) {
     .magnitu-stats-grid {
         grid-template-columns: 1fr;
     }
+}
+
+.magnitu-field-hint--tight {
+    margin-top: 10px;
+    margin-bottom: 0;
 }
 
 .magnitu-stat-tile {

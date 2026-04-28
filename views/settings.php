@@ -13,6 +13,7 @@
  * @var bool $satellite
  * @var array<string, string|null> $magnituConfig
  * @var array{total:int, magnitu:int, recipe:int} $magnituScoreStats
+ * @var int $magnituTrainingLabelCount rows in magnitu_labels (Magnitu training data on this instance)
  * @var string $seismoApiUrl
  * @var list<array<string, mixed>> $satellitesRegistry
  * @var string $satellitesMothershipUrl

@@ -6,6 +6,7 @@
  * @var string $basePath
  * @var array<string, string|null> $magnituConfig
  * @var array{total:int, magnitu:int, recipe:int} $magnituScoreStats
+ * @var int $magnituTrainingLabelCount
  * @var string $seismoApiUrl
  */
 
@@ -49,7 +50,7 @@ declare(strict_types=1);
 
             <div class="magnitu-panel">
                 <h3 class="section-title">Scoring state</h3>
-                <div class="magnitu-stats-grid">
+                <div class="magnitu-stats-grid magnitu-stats-grid--four">
                     <div class="magnitu-stat-tile">
                         <div class="magnitu-stat-value"><?= (int)$magnituScoreStats['total'] ?></div>
                         <div class="magnitu-stat-label">Entries scored</div>
@@ -62,7 +63,15 @@ declare(strict_types=1);
                         <div class="magnitu-stat-value"><?= (int)$magnituScoreStats['recipe'] ?></div>
                         <div class="magnitu-stat-label">By Recipe (keywords)</div>
                     </div>
+                    <div class="magnitu-stat-tile">
+                        <div class="magnitu-stat-value"><?= (int)($magnituTrainingLabelCount ?? 0) ?></div>
+                        <div class="magnitu-stat-label">Training labels</div>
+                    </div>
                 </div>
+                <p class="magnitu-field-hint magnitu-field-hint--tight">
+                    <strong>Training labels</strong> are rows in <code>magnitu_labels</code> (in-app <a href="<?= e($basePath) ?>/index.php?action=label">Label</a> tab and Magnitu sync).
+                    Stars on the timeline are favourites, not training data.
+                </p>
 
                 <?php if (!empty($magnituConfig['last_sync_at'])): ?>
                     <?php
