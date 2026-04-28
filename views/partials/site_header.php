@@ -32,7 +32,12 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     $brandFull = seismoBrandTitle();
                     if (($headerTitle ?? '') === $brandFull) {
                         if (isSatellite()) {
-                            echo '<strong class="top-bar-brand-name top-bar-brand-suffix">' . e(seismoBrandSuffix()) . '</strong>';
+                            if (seismoSatelliteBrandSplit()) {
+                                echo '<strong class="top-bar-brand-name top-bar-brand-prefix">' . e('Seismo') . '</strong>'
+                                    . '<strong class="top-bar-brand-name top-bar-brand-suffix"> ' . e(seismoBrandSuffix()) . '</strong>';
+                            } else {
+                                echo '<strong class="top-bar-brand-name">' . e(seismoBrandSuffix()) . '</strong>';
+                            }
                         } else {
                             echo '<strong class="top-bar-brand-name">' . e(seismoBrandBase()) . '</strong>';
                             $ver = seismoBrandVersionLabel();
@@ -81,7 +86,9 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                 button.disabled = true;
                 button.classList.add('is-refreshing');
                 button.setAttribute('aria-busy', 'true');
-                button.innerHTML = 'Refreshing<span class="loading-dots" aria-hidden="true"></span>';
+                button.innerHTML = 'Refreshing<span class="loading-dots" aria-hidden="true">'
+                    + '<span class="loading-dots-char">.</span><span class="loading-dots-char">.</span>'
+                    + '<span class="loading-dots-char">.</span></span>';
             }
             function setButtonDefault() {
                 button.disabled = false;

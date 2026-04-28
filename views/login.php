@@ -28,7 +28,11 @@ use Seismo\Http\CsrfToken;
                 <span class="top-bar-title">
                     <img src="<?= e($basePath) ?>/assets/img/logo.png" alt="" class="logo-icon logo-icon-large" width="38" height="38" decoding="async">
                     <?php if (function_exists('isSatellite') && isSatellite()): ?>
-                    <strong class="top-bar-brand-name top-bar-brand-suffix"><?= e(seismoBrandSuffix()) ?></strong>
+                        <?php if (seismoSatelliteBrandSplit()): ?>
+                            <strong class="top-bar-brand-name top-bar-brand-prefix"><?= e('Seismo') ?></strong><strong class="top-bar-brand-name top-bar-brand-suffix"> <?= e(seismoBrandSuffix()) ?></strong>
+                        <?php else: ?>
+                            <strong class="top-bar-brand-name"><?= e(seismoBrandSuffix()) ?></strong>
+                        <?php endif; ?>
                     <?php else: ?>
                     <strong class="top-bar-brand-name"><?= e(seismoBrandBase()) ?></strong>
                     <span class="top-bar-brand-version"><?= e(seismoBrandVersionLabel()) ?></span>

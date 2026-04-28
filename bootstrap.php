@@ -9,7 +9,8 @@
  *   4. Provide a handful of global helpers that every layer depends on:
  *      getDbConnection(), getBasePath(), isSatellite(), entryTable(),
  *      entryDbSchemaExpr(), seismoBrandBase(), seismoBrandSuffix(),
- *      seismoBrandVersionLabel(), seismoBrandTitle(), seismoBrandAccent().
+ *      seismoBrandVersionLabel(), seismoBrandTitle(), seismoBrandAccent(),
+ *      seismoSatelliteBrandSplit(), seismoBrandDisplaySplit().
  *
  * Anything larger (DDL, scoring, feature config) lives in its own module or
  * migration file. See docs/consolidation-plan.md.
@@ -239,6 +240,21 @@ function seismoBrandBase(): string
 }
 
 /**
+ * If $storedTitle is canonical "Seismo {suffix}", returns ['Seismo', suffix]. Else null.
+ *
+ * @return array{0:string,1:string}|null
+ */
+function seismoBrandDisplaySplit(string $storedTitle): ?array
+{
+    $t = trim($storedTitle);
+    if ($t === '' || preg_match('/^Seismo\s+(.+)$/iu', $t, $m) !== 1) {
+        return null;
+    }
+
+    return ['Seismo', trim($m[1])];
+}
+
+/**
  * User-chosen satellite name without the fixed "Seismo " prefix (for UI on satellites).
  * Falls back to the full configured title when it does not start with "Seismo ".
  */
@@ -248,8 +264,9 @@ function seismoBrandSuffix(): string
     if ($t === '') {
         return 'Seismo';
     }
-    if (preg_match('/^Seismo\s+(.+)$/iu', $t, $m)) {
-        return trim($m[1]);
+    $split = seismoBrandDisplaySplit($t);
+    if ($split !== null) {
+        return $split[1];
     }
 
     return $t;
@@ -266,13 +283,32 @@ function seismoBrandVersionLabel(): string
 }
 
 /**
+ * True when the satellite brand is canonical "Seismo {suffix}" (split header styling).
+ */
+function seismoSatelliteBrandSplit(): bool
+{
+    if (!isSatellite()) {
+        return false;
+    }
+    $t = trim(SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : '');
+
+    return $t !== '' && seismoBrandDisplaySplit($t) !== null;
+}
+
+/**
  * Brand string for document titles and APIs.
- * Mothership: base + version (e.g. "Seismo v0.5.1"). Satellite: suffix only, no version.
+ * Mothership: base + version (e.g. "Seismo v0.5.1").
+ * Satellite: full title "Seismo {suffix}" when canonical; otherwise stored title / fallback.
  */
 function seismoBrandTitle(): string
 {
     if (isSatellite()) {
-        return seismoBrandSuffix();
+        if (seismoSatelliteBrandSplit()) {
+            return 'Seismo ' . seismoBrandSuffix();
+        }
+        $t = trim(SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : '');
+
+        return $t !== '' ? $t : 'Seismo';
     }
 
     return trim(seismoBrandBase() . ' ' . seismoBrandVersionLabel());

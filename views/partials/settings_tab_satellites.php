@@ -73,7 +73,18 @@ $bp = $basePath;
                                 ?>
                                 <tr class="<?= $isHighlight ? 'settings-satellite-row-highlight' : '' ?>">
                                     <td><code><?= e($slug) ?></code></td>
-                                    <td><?= e((string)($sat['display_name'] ?? '')) ?></td>
+                                    <td>
+                                        <?php
+                                        $dn = (string)($sat['display_name'] ?? '');
+                                        $accentHex = trim((string)($sat['brand_accent'] ?? ''));
+                                        $brandParts = seismoBrandDisplaySplit($dn);
+                                        ?>
+                                        <?php if ($brandParts !== null): ?>
+                                            <span class="settings-satellite-brand-prefix"><?= e($brandParts[0]) ?></span><span class="settings-satellite-brand-suffix"<?= $accentHex !== '' ? ' style="color: ' . e($accentHex) . '"' : '' ?>><?= e(' ' . $brandParts[1]) ?></span>
+                                        <?php else: ?>
+                                            <?= e($dn) ?>
+                                        <?php endif; ?>
+                                    </td>
                                     <td><code><?= e((string)($sat['magnitu_profile'] ?? '')) ?></code></td>
                                     <td>
                                         <?php if (!empty($sat['brand_accent'])): ?>
