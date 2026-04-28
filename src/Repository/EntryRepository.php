@@ -64,6 +64,13 @@ final class EntryRepository
     public const MAX_LIMIT = 200;
 
     /**
+     * Per-family fetch multiplier for the merged timeline. We fetch more than
+     * `limit` so each family has a chance to appear after the global sort, but
+     * we must stay fast enough for shared-host timeouts.
+     */
+    private const MERGE_FANOUT = 6;
+
+    /**
      * Leg (`calendar_events`) merge window into the blended dashboard feed.
      * Rows with `event_date` older than this are omitted so very old dossiers do
      * not crowd out feeds/Lex unless the Leg pill is excluded via
@@ -89,7 +96,7 @@ final class EntryRepository
      * Merged newest-first timeline across every entry family.
      *
      * **Paging caveat.** Per-source fetches use {@see mergePerSourceFetchCap()}
-     * ({@see MAX_LIMIT} newest rows **per family** before merge). The final page
+     * (≈ `MERGE_FANOUT × limit`, bounded by {@see MAX_LIMIT}). The final page
      * is still sliced from the globally sorted pool — relevance sort pushes
      * unscored rows after Magnitu-scored ones (see Settings → sort-by-relevance).
      *
@@ -2158,12 +2165,13 @@ final class EntryRepository
 
     /**
      * Newest-first rows per SQL family merged into {@see getLatestTimeline()}
-     * and {@see searchTimeline()} — fixed at {@see MAX_LIMIT} before global sort so
-     * “just ingested” items are not squeezed out intra-family before merge.
+     * and {@see searchTimeline()}. Fetch a widened window so new items from a
+     * quieter family still surface in the blended first page.
      */
-    private function mergePerSourceFetchCap(int $_limit, int $_offset): int
+    private function mergePerSourceFetchCap(int $limit, int $offset): int
     {
-        return self::MAX_LIMIT;
+        $w = max(1, $limit + max(0, $offset));
+        return min(self::MAX_LIMIT, max($w, $w * self::MERGE_FANOUT));
     }
 
     /**
