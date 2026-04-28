@@ -2,7 +2,10 @@
   "schema_version": 1,
   "remove_dirs": [
     "tests",
-    "docs"
+    "docs",
+    "newsbridge",
+    "src/Core/Fetcher",
+    "src/Plugin"
   ],
   "remove_files": [
     "routes_mothership.inc.php",
@@ -34,6 +37,13 @@
     "src/Controller/ScraperController.php",
     "src/Controller/SetupController.php",
     "src/Controller/StyleguideController.php",
+    "src/Service/CoreRunner.php",
+    "src/Service/RefreshAllService.php",
+    "src/Service/NewsbridgeGenerator.php",
+    "src/Service/PluginRegistry.php",
+    "src/Service/PluginRunResult.php",
+    "src/Service/SourceFetcherInterface.php",
+    "src/Repository/PluginRunLogRepository.php",
     "satellite-prune.json"
   ],
   "post_verify": {
@@ -46,9 +56,14 @@
     "must_not_exist": [
       "routes_mothership.inc.php",
       "refresh_cron.php",
+      "newsbridge",
       "views/lex.php",
       "views/partials/settings_mail.php",
-      "src/Controller/FeedController.php"
+      "src/Controller/FeedController.php",
+      "src/Core/Fetcher",
+      "src/Plugin/LexFedlex/LexFedlexPlugin.php",
+      "src/Service/CoreRunner.php",
+      "src/Service/RefreshAllService.php"
     ],
     "php_lint": [
       "index.php",
