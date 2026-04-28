@@ -56,12 +56,20 @@ final class EntryRepository
     /**
      * Hard cap on the final timeline size.
      *
-     * Per-source queries each take (limit + offset) rows so merge+sort produces
-     * a stable window, which means worst-case memory is roughly
+     * Per-source queries each take up to {@see mergePerSourceFetchCap()}
+     * (≤ MAX_LIMIT) rows before merge+sort, so worst-case memory stays roughly
      *   5 families × MAX_LIMIT rows × ~10 KB/row ≈ 10 MB
      * — comfortably under the 128 MB shared-hosting default.
      */
     public const MAX_LIMIT = 200;
+
+    /**
+     * When merging feeds + mail + lex + calendar, each family's SELECT is capped
+     * at this × (limit + offset) (then {@see MAX_LIMIT}) so the global sort has
+     * enough candidates: dense RSS and date-only Lex timestamps no longer
+     * squeeze other families off the first page (see {@see getLatestTimeline()}).
+     */
+    private const MERGED_TIMELINE_FETCH_FANOUT = 4;
 
     /** Unified `emails` table (Slice 4 migration) — ordering preference. */
     private const EMAIL_DATE_COLUMNS = ['date_utc', 'date_received', 'created_at', 'date_sent'];
@@ -80,13 +88,12 @@ final class EntryRepository
     /**
      * Merged newest-first timeline across every entry family.
      *
-     * **Paging caveat.** Per-source fetches are capped at `$limit + $offset`
-     * each, so `$offset` is *valid* (the merged slice is well-defined at the
-     * head) but not *deep-page-safe* under heavy skew. If one family dumps
-     * its whole per-source window into the most recent day while a quieter
-     * family has rows further back, a caller asking for a deep offset will
-     * be missing interleaved rows from the quieter family that exist but
-     * weren't fetched.
+     * **Paging caveat.** Per-source fetches are capped by
+     * {@see mergePerSourceFetchCap()} (roughly `MERGED_TIMELINE_FETCH_FANOUT` ×
+     * `(limit + offset)`, bounded by `MAX_LIMIT`). If one family dumps its
+     * whole per-source window into the most recent day while a quieter family
+     * has rows further back, deep `offset` paging can still miss quieter
+     * interleavings that were never fetched.
      *
      * Slice 1 has no pagination UI, so `DashboardController` clamps
      * `MAX_OFFSET = 0` in practice. When paging UI returns we'll switch to
@@ -100,11 +107,10 @@ final class EntryRepository
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
 
-        // Per-source fetch size. Taking $limit + $offset from each source
-        // guarantees we have enough rows to slice a valid offset/limit window
-        // at the head. See the paging caveat above for why deep offsets are
-        // not safe under heavy skew.
-        $perSource = $limit + $offset;
+        // Per-source fetch size: fan out so merge+global sort can interleave
+        // families; $limit + $offset alone under-fills when one family floods
+        // the recent window (see class docblock).
+        $perSource = $this->mergePerSourceFetchCap($limit, $offset);
         $f        = $filter;
 
         $items = [];
@@ -150,7 +156,7 @@ final class EntryRepository
         }
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
-        $perSource = $limit + $offset;
+        $perSource = $this->mergePerSourceFetchCap($limit, $offset);
         // Escape LIKE wildcards in user input so "%" and "_" are literal (MariaDB default escape \).
         $term = '%' . $this->escapeLikePattern($q) . '%';
         $f    = $filter;
@@ -667,12 +673,11 @@ final class EntryRepository
      */
     private function wrapLexItem(array $row): array
     {
-        $date = (string)($row['document_date'] ?? $row['created_at'] ?? '');
         return [
             'type'         => 'lex',
             'entry_type'   => 'lex_item',
             'entry_id'     => (int)($row['id'] ?? 0),
-            'date'         => $date !== '' ? (int)strtotime($date) : 0,
+            'date'         => $this->lexMergedTimelineUnix($row),
             'data'         => $row,
             'score'        => null,
             'is_favourite' => false,
@@ -2107,6 +2112,55 @@ final class EntryRepository
             return self::MAX_LIMIT;
         }
         return $limit;
+    }
+
+    /**
+     * Rows pulled per entry family before merge — widens enough for a fair blend.
+     *
+     * @return int-positive
+     */
+    private function mergePerSourceFetchCap(int $limit, int $offset): int
+    {
+        $w = $limit + max(0, $offset);
+
+        return min(self::MAX_LIMIT, max($w, $w * self::MERGED_TIMELINE_FETCH_FANOUT));
+    }
+
+    /**
+     * Timeline sort key for Lex: `document_date` is DATE-only so strtotime()
+     * is midnight — same-calendar-day feeds/emails beat it and bury Lex below
+     * the fold. When `created_at` matches that official publication day,
+     * use ingestion time so same-day dossiers compete fairly in the merged sort.
+     * Card labels still read `document_date` from the raw row in the view.
+     *
+     * @param array<string, mixed> $row
+     */
+    private function lexMergedTimelineUnix(array $row): int
+    {
+        $docRaw = $row['document_date'] ?? null;
+        $createdRaw = $row['created_at'] ?? null;
+        $created = ($createdRaw !== null && $createdRaw !== '')
+            ? (int)strtotime((string)$createdRaw)
+            : 0;
+
+        if ($docRaw === null || $docRaw === '') {
+            return $created;
+        }
+
+        $docStr = trim((string)$docRaw);
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $docStr)) {
+            return (int)strtotime($docStr) ?: $created;
+        }
+
+        $docUnix = (int)strtotime($docStr . ' 00:00:00');
+        if ($created > 0) {
+            $createdDay = date('Y-m-d', $created);
+            if ($createdDay === $docStr) {
+                return $created;
+            }
+        }
+
+        return $docUnix > 0 ? $docUnix : $created;
     }
 
     /**
