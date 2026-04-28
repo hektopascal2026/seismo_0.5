@@ -39,6 +39,8 @@ final class SatelliteController
         }
         if ($displayName === '') {
             $displayName = 'Seismo ' . ucfirst($slug);
+        } else {
+            $displayName = $this->canonicalSatelliteDisplayName($displayName);
         }
         if ($accent !== '' && !preg_match('/^#[0-9a-fA-F]{3,8}$/', $accent)) {
             $_SESSION['error'] = 'Accent colour must be a hex value like #4a90e2.';
@@ -276,6 +278,23 @@ final class SatelliteController
         $slug = trim($slug, '-');
 
         return substr($slug, 0, 40);
+    }
+
+    /**
+     * Stored display names are canonical "Seismo {suffix}". Accept suffix-only input
+     * as well as a full pasted title starting with "Seismo " (any case).
+     */
+    private function canonicalSatelliteDisplayName(string $input): string
+    {
+        $input = preg_replace('/\s+/u', ' ', trim($input));
+        if ($input === '') {
+            return '';
+        }
+        if (preg_match('/^seismo(?:\s+|$)/iu', $input)) {
+            return $input;
+        }
+
+        return 'Seismo ' . $input;
     }
 
     private function getRemoteRefreshKey(): string

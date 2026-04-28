@@ -31,8 +31,15 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     <?php
                     $brandFull = seismoBrandTitle();
                     if (($headerTitle ?? '') === $brandFull) {
-                        echo '<strong class="top-bar-brand-name">' . e(seismoBrandBase()) . '</strong>';
-                        echo ' <span class="top-bar-brand-version">' . e(seismoBrandVersionLabel()) . '</span>';
+                        if (isSatellite()) {
+                            echo '<strong class="top-bar-brand-name top-bar-brand-suffix">' . e(seismoBrandSuffix()) . '</strong>';
+                        } else {
+                            echo '<strong class="top-bar-brand-name">' . e(seismoBrandBase()) . '</strong>';
+                            $ver = seismoBrandVersionLabel();
+                            if ($ver !== '') {
+                                echo ' <span class="top-bar-brand-version">' . e($ver) . '</span>';
+                            }
+                        }
                     } else {
                         echo '<strong class="top-bar-page-title">' . e((string)$headerTitle) . '</strong>';
                     }

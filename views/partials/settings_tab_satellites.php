@@ -121,7 +121,8 @@ $bp = $basePath;
                     </div>
                     <div class="admin-form-field">
                         <label for="sat_name">Display name</label>
-                        <input type="text" id="sat_name" name="display_name" maxlength="80" placeholder="Seismo Digital" class="search-input">
+                        <input type="text" id="sat_name" name="display_name" maxlength="80" placeholder="Digital" class="search-input" aria-describedby="sat_name_hint">
+                        <p id="sat_name_hint" class="admin-intro" style="margin-top:0.35rem; font-size:0.85rem;">Enter only the satellite label after &quot;Seismo&quot; (stored as Seismo … in JSON).</p>
                     </div>
                     <div class="admin-form-field">
                         <label for="sat_profile">Magnitu profile</label>

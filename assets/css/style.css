@@ -85,6 +85,10 @@ body {
     opacity: 1;
 }
 
+.top-bar-title .top-bar-brand-suffix {
+    color: var(--seismo-accent, #111);
+}
+
 .top-bar-title a {
     color: inherit;
     text-decoration: none;

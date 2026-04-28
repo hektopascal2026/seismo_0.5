@@ -8,8 +8,8 @@
  *   3. Register a minimal PSR-4 autoloader for Seismo\* classes under src/.
  *   4. Provide a handful of global helpers that every layer depends on:
  *      getDbConnection(), getBasePath(), isSatellite(), entryTable(),
- *      entryDbSchemaExpr(), seismoBrandBase(), seismoBrandVersionLabel(),
- *      seismoBrandTitle(), seismoBrandAccent().
+ *      entryDbSchemaExpr(), seismoBrandBase(), seismoBrandSuffix(),
+ *      seismoBrandVersionLabel(), seismoBrandTitle(), seismoBrandAccent().
  *
  * Anything larger (DDL, scoring, feature config) lives in its own module or
  * migration file. See docs/consolidation-plan.md.
@@ -238,18 +238,44 @@ function seismoBrandBase(): string
     return SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : 'Seismo';
 }
 
-/** Display version label for the top bar, e.g. "v0.5.1". */
+/**
+ * User-chosen satellite name without the fixed "Seismo " prefix (for UI on satellites).
+ * Falls back to the full configured title when it does not start with "Seismo ".
+ */
+function seismoBrandSuffix(): string
+{
+    $t = trim(SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : '');
+    if ($t === '') {
+        return 'Seismo';
+    }
+    if (preg_match('/^Seismo\s+(.+)$/iu', $t, $m)) {
+        return trim($m[1]);
+    }
+
+    return $t;
+}
+
+/** Display version label for the top bar, e.g. "v0.5.1". Empty on satellites. */
 function seismoBrandVersionLabel(): string
 {
+    if (isSatellite()) {
+        return '';
+    }
+
     return 'v' . SEISMO_VERSION;
 }
 
 /**
- * Full brand string for document titles and APIs (base + space + version label).
+ * Brand string for document titles and APIs.
+ * Mothership: base + version (e.g. "Seismo v0.5.1"). Satellite: suffix only, no version.
  */
 function seismoBrandTitle(): string
 {
-    return seismoBrandBase() . ' ' . seismoBrandVersionLabel();
+    if (isSatellite()) {
+        return seismoBrandSuffix();
+    }
+
+    return trim(seismoBrandBase() . ' ' . seismoBrandVersionLabel());
 }
 
 /**
