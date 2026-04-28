@@ -138,11 +138,11 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                 </div>
                 <div class="admin-form-field">
                     <label>Lookback days (1–90)<br>
-                    <input type="number" name="parliament_ch_lookback_days" value="<?= (int)($parlChCfg['lookback_days'] ?? 7) ?>" min="1" max="90" class="search-input" style="width:100%; max-width:10rem;"></label>
+                    <input type="number" name="parliament_ch_lookback_days" value="<?= (int)($parlChCfg['lookback_days'] ?? 28) ?>" min="1" max="90" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
                 <div class="admin-form-field">
                     <label>Row limit (10–500)<br>
-                    <input type="number" name="parliament_ch_limit" value="<?= (int)($parlChCfg['limit'] ?? 100) ?>" min="10" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
+                    <input type="number" name="parliament_ch_limit" value="<?= (int)($parlChCfg['limit'] ?? 200) ?>" min="10" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
                 <div class="admin-form-field">
                     <label>Notes<br>

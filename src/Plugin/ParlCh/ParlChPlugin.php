@@ -36,8 +36,8 @@ final class ParlChPlugin implements SourceFetcherInterface
     private const DEFAULT_API_BASE       = 'https://ws.parlament.ch/odata.svc';
     private const DEFAULT_LANGUAGE       = 'DE';
     private const DEFAULT_LOOKFORWARD    = 90;
-    private const DEFAULT_LOOKBACK       = 7;
-    private const DEFAULT_BUSINESS_LIMIT = 100;
+    private const DEFAULT_LOOKBACK       = 28;
+    private const DEFAULT_BUSINESS_LIMIT = 200;
     private const MAX_BUSINESS_LIMIT     = 500;
     private const SESSION_LIMIT          = 20;
 
@@ -104,9 +104,12 @@ final class ParlChPlugin implements SourceFetcherInterface
     {
         $sinceDate = gmdate('Y-m-d', strtotime('-' . $lookback . ' days'));
         $filter = "Language eq '{$lang}' and Modified ge datetime'{$sinceDate}T00:00:00'";
+        // Curia Vista highlights “new” dossiers by catalogue updates; those often
+        // surface as Modified more reliably than SubmissionDate ordering. Using
+        // Modified desc keeps recently touched business in the bounded $top window.
         $url = $apiBase . '/Business'
             . '?$filter=' . rawurlencode($filter)
-            . '&$orderby=' . rawurlencode('SubmissionDate desc')
+            . '&$orderby=' . rawurlencode('Modified desc')
             . '&$top=' . $limit
             . '&$format=json';
 

@@ -46,14 +46,12 @@ final class CalendarEventRepository
         $where = 'source IN (' . $placeholders . ')';
         $bind = $sources;
         if (!$includePast) {
-            // DB session is UTC but the Leg view labels "today" in Europe/Zurich.
-            // Compute the cutoff in PHP and bind it: CONVERT_TZ() silently
-            // returns NULL on hosts whose `mysql.time_zone_name` table isn't
-            // populated (common on shared hosting), which would turn the
-            // `event_date >= NULL` comparison into NULL and hide every
-            // non-null-dated row. Portable to any MariaDB/MySQL install.
+            // DB session is UTC but Leg labels use Europe/Zurich — compute cutoff in
+            // PHP (avoids CONVERT_TZ portability issues). **30‑day rolling window**
+            // matches 0.4 `controllers/calendar.php`: `event_date >= DATE_SUB(curdate(),
+            // INTERVAL 30 DAY)`. “Show past” removes this floor.
             $where .= ' AND (event_date IS NULL OR event_date >= ?)';
-            $bind[] = self::zurichToday();
+            $bind[] = self::zurichLegUpcomingCutoff();
         }
         if ($eventType !== null && $eventType !== '') {
             $where .= ' AND event_type = ?';
@@ -100,7 +98,7 @@ final class CalendarEventRepository
         $bind = $sources;
         if (!$includePast) {
             $where .= ' AND (event_date IS NULL OR event_date >= ?)';
-            $bind[] = self::zurichToday();
+            $bind[] = self::zurichLegUpcomingCutoff();
         }
         if ($eventType !== null && $eventType !== '') {
             $where .= ' AND event_type = ?';
@@ -351,14 +349,17 @@ final class CalendarEventRepository
         return array_values(array_unique($out));
     }
 
+    /** Same as 0.4 non–show-past filter: thirty calendar days back in Zurich. */
+    private const LEG_UPCOMING_LOOKBACK_DAYS = 30;
+
     /**
-     * Today's date in Europe/Zurich, computed in PHP so the cutoff is portable
-     * to MySQL/MariaDB installs without `mysql.time_zone_name` data. PHP's
-     * timezone DB ships with the interpreter on every host we care about.
+     * Earliest `event_date` included in Leg’s default view (without “Show past”).
      */
-    private static function zurichToday(): string
+    private static function zurichLegUpcomingCutoff(): string
     {
-        return (new DateTimeImmutable('now', new DateTimeZone('Europe/Zurich')))->format('Y-m-d');
+        return (new DateTimeImmutable('now', new DateTimeZone('Europe/Zurich')))
+            ->modify('-' . self::LEG_UPCOMING_LOOKBACK_DAYS . ' days')
+            ->format('Y-m-d');
     }
 
     private function normalizeDate(mixed $v): ?string

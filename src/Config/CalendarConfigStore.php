@@ -95,8 +95,8 @@ final class CalendarConfigStore
                 'api_base'         => 'https://ws.parlament.ch/odata.svc',
                 'language'         => 'DE',
                 'lookforward_days' => 90,
-                'lookback_days'    => 7,
-                'limit'            => 100,
+                'lookback_days'    => 28,
+                'limit'            => 200,
                 'business_types'   => [
                     1  => 'Geschaeft des Bundesrates',
                     3  => 'Standesinitiative',

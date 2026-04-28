@@ -588,8 +588,9 @@ final class EntryRepository
     }
 
     /**
-     * Leg / parliamentary business. Future-biased window so upcoming sessions
-     * still show up even when older data dominates.
+     * Leg rows merged into the main timeline — same bounded past tail as 0.4
+     * `controllers/dashboard.php` (`CURDATE − 14 days` or NULL), so archived
+     * Geschäfte do not overwhelm the blended feed when Lex/feeds dominate.
      *
      * @return array<int, array<string, mixed>>
      */
