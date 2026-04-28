@@ -197,10 +197,28 @@ final class RefreshAllService
         $key = $plugin->getConfigKey();
 
         return match ($plugin->getEntryType()) {
-            'lex_item'       => (array)($this->lexConfig->load()[$key] ?? []),
+            'lex_item'       => $this->resolveLexBlock($key),
             'calendar_event' => (array)($this->calendarConfig->load()[$key] ?? []),
             default          => [],
         };
+    }
+
+    /**
+     * Lex plugins share a global `jus_banned_words` list (legacy 0.4 surface).
+     * Inject it only for the Jus sources so plugins can filter titles without
+     * each needing to round-trip the entire LexConfigStore.
+     *
+     * @return array<string, mixed>
+     */
+    private function resolveLexBlock(string $key): array
+    {
+        $all = $this->lexConfig->load();
+        $block = (array)($all[$key] ?? []);
+        if (in_array($key, \Seismo\Repository\TimelineFilter::JUS_LEX_SOURCES, true)) {
+            $bw = $all['jus_banned_words'] ?? [];
+            $block['jus_banned_words'] = is_array($bw) ? $bw : [];
+        }
+        return $block;
     }
 
     /**
