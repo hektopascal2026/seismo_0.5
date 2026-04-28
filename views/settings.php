@@ -28,6 +28,10 @@
  * @var ?string $diagLoadError
  * @var ?array{id: string, count: int, error: ?string, items: list<array<string, mixed>>} $diagTestResult
  * @var array<string, list<array{run_at: \DateTimeImmutable, status: string, item_count: int, error_message: ?string, duration_ms: int}>> $diagRunHistory
+ * @var list<array<string, mixed>> $diagSourceHealthFeeds
+ * @var list<array<string, mixed>> $diagSourceHealthMail
+ * @var int $diagSourceHealthStaleDays
+ * @var ?string $diagSourceHealthError
  * @var bool $migrateKeyConfigured
  * @var bool $configLocalWritable
  * @var ?string $pendingMigrateKey

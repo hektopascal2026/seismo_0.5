@@ -6,8 +6,10 @@ namespace Seismo\Controller;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use PDO;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\PluginRunLogRepository;
+use Seismo\Repository\SourceHealthRepository;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\CoreRunner;
 use Seismo\Service\PluginRegistry;
@@ -56,6 +58,10 @@ final class DiagnosticsController
      *   diagLoadError: ?string,
      *   diagTestResult: ?array{id: string, count: int, error: ?string, items: list<array<string, mixed>>},
      *   diagRunHistory: array<string, list<array{run_at: \DateTimeImmutable, status: string, item_count: int, error_message: ?string, duration_ms: int}>>,
+     *   diagSourceHealthFeeds: list<array<string, mixed>>,
+     *   diagSourceHealthMail: list<array<string, mixed>>,
+     *   diagSourceHealthStaleDays: int,
+     *   diagSourceHealthError: ?string,
      * }
      */
     public static function prepareViewData(): array
@@ -74,6 +80,7 @@ final class DiagnosticsController
         $coreStatus = [];
         $loadError  = null;
         $runHistory = [];
+        $pdo        = null;
 
         try {
             $pdo        = getDbConnection();
@@ -135,12 +142,32 @@ final class DiagnosticsController
         $testResult = $_SESSION['plugin_test_result'] ?? null;
         unset($_SESSION['plugin_test_result']);
 
+        $sourceHealthFeeds   = [];
+        $sourceHealthMail    = [];
+        $sourceHealthError   = null;
+        $sourceHealthDays    = 14;
+
+        if (!isSatellite() && $pdo instanceof PDO) {
+            try {
+                $health            = new SourceHealthRepository($pdo);
+                $sourceHealthFeeds = $health->listFeedHealth($sourceHealthDays);
+                $sourceHealthMail  = $health->listMailHealth($sourceHealthDays);
+            } catch (\Throwable $e) {
+                error_log('Seismo diagnostics source health: ' . $e->getMessage());
+                $sourceHealthError = 'Could not load source health. Check error_log for details.';
+            }
+        }
+
         return [
-            'diagStatus'     => $status,
-            'diagCoreStatus' => $coreStatus,
-            'diagLoadError'  => $loadError,
-            'diagTestResult' => is_array($testResult) ? $testResult : null,
-            'diagRunHistory' => $runHistory,
+            'diagStatus'              => $status,
+            'diagCoreStatus'          => $coreStatus,
+            'diagLoadError'           => $loadError,
+            'diagTestResult'          => is_array($testResult) ? $testResult : null,
+            'diagRunHistory'          => $runHistory,
+            'diagSourceHealthFeeds'   => $sourceHealthFeeds,
+            'diagSourceHealthMail'    => $sourceHealthMail,
+            'diagSourceHealthStaleDays' => $sourceHealthDays,
+            'diagSourceHealthError'   => $sourceHealthError,
         ];
     }
 

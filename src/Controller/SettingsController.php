@@ -127,7 +127,11 @@ final class SettingsController
         $diagCoreStatus = [];
         $diagLoadError  = null;
         $diagTestResult = null;
-        $diagRunHistory = [];
+        $diagRunHistory           = [];
+        $diagSourceHealthFeeds    = [];
+        $diagSourceHealthMail     = [];
+        $diagSourceHealthStaleDays = 14;
+        $diagSourceHealthError    = null;
 
         if ($tab === 'general') {
             $cfgPath = SEISMO_ROOT . '/config.local.php';
@@ -221,7 +225,11 @@ final class SettingsController
                 $diagCoreStatus = $diagBundle['diagCoreStatus'];
                 $diagLoadError  = $diagBundle['diagLoadError'];
                 $diagTestResult = $diagBundle['diagTestResult'];
-                $diagRunHistory = $diagBundle['diagRunHistory'];
+                $diagRunHistory            = $diagBundle['diagRunHistory'];
+                $diagSourceHealthFeeds     = $diagBundle['diagSourceHealthFeeds'];
+                $diagSourceHealthMail      = $diagBundle['diagSourceHealthMail'];
+                $diagSourceHealthStaleDays = $diagBundle['diagSourceHealthStaleDays'];
+                $diagSourceHealthError     = $diagBundle['diagSourceHealthError'];
             } catch (\Throwable $e) {
                 error_log('Seismo settings diagnostics: ' . $e->getMessage());
                 $pageError = 'Could not load diagnostics. Check error_log for details.';

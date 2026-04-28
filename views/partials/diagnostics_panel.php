@@ -9,6 +9,10 @@
  * @var ?string $diagLoadError
  * @var ?array{id: string, count: int, error: ?string, items: list<array<string, mixed>>} $diagTestResult
  * @var array<string, list<array{run_at: \DateTimeImmutable, status: string, item_count: int, error_message: ?string, duration_ms: int}>> $diagRunHistory
+ * @var list<array<string, mixed>> $diagSourceHealthFeeds
+ * @var list<array<string, mixed>> $diagSourceHealthMail
+ * @var int $diagSourceHealthStaleDays
+ * @var ?string $diagSourceHealthError
  * @var bool $satellite
  */
 
@@ -30,6 +34,21 @@ $diagCardClass = static function (?array $row): string {
         default   => 'entry-card--diag-warn',
     };
 };
+
+$diagSourceHealthStatus = static function (string $status): array {
+    return match ($status) {
+        'broken' => ['label' => 'Broken', 'class' => 'diag-source-pill diag-source-pill--broken'],
+        'stale' => ['label' => 'Stale', 'class' => 'diag-source-pill diag-source-pill--stale'],
+        'ok' => ['label' => 'OK', 'class' => 'diag-source-pill diag-source-pill--ok'],
+        'disabled' => ['label' => 'Disabled', 'class' => 'diag-source-pill diag-source-pill--disabled'],
+        default => ['label' => $status, 'class' => 'diag-source-pill'],
+    };
+};
+
+$diagSourceHealthFeeds = $diagSourceHealthFeeds ?? [];
+$diagSourceHealthMail = $diagSourceHealthMail ?? [];
+$diagSourceHealthStaleDays = (int)($diagSourceHealthStaleDays ?? 14);
+$diagSourceHealthError = $diagSourceHealthError ?? null;
 ?>
         <?php if ($diagLoadError !== null): ?>
             <div class="message message-error"><?= e($diagLoadError) ?></div>
@@ -49,6 +68,115 @@ $diagCardClass = static function (?array $row): string {
                 <button type="submit" class="btn btn-primary"<?= $satellite ? ' disabled' : '' ?>>Refresh all now</button>
             </form>
         </div>
+
+        <?php if (!$satellite): ?>
+        <div class="latest-entries-section module-section-spaced">
+            <h2 class="section-title">Source health</h2>
+            <p class="admin-intro">
+                One row per <strong>feed</strong> (RSS, Substack, Parl. press, scraper) and per <strong>mail subscription</strong>.
+                <strong>Stale</strong> means no successful fetch (feeds, by <code>last_fetched</code>) or no matching message
+                ingested into the mail store in the last <strong><?= (int)$diagSourceHealthStaleDays ?></strong> days.
+                <strong>Broken</strong> applies to feeds only: enabled source with consecutive failures or a stored fetch error.
+            </p>
+            <?php if ($diagSourceHealthError !== null): ?>
+                <div class="message message-error"><?= e($diagSourceHealthError) ?></div>
+            <?php else: ?>
+                <?php
+                $feedAttention = 0;
+                foreach ($diagSourceHealthFeeds as $_fh) {
+                    if (in_array($_fh['status'] ?? '', ['broken', 'stale'], true)) {
+                        $feedAttention++;
+                    }
+                }
+                $mailAttention = 0;
+                foreach ($diagSourceHealthMail as $_mh) {
+                    if (($_mh['status'] ?? '') === 'stale') {
+                        $mailAttention++;
+                    }
+                }
+                ?>
+                <p class="admin-intro diag-source-health-summary">
+                    <?= (int)$feedAttention ?> feed source(s) and <?= (int)$mailAttention ?> mail subscription(s) need attention
+                    (broken or stale).
+                </p>
+
+                <h3 class="section-title section-title--nested">Feeds</h3>
+                <div class="settings-satellite-table-wrap">
+                    <table class="settings-satellite-table diag-source-health-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Status</th>
+                                <th scope="col">Kind</th>
+                                <th scope="col">Title</th>
+                                <th scope="col">Last fetch</th>
+                                <th scope="col">Error / note</th>
+                                <th scope="col"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($diagSourceHealthFeeds as $fr): ?>
+                                <?php
+                                $st = $diagSourceHealthStatus((string)($fr['status'] ?? ''));
+                                $lfRaw = $fr['last_fetched_raw'] ?? null;
+                                $lfShown = ($lfRaw !== null && (string)$lfRaw !== '')
+                                    ? date('d.m.Y H:i', strtotime((string)$lfRaw))
+                                    : 'never';
+                                $err = trim((string)($fr['last_error'] ?? ''));
+                                if (mb_strlen($err) > 160) {
+                                    $err = mb_substr($err, 0, 157) . '…';
+                                }
+                                $failN = (int)($fr['consecutive_failures'] ?? 0);
+                                $note = $err !== '' ? $err : ($failN > 0 ? 'consecutive_failures: ' . $failN : '—');
+                                ?>
+                                <tr>
+                                    <td><span class="<?= e($st['class']) ?>" role="status"><?= e($st['label']) ?></span></td>
+                                    <td><?= e((string)($fr['source_kind_label'] ?? '')) ?></td>
+                                    <td><?= e((string)($fr['title'] ?? '')) ?></td>
+                                    <td class="diag-source-health-mono"><?= e($lfShown) ?></td>
+                                    <td class="diag-source-health-note"><?= e($note) ?></td>
+                                    <td><a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="section-title section-title--nested">Mail subscriptions</h3>
+                <div class="settings-satellite-table-wrap">
+                    <table class="settings-satellite-table diag-source-health-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Status</th>
+                                <th scope="col">Display name</th>
+                                <th scope="col">Match</th>
+                                <th scope="col">Last ingested</th>
+                                <th scope="col"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($diagSourceHealthMail as $mr): ?>
+                                <?php
+                                $st = $diagSourceHealthStatus((string)($mr['status'] ?? ''));
+                                $liRaw = $mr['last_ingested_raw'] ?? null;
+                                $liShown = ($liRaw !== null && (string)$liRaw !== '')
+                                    ? date('d.m.Y H:i', strtotime((string)$liRaw))
+                                    : 'never';
+                                $matchLabel = (string)($mr['match_type'] ?? '') . ': ' . (string)($mr['match_value'] ?? '');
+                                ?>
+                                <tr>
+                                    <td><span class="<?= e($st['class']) ?>" role="status"><?= e($st['label']) ?></span></td>
+                                    <td><?= e((string)($mr['display_name'] ?? '')) ?></td>
+                                    <td class="diag-source-health-mono"><?= e($matchLabel) ?></td>
+                                    <td class="diag-source-health-mono"><?= e($liShown) ?></td>
+                                    <td><a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=subscriptions">Mail</a></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
 
         <?php if ($diagCoreStatus !== []): ?>
         <div class="latest-entries-section module-section-spaced">
