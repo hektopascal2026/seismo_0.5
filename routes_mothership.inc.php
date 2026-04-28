@@ -223,6 +223,11 @@ $router->register(
     true
 );
 $router->register(
+    'logbook',
+    \Seismo\Controller\LogbookController::class . '::show',
+    true
+);
+$router->register(
     'feeds',
     \Seismo\Controller\FeedController::class . '::show',
     true

@@ -9,6 +9,7 @@ use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryRepository;
 use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\ScraperConfigRepository;
+use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
 
 final class ScraperController
@@ -104,6 +105,12 @@ final class ScraperController
             } else {
                 $newId = $repo->insert($payload);
                 $_SESSION['success'] = 'Scraper source added (#' . $newId . ').';
+                try {
+                    (new SourceLogRepository(getDbConnection()))
+                        ->append(SourceLogRepository::KIND_SCRAPER, $newId, $payload['name']);
+                } catch (\Throwable $e) {
+                    error_log('Seismo source_log (scraper): ' . $e->getMessage());
+                }
             }
         } catch (\Throwable $e) {
             error_log('Seismo scraper_save: ' . $e->getMessage());

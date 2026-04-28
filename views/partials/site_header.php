@@ -5,7 +5,7 @@
  * @var string $basePath
  * @var string $headerTitle
  * @var string|null $headerSubtitle
- * @var string $activeNav index|filter|about|magnitu|label|feeds|scraper|mail|lex|leg|settings|configuration|styleguide
+ * @var string $activeNav index|filter|about|magnitu|label|feeds|scraper|mail|lex|leg|settings|configuration|styleguide|logbook
  * @var string $csrfField
  */
 
@@ -149,6 +149,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <a href="<?= e($basePath) ?>/index.php?action=lex" class="nav-link<?= $activeNav === 'lex' ? ' active' : '' ?>">Lex</a>
             <a href="<?= e($basePath) ?>/index.php?action=leg" class="nav-link<?= $activeNav === 'leg' ? ' active' : '' ?>">Leg</a>
             <a href="<?= e($basePath) ?>/index.php?action=styleguide" class="nav-link<?= $activeNav === 'styleguide' ? ' active' : '' ?>">Styleguide</a>
+            <a href="<?= e($basePath) ?>/index.php?action=logbook" class="nav-link<?= $activeNav === 'logbook' ? ' active' : '' ?>">Logbook</a>
             <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=settings" class="nav-link<?= $activeNav === 'settings' ? ' active' : '' ?>">Settings</a>
             <?php if (!isSatellite()): ?>

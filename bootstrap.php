@@ -247,11 +247,29 @@ function seismoBrandBase(): string
 function seismoBrandDisplaySplit(string $storedTitle): ?array
 {
     $t = trim($storedTitle);
-    if ($t === '' || preg_match('/^Seismo\s+(.+)$/iu', $t, $m) !== 1) {
+    if ($t === '') {
         return null;
     }
+    /* Canonical mothership exports: "Seismo Sicherheit". */
+    if (preg_match('/^Seismo\s+(.+)$/iu', $t, $m) === 1 && trim($m[1]) !== '') {
+        return ['Seismo', trim($m[1])];
+    }
+    /*
+     * Single-token suffix-only (e.g. "Sicherheit") — satellite.json sometimes set
+     * brand.title without the "Seismo " prefix, so config.local.php had only the suffix.
+     * Do not infer for strings that already start with "Seismo" (e.g. "SeismoLabs").
+     */
+    if (
+        strpos($t, ' ') === false
+        && $t !== 'Seismo'
+        && !preg_match('/^Seismo\s+/iu', $t)
+        && !preg_match('/^Seismo$/iu', $t)
+        && stripos($t, 'Seismo') !== 0
+    ) {
+        return ['Seismo', $t];
+    }
 
-    return ['Seismo', trim($m[1])];
+    return null;
 }
 
 /**
