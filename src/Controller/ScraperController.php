@@ -65,6 +65,11 @@ final class ScraperController
         $filterPillOptions = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
         $dashboardError    = $pageError;
 
+        $showModuleRefresh       = !$satellite;
+        $moduleRefreshAction     = 'refresh_scraper_sources';
+        $moduleRefreshLabel      = 'Refresh Scraper';
+        $moduleRefreshReturnView = $view;
+
         require SEISMO_ROOT . '/views/scraper.php';
     }
 

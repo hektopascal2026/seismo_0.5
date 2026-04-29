@@ -91,6 +91,11 @@ final class MailController
         $filterPillOptions = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
         $dashboardError    = $pageError;
 
+        $showModuleRefresh       = !$satellite;
+        $moduleRefreshAction     = 'refresh_mail_ingest';
+        $moduleRefreshLabel      = 'Refresh Mail';
+        $moduleRefreshReturnView = $view;
+
         require SEISMO_ROOT . '/views/mail.php';
     }
 

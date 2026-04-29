@@ -67,6 +67,11 @@ final class FeedController
         $filterPillOptions = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
         $dashboardError    = $pageError;
 
+        $showModuleRefresh       = !$satellite;
+        $moduleRefreshAction     = 'refresh_feed_sources';
+        $moduleRefreshLabel      = 'Refresh Feeds';
+        $moduleRefreshReturnView = $view;
+
         require SEISMO_ROOT . '/views/feeds.php';
     }
 

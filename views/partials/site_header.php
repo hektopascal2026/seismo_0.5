@@ -7,6 +7,10 @@
  * @var string|null $headerSubtitle
  * @var string $activeNav index|filter|about|magnitu|label|feeds|scraper|mail|lex|leg|settings|configuration|styleguide|logbook
  * @var string $csrfField
+ * @var bool $showModuleRefresh Optional — Feeds / Scraper / Mail top-bar module refresh (mothership).
+ * @var string|null $moduleRefreshAction e.g. refresh_feed_sources
+ * @var string|null $moduleRefreshLabel e.g. Refresh Feeds
+ * @var string|null $moduleRefreshReturnView items|sources|subscriptions — POST back after refresh
  */
 
 declare(strict_types=1);
@@ -64,6 +68,18 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                         <?= $csrfField ?>
                         <input type="hidden" name="return_action" value="<?= e($timelineRefreshRet) ?>">
                         <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="Refresh" title="<?= isSatellite() ? 'Triggers mothership refresh (feeds, press, scrapers, mail, Leg — Lex omitted, same as mothership toolbar)' : 'Refresh feeds, press, scrapers, mail, and parliament calendar. Lex legislation uses Diagnostics or cron.' ?>">Refresh</button>
+                    </form>
+                <?php endif; ?>
+                <?php
+                $moduleAct = $moduleRefreshAction ?? '';
+                $moduleLab = $moduleRefreshLabel ?? '';
+                $moduleRv  = (string)($moduleRefreshReturnView ?? '');
+                ?>
+                <?php if (($showModuleRefresh ?? false) && $moduleAct !== '' && $moduleLab !== ''): ?>
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($moduleAct) ?>" class="admin-inline-form top-bar-form-gap">
+                        <?= $csrfField ?>
+                        <input type="hidden" name="return_view" value="<?= e($moduleRv) ?>">
+                        <button type="submit" class="top-bar-btn top-bar-btn--text"><?= e($moduleLab) ?></button>
                     </form>
                 <?php endif; ?>
                 <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>

@@ -341,7 +341,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     </table>
                 </div>
 
-                <p class="meta-text" style="margin-top: 1rem;">Per-module buttons on <strong>Feeds</strong>, <strong>Scraper</strong>, <strong>Mail</strong>, and <strong>Lex</strong> run only that slice of the pipeline (mothership). Module pages also list one-plugin-at-a-time actions alongside &ldquo;Refresh all Lex sources.&rdquo;</p>
+                <p class="meta-text" style="margin-top: 1rem;"><strong>Feeds</strong>, <strong>Scraper</strong>, and <strong>Mail</strong> each have a top-bar refresh (same corner as the timeline). The <strong>Lex</strong> page lists per-plugin actions and &ldquo;Refresh all Lex sources.&rdquo;</p>
                 <p class="meta-text">Throttle numbers and last-run status: <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=diagnostics">Settings → Diagnostics</a><?= $satellite ? ' (mothership only)' : '' ?>.</p>
             </section>
 
