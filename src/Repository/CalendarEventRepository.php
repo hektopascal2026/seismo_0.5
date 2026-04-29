@@ -11,8 +11,7 @@ use PDOException;
 
 /**
  * Leg family table — bounded reads, transactional upserts, satellite-safe entryTable().
- * Rows sort **future-first** by event_date (unlike every other family), matching
- * the "upcoming parliamentary business" framing of the Leg page.
+ * Leg page lists rows with **`event_date` descending** (newest first; tie-break `id` DESC).
  */
 final class CalendarEventRepository
 {
@@ -25,7 +24,7 @@ final class CalendarEventRepository
     }
 
     /**
-     * Events ordered for the Leg page (future first, then past).
+     * Events ordered for the Leg page (newest calendar date first; `NULL` dates last).
      *
      * @param list<string> $sources
      * @return list<array<string, mixed>>
@@ -60,7 +59,7 @@ final class CalendarEventRepository
 
         $sql = "SELECT * FROM {$table}
             WHERE {$where}
-            ORDER BY (event_date IS NULL), event_date ASC, id ASC
+            ORDER BY (event_date IS NULL), event_date DESC, id DESC
             LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
 
         try {
