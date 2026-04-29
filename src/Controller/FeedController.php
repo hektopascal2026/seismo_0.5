@@ -10,6 +10,7 @@ use Seismo\Repository\EntryRepository;
 use Seismo\Repository\FeedRepository;
 use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Service\RefreshAllService;
 
 final class FeedController
 {
@@ -67,6 +68,45 @@ final class FeedController
         $dashboardError    = $pageError;
 
         require SEISMO_ROOT . '/views/feeds.php';
+    }
+
+    public function refreshFeedSources(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirect([]);
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectAfterFeedRefresh();
+
+            return;
+        }
+        if (isSatellite()) {
+            $_SESSION['error'] = 'Satellite mode: refresh runs on the mothership.';
+            $this->redirectAfterFeedRefresh();
+
+            return;
+        }
+
+        set_time_limit(300);
+        try {
+            $pdo     = getDbConnection();
+            $results = RefreshAllService::boot($pdo)->runFeedModuleCoreFetchers(true);
+        } catch (\Throwable $e) {
+            error_log('Seismo refresh_feed_sources: ' . $e->getMessage());
+            $_SESSION['error'] = 'Refresh failed: ' . $e->getMessage();
+            $this->redirectAfterFeedRefresh();
+
+            return;
+        }
+
+        RefreshAllService::applySessionFlashForAggregateResults(
+            $results,
+            'Feed sources (RSS, Substack & Parl. press)'
+        );
+        $this->redirectAfterFeedRefresh();
     }
 
     public function save(): void
@@ -263,6 +303,17 @@ final class FeedController
         }
 
         $this->redirect(['view' => 'sources']);
+    }
+
+    private function redirectAfterFeedRefresh(): void
+    {
+        $v = trim((string)($_POST['return_view'] ?? ''));
+        if ($v === 'sources') {
+            $this->redirect(['view' => 'sources']);
+
+            return;
+        }
+        $this->redirect([]);
     }
 
     /**

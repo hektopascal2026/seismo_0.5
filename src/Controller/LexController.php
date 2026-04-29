@@ -69,6 +69,42 @@ final class LexController
         require SEISMO_ROOT . '/views/lex.php';
     }
 
+    public function refreshAllLex(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectToLex();
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectToLex();
+
+            return;
+        }
+        if (isSatellite()) {
+            $_SESSION['error'] = 'Satellite mode: refresh runs on the mothership.';
+            $this->redirectToLex();
+
+            return;
+        }
+
+        set_time_limit(300);
+        try {
+            $pdo     = getDbConnection();
+            $results = RefreshAllService::boot($pdo)->runAllLexItemPlugins(true);
+        } catch (\Throwable $e) {
+            error_log('Seismo refresh_lex_all: ' . $e->getMessage());
+            $_SESSION['error'] = 'Lex refresh failed: ' . $e->getMessage();
+            $this->redirectToLex();
+
+            return;
+        }
+
+        RefreshAllService::applySessionFlashForAggregateResults($results, 'Lex legislation sources');
+        $this->redirectToLex();
+    }
+
     public function refreshFedlex(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {

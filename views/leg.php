@@ -115,6 +115,7 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
         <?php if (!$satellite): ?>
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Refresh Parlament CH</h2>
+            <p class="admin-intro" style="margin-top:0;">Runs the <code>parl_ch</code> plugin only (parliamentary business calendar).</p>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_parl_ch" class="admin-inline-form">
                 <?= $csrfField ?>
                 <button type="submit" class="btn btn-primary">Refresh Parlament CH</button>

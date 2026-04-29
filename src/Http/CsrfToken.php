@@ -20,7 +20,8 @@ namespace Seismo\Http;
  * plumbing for no practical attacker resistance at our scale.
  *
  * The token is required on every state-changing POST (`toggle_favourite`,
- * `refresh_fedlex`, `refresh_parl_ch`, `refresh_all`, `refresh_plugin`,
+ * `refresh_fedlex`, `refresh_parl_ch`, `refresh_feed_sources`, `refresh_scraper_sources`,
+ * `refresh_mail_ingest`, `refresh_lex_all`, `refresh_all`, `refresh_plugin`,
  * `save_lex_ch`, `save_leg_parl_ch`, `plugin_test`). Routes handling
  * GET are untouched. Magnitu API routes authenticate with Bearer tokens
  * and never see session cookies, so CSRF does not apply.

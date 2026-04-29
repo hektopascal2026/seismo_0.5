@@ -11,6 +11,7 @@ use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\ScraperConfigRepository;
 use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Service\RefreshAllService;
 
 final class ScraperController
 {
@@ -65,6 +66,52 @@ final class ScraperController
         $dashboardError    = $pageError;
 
         require SEISMO_ROOT . '/views/scraper.php';
+    }
+
+    public function refreshScraperSources(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            header('Location: ?action=scraper', true, 303);
+            exit;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectAfterScraperRefresh();
+
+            return;
+        }
+        if (isSatellite()) {
+            $_SESSION['error'] = 'Satellite mode: refresh runs on the mothership.';
+            $this->redirectAfterScraperRefresh();
+
+            return;
+        }
+
+        set_time_limit(300);
+        try {
+            $pdo     = getDbConnection();
+            $results = RefreshAllService::boot($pdo)->runScraperModuleCoreFetcher(true);
+        } catch (\Throwable $e) {
+            error_log('Seismo refresh_scraper_sources: ' . $e->getMessage());
+            $_SESSION['error'] = 'Refresh failed: ' . $e->getMessage();
+            $this->redirectAfterScraperRefresh();
+
+            return;
+        }
+
+        RefreshAllService::applySessionFlashForAggregateResults($results, 'Scraper sources');
+        $this->redirectAfterScraperRefresh();
+    }
+
+    private function redirectAfterScraperRefresh(): void
+    {
+        $v = trim((string)($_POST['return_view'] ?? ''));
+        if ($v === 'sources') {
+            header('Location: ?' . http_build_query(['action' => 'scraper', 'view' => 'sources']), true, 303);
+        } else {
+            header('Location: ?action=scraper', true, 303);
+        }
+        exit;
     }
 
     public function save(): void

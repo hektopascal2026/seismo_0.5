@@ -91,6 +91,121 @@ final class RefreshAllService
     }
 
     /**
+     * Feeds page: RSS/Substack + Parliament press (not scraper or mail).
+     *
+     * @return array<string, PluginRunResult>
+     */
+    public function runFeedModuleCoreFetchers(bool $force = true): array
+    {
+        $results = [
+            CoreRunner::ID_RSS         => $this->coreRunner->runOne(CoreRunner::ID_RSS, $force),
+            CoreRunner::ID_PARL_PRESS => $this->coreRunner->runOne(CoreRunner::ID_PARL_PRESS, $force),
+        ];
+        $this->recipeRescoreAfterIngest();
+
+        return $results;
+    }
+
+    /**
+     * @return array<string, PluginRunResult>
+     */
+    public function runScraperModuleCoreFetcher(bool $force = true): array
+    {
+        $results = [
+            CoreRunner::ID_SCRAPER => $this->coreRunner->runOne(CoreRunner::ID_SCRAPER, $force),
+        ];
+        $this->recipeRescoreAfterIngest();
+
+        return $results;
+    }
+
+    /**
+     * @return array<string, PluginRunResult>
+     */
+    public function runMailModuleCoreFetcher(bool $force = true): array
+    {
+        $results = [
+            CoreRunner::ID_MAIL => $this->coreRunner->runOne(CoreRunner::ID_MAIL, $force),
+        ];
+        $this->recipeRescoreAfterIngest();
+
+        return $results;
+    }
+
+    /**
+     * Every registered plugin with {@see SourceFetcherInterface::getEntryType()} `lex_item`
+     * (Fedlex, EUR-Lex, DE/FR, Jus sources).
+     *
+     * @return array<string, PluginRunResult>
+     */
+    public function runAllLexItemPlugins(bool $force = true): array
+    {
+        $results = [];
+        foreach ($this->registry->all() as $id => $plugin) {
+            if ($plugin->getEntryType() !== 'lex_item') {
+                continue;
+            }
+            $results[$id] = $this->runOne($plugin, $force);
+        }
+        $this->recipeRescoreAfterIngest();
+
+        return $results;
+    }
+
+    /**
+     * @param array<string, PluginRunResult> $results
+     *
+     * @return array{summary: string, all_failed: bool}
+     */
+    public static function aggregatePluginRunResults(array $results): array
+    {
+        $okCount = 0;
+        $warnCount = 0;
+        $errCount = 0;
+        $itemsTotal = 0;
+        foreach ($results as $r) {
+            if ($r->isOk()) {
+                $okCount++;
+                $itemsTotal += $r->count;
+            } elseif ($r->status === 'warn') {
+                $warnCount++;
+                $itemsTotal += $r->count;
+            } elseif ($r->status === 'error') {
+                $errCount++;
+            }
+        }
+        $skipped = count($results) - $okCount - $warnCount - $errCount;
+        $summary = sprintf(
+            '%d ok, %d partial (%d items), %d error, %d skipped',
+            $okCount,
+            $warnCount,
+            $itemsTotal,
+            $errCount,
+            $skipped
+        );
+        $n = count($results);
+        $allFailed = $n > 0 && $errCount === $n;
+
+        return ['summary' => $summary, 'all_failed' => $allFailed];
+    }
+
+    /**
+     * Sets {@see $_SESSION} success/error from an aggregate plugin run (module refresh buttons).
+     *
+     * @param array<string, PluginRunResult> $results
+     */
+    public static function applySessionFlashForAggregateResults(array $results, string $label): void
+    {
+        $agg = self::aggregatePluginRunResults($results);
+        $msg = $label . ': ' . $agg['summary'] . '.';
+        if ($agg['all_failed']) {
+            $_SESSION['error'] = $msg;
+        } else {
+            $_SESSION['success'] = $msg;
+        }
+    }
+
+    /**
      * Run a single plugin by id.
      *
      * @param bool $force Defaults to true because the web single-plugin refresh

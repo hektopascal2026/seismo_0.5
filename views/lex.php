@@ -75,7 +75,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
         <?php endif; ?>
 
         <p class="message message-info">
-            <strong>Lex refresh:</strong> EU (<code>lex_eu</code>), Swiss Fedlex (<code>fedlex</code>), Germany (<code>recht_bund</code>), and France (<code>legifrance</code>) run from this page or from <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=diagnostics">Settings → Diagnostics</a> / cron (<code>Refresh all</code>).
+            <strong>Lex refresh:</strong> Use <strong>Refresh all Lex sources</strong> below for every Lex plugin at once (EU, CH, DE, FR, Jus), or a single-source button, or <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=diagnostics">Settings → Diagnostics</a> / cron.
             <strong>Parlament Medien</strong> (press) are <code>feed_items</code> — configure <code>parl_press</code> on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.
         </p>
 
@@ -113,7 +113,11 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
         <?php if (!$satellite): ?>
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Refresh legislation sources</h2>
-            <p class="admin-intro">Each button runs one plugin (same as Diagnostics → per-plugin refresh).</p>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_all" class="admin-inline-form" style="margin-bottom: 1rem;">
+                <?= $csrfField ?>
+                <button type="submit" class="btn btn-primary">Refresh all Lex sources</button>
+            </form>
+            <p class="admin-intro">Runs every enabled Lex plugin (EUR-Lex, Fedlex, DE, FR, Jus) in one request. Below: one plugin per button (same as Diagnostics).</p>
             <div class="admin-form-actions">
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_eu" class="admin-inline-form">
                     <?= $csrfField ?>

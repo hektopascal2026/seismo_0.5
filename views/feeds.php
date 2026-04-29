@@ -51,6 +51,17 @@ $sourcesQs = 'action=feeds&view=sources';
             <?php unset($_SESSION['error']); ?>
         <?php endif; ?>
 
+        <?php if (!$satellite): ?>
+        <div class="latest-entries-section module-section-spaced" style="padding-bottom:0;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_feed_sources" class="admin-inline-form" style="flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem;">
+                <?= $csrfField ?>
+                <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                <button type="submit" class="btn btn-primary">Refresh RSS, Substack &amp; Parl. press</button>
+                <span class="admin-intro" style="margin:0;">Runs <code>core:rss</code> and <code>core:parl_press</code> only.</span>
+            </form>
+        </div>
+        <?php endif; ?>
+
         <div class="view-toggle view-toggle-bar">
             <span class="view-toggle-label">View:</span>
             <a href="<?= e($basePath) ?>/index.php?<?= e($itemsQs) ?>" class="btn <?= $view === 'items' ? 'btn-primary' : 'btn-secondary' ?>">Items</a>

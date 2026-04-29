@@ -88,6 +88,11 @@ $router->register(
     false
 );
 $router->register(
+    'refresh_lex_all',
+    \Seismo\Controller\LexController::class . '::refreshAllLex',
+    false
+);
+$router->register(
     'save_lex_fr',
     \Seismo\Controller\LexController::class . '::saveLexFr',
     false
@@ -248,6 +253,11 @@ $router->register(
     false
 );
 $router->register(
+    'refresh_feed_sources',
+    \Seismo\Controller\FeedController::class . '::refreshFeedSources',
+    false
+);
+$router->register(
     'scraper',
     \Seismo\Controller\ScraperController::class . '::show',
     true
@@ -268,9 +278,19 @@ $router->register(
     false
 );
 $router->register(
+    'refresh_scraper_sources',
+    \Seismo\Controller\ScraperController::class . '::refreshScraperSources',
+    false
+);
+$router->register(
     'mail',
     \Seismo\Controller\MailController::class . '::show',
     true
+);
+$router->register(
+    'refresh_mail_ingest',
+    \Seismo\Controller\MailController::class . '::refreshMailIngest',
+    false
 );
 $router->register(
     'mail_subscription_save',

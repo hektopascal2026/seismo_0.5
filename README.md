@@ -6,7 +6,7 @@ Behind the scenes it runs a **deterministic recipe scorer** (keywords, source we
 
 The codebase targets **PHP 8.2**, **MariaDB/MySQL**, and **vanilla PHP** (no Redis, no background worker daemons): one web app plus a **CLI cron** entry is enough for typical shared hosting.
 
-**0.5.1** adds **previews** on the **Feeds** (RSS/Substack), **Scraper**, and **Mail** module pages so you can validate URLs, extracted articles, and newsletter matches before saving — making it easier to build up a library of sources.
+**0.5.2** adds **per-module refresh** on **Feeds**, **Scraper**, **Mail**, and **Lex** (one click runs only that area’s ingest), and keeps the **timeline** toolbar refresh light by skipping **Lex** legislation pulls (use **Settings → Diagnostics** or **cron** for a full run). **0.5.1** added **previews** on those module pages to validate sources before saving.
 
 ---
 

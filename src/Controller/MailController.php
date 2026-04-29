@@ -9,6 +9,7 @@ use Seismo\Repository\EmailSubscriptionRepository;
 use Seismo\Repository\EntryRepository;
 use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Service\RefreshAllService;
 
 final class MailController
 {
@@ -91,6 +92,52 @@ final class MailController
         $dashboardError    = $pageError;
 
         require SEISMO_ROOT . '/views/mail.php';
+    }
+
+    public function refreshMailIngest(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            header('Location: ?action=mail', true, 303);
+            exit;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectAfterMailRefresh();
+
+            return;
+        }
+        if (isSatellite()) {
+            $_SESSION['error'] = 'Satellite mode: refresh runs on the mothership.';
+            $this->redirectAfterMailRefresh();
+
+            return;
+        }
+
+        set_time_limit(300);
+        try {
+            $pdo     = getDbConnection();
+            $results = RefreshAllService::boot($pdo)->runMailModuleCoreFetcher(true);
+        } catch (\Throwable $e) {
+            error_log('Seismo refresh_mail_ingest: ' . $e->getMessage());
+            $_SESSION['error'] = 'Refresh failed: ' . $e->getMessage();
+            $this->redirectAfterMailRefresh();
+
+            return;
+        }
+
+        RefreshAllService::applySessionFlashForAggregateResults($results, 'Mail (IMAP)');
+        $this->redirectAfterMailRefresh();
+    }
+
+    private function redirectAfterMailRefresh(): void
+    {
+        $v = trim((string)($_POST['return_view'] ?? ''));
+        if ($v === 'subscriptions') {
+            header('Location: ?' . http_build_query(['action' => 'mail', 'view' => 'subscriptions']), true, 303);
+        } else {
+            header('Location: ?action=mail', true, 303);
+        }
+        exit;
     }
 
     public function saveSubscription(): void

@@ -18,7 +18,7 @@
 
 declare(strict_types=1);
 
-define('SEISMO_VERSION', '0.5.1');
+define('SEISMO_VERSION', '0.5.2');
 define('SEISMO_ROOT', __DIR__);
 
 // ---------------------------------------------------------------------------
@@ -290,7 +290,7 @@ function seismoBrandSuffix(): string
     return $t;
 }
 
-/** Display version label for the top bar, e.g. "v0.5.1". Empty on satellites. */
+/** Display version label for the top bar, e.g. "v0.5.2". Empty on satellites. */
 function seismoBrandVersionLabel(): string
 {
     if (isSatellite()) {
@@ -315,7 +315,7 @@ function seismoSatelliteBrandSplit(): bool
 
 /**
  * Brand string for document titles and APIs.
- * Mothership: base + version (e.g. "Seismo v0.5.1").
+ * Mothership: base + version (e.g. "Seismo v0.5.2").
  * Satellite: full title "Seismo {suffix}" when canonical; otherwise stored title / fallback.
  */
 function seismoBrandTitle(): string

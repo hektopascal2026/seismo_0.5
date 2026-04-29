@@ -211,14 +211,22 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.5.1 (Current)</strong> <span class="v-date">Apr 2026</span></div>
+                        <div class="v-header"><strong>v0.5.2 (Current)</strong> <span class="v-date">Apr 2026</span></div>
+                        <div class="v-title">Operations &amp; refresh UX</div>
+                        <ul>
+                            <li><strong>Per-module refresh:</strong> Feeds, Scraper, Mail, and Lex pages run only their ingest pipeline; Leg keeps its Parlament CH control.</li>
+                            <li><strong>Timeline refresh:</strong> Toolbar refresh skips Lex legislation sources by default to avoid long HTTP requests; full refresh stays on Diagnostics and cron.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.5.1</strong> <span class="v-date">Apr 2026</span></div>
                         <div class="v-title">Architectural Consolidation</div>
                         <ul>
                             <li><strong>Service-Oriented Core:</strong> Replaced procedural logic with lightweight controllers and repository patterns.</li>
                             <li><strong>Unified Pipeline:</strong> All fetching now runs under a master cron (<code>refresh_cron.php</code>).</li>
                             <li><strong>Security Hardening:</strong> Implementation of CSRF protection and a dormant session-auth layer.</li>
                             <li><strong>Clean API:</strong> Retired the "AI view" in favor of a stable, bearer-token-protected JSON/Markdown export API.</li>
-                            <li><strong>Source previews (0.5.1):</strong> Feeds, Scraper, and Mail pages help validate sources before you commit them.</li>
+                            <li><strong>Source previews:</strong> Feeds, Scraper, and Mail pages help validate sources before you commit them.</li>
                         </ul>
                     </div>
                 </div>
