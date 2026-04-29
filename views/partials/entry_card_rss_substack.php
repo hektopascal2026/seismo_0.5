@@ -42,8 +42,25 @@ $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-subs
                                     <?php if ($parlCommission !== ''): ?>
                                         <span class="entry-tag entry-tag--meta"><?= htmlspecialchars($parlCommission) ?></span>
                                     <?php endif; ?>
-                                <?php elseif (!empty($item['feed_category']) && $item['feed_category'] !== 'unsortiert'): ?>
-                                    <span class="entry-tag <?= $feedCatTagClass ?>"><?= htmlspecialchars($item['feed_category']) ?></span>
+                                <?php else: ?>
+                                    <?php
+                                        $feedCategory = trim((string)($item['feed_category'] ?? ''));
+                                        $feedLabel = '';
+                                        if ($feedCategory !== '' && $feedCategory !== 'unsortiert') {
+                                            $feedLabel = $feedCategory;
+                                        } else {
+                                            $feedLabel = trim((string)($item['feed_title'] ?? ''));
+                                            if ($feedLabel === '') {
+                                                $feedLabel = trim((string)($item['feed_name'] ?? ''));
+                                            }
+                                        }
+                                        if (mb_strlen($feedLabel) > 32) {
+                                            $feedLabel = mb_substr($feedLabel, 0, 32) . '…';
+                                        }
+                                    ?>
+                                    <?php if ($feedLabel !== ''): ?>
+                                        <span class="entry-tag <?= $feedCatTagClass ?>"><?= htmlspecialchars($feedLabel) ?></span>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
