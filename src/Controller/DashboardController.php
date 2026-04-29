@@ -164,6 +164,7 @@ final class DashboardController
     /**
      * Satellite POST handler — proxies to the mothership {@see DiagnosticsController::refreshAllRemote()}
      * using {@see SEISMO_MOTHERSHIP_URL} and {@see SEISMO_REMOTE_REFRESH_KEY}.
+     * Same ingest scope as the mothership timeline toolbar (Lex plugins omitted).
      */
     public function refreshRemote(): void
     {

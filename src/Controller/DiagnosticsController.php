@@ -290,9 +290,13 @@ final class DiagnosticsController
     }
 
     /**
-     * Satellite-callable full refresh — validates `?key=` against
+     * Satellite-callable refresh — validates `?key=` against
      * `SEISMO_REMOTE_REFRESH_KEY`. JSON response; no session (safe for cross-origin
      * fetch from a public satellite page). Port of 0.4 `handleRefreshAllRemote`.
+     *
+     * Uses {@see RefreshAllService::runAll()} with Lex plugins skipped — same as
+     * the mothership timeline toolbar Refresh (avoids long HTTP runs). Lex legislation
+     * still updates via cron or Settings → Diagnostics.
      */
     public function refreshAllRemote(): void
     {
@@ -341,7 +345,7 @@ final class DiagnosticsController
 
         $startedAt = microtime(true);
         try {
-            $results = RefreshAllService::boot($pdo)->runAll(true);
+            $results = RefreshAllService::boot($pdo)->runAll(true, true);
         } catch (\Throwable $e) {
             error_log('Seismo refresh_all_remote: ' . $e->getMessage());
             http_response_code(500);
