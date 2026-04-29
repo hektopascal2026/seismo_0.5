@@ -195,8 +195,10 @@ final class DiagnosticsController
         }
         $config->set(self::KEY_LAST_REFRESH_AT, (string)time());
 
+        $skipLexPlugins = $this->timelineRefreshRequestsSkipLex();
+
         try {
-            $results = RefreshAllService::boot($pdo)->runAll(true);
+            $results = RefreshAllService::boot($pdo)->runAll(true, $skipLexPlugins);
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics refresh_all: ' . $e->getMessage());
             $msg = 'Refresh all failed: ' . $e->getMessage();
@@ -233,6 +235,9 @@ final class DiagnosticsController
             $errCount,
             $skipped
         );
+        if ($skipLexPlugins) {
+            $summary .= ' Lex legislation plugins were not run — use Settings → Diagnostics → Refresh all, or cron, for those sources.';
+        }
         $_SESSION['success'] = $summary;
         if ($ajax) {
             $this->jsonRefreshResponse(200, true, $summary, null);
@@ -473,6 +478,18 @@ final class DiagnosticsController
         }
 
         return true;
+    }
+
+    /**
+     * Timeline / filter toolbar Refresh posts `return_action` index|filter; skip Lex
+     * plugins so the request finishes within upstream HTTP timeouts. Diagnostics
+     * omits `return_action` (full run including Lex).
+     */
+    private function timelineRefreshRequestsSkipLex(): bool
+    {
+        $t = trim((string)($_POST['return_action'] ?? ''));
+
+        return $t === 'index' || $t === 'filter';
     }
 
     /**

@@ -20,7 +20,8 @@ use Seismo\Repository\PluginRunLogRepository;
 /**
  * Orchestrates plugin execution. Shared by:
  *   - Master cron (refresh_cron.php) — calls runAll() with throttling.
- *   - Web "Refresh all" button (?action=refresh_all) — calls runAll(force: true).
+ *   - Web "Refresh all" — Diagnostics uses runAll(force: true); timeline Refresh
+ *     uses runAll(force: true, skipLexPlugins: true) so HTTP stays within timeouts.
  *   - Per-plugin refresh buttons — calls runPlugin($id, force: true).
  *   - Diagnostics "Test" button — calls testPlugin($id) (no persistence).
  *
@@ -66,12 +67,21 @@ final class RefreshAllService
      * Run core fetchers, then every registered plugin.
      *
      * @param bool $force If true, ignore the per-plugin throttle (web "Refresh all").
+     * @param bool $skipLexPlugins If true, skip plugins with {@see SourceFetcherInterface::getEntryType()}
+     *                            `lex_item` (timeline toolbar Refresh — Lex stays on Diagnostics / cron).
      * @return array<string, PluginRunResult>
      */
-    public function runAll(bool $force = false): array
+    public function runAll(bool $force = false, bool $skipLexPlugins = false): array
     {
         $results = $this->coreRunner->runAll($force);
         foreach ($this->registry->all() as $id => $plugin) {
+            if ($skipLexPlugins && $plugin->getEntryType() === 'lex_item') {
+                $results[$id] = PluginRunResult::skipped(
+                    'Skipped — timeline refresh omits Lex sources (use Diagnostics or refresh_cron.php).',
+                    false
+                );
+                continue;
+            }
             $results[$id] = $this->runOne($plugin, $force);
         }
 

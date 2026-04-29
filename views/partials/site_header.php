@@ -63,7 +63,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     <form id="seismo-timeline-refresh-form" method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap">
                         <?= $csrfField ?>
                         <input type="hidden" name="return_action" value="<?= e($timelineRefreshRet) ?>">
-                        <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="Refresh" title="<?= isSatellite() ? 'Fetch all sources on the mothership (remote refresh)' : 'Fetch all sources (same as Settings → Diagnostics → Refresh all)' ?>">Refresh</button>
+                        <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="Refresh" title="<?= isSatellite() ? 'Fetch all sources on the mothership (remote refresh)' : 'Refresh feeds, press, scrapers, mail, and parliament calendar. Lex legislation uses Diagnostics or cron.' ?>">Refresh</button>
                     </form>
                 <?php endif; ?>
                 <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
