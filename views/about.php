@@ -238,7 +238,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 <div class="about-grid">
                     <div class="about-grid-item">
                         <strong>Refresh &amp; cron</strong>
-                        <p>The web <strong>Refresh</strong> control and <code>refresh_cron.php</code> share one pipeline (<code>RefreshAllService::runAll()</code>). Cron is CLI-only; interactive refresh bypasses plugin throttles.</p>
+                        <p>All paths use the same ingest pipeline (<code>RefreshAllService::runAll()</code>). How often each source actually hits its upstream differs — see <strong>§ IX</strong> below.</p>
                     </div>
                     <div class="about-grid-item">
                         <strong>Retention</strong>
@@ -297,6 +297,52 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 <?php else: ?>
                 <p class="meta-text">Database statistics are unavailable (connection or schema not ready).</p>
                 <?php endif; ?>
+            </section>
+
+            <!-- IX. Refresh overview -->
+            <section class="settings-section about-card dashboard-section" id="about-refresh">
+                <h2>IX. Refresh: cron, timeline, and Diagnostics</h2>
+                <p class="about-lede">Everything passes through the same service, but <strong>throttles</strong>, <strong>force</strong>, and <strong>Lex</strong> handling differ. Use this table as the mental model.</p>
+
+                <?php if ($satellite): ?>
+                <p class="message message-info" style="margin-top: 1rem;"><strong>Satellite:</strong> Upstream fetching runs on the <strong>mothership</strong>. Local <code>refresh_cron.php</code> does not ingest feeds, Lex, or Leg from the network. The timeline <strong>Refresh</strong> button asks the mothership to run a refresh (same lighter scope as the mothership toolbar — Lex legislation plugins are not pulled by that path).</p>
+                <?php endif; ?>
+
+                <div class="table-responsive">
+                    <table class="styleguide-table about-refresh-table">
+                        <thead>
+                            <tr>
+                                <th>How it runs</th>
+                                <th>Respects time gaps?</th>
+                                <th>Lex (Fedlex, EU, DE, FR, Jus, …)</th>
+                                <th>Typical use</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>CLI <code>refresh_cron.php</code></strong><br><span class="meta-text">(e.g. Plesk cron; often every 5–60&nbsp;min)</span></td>
+                                <td><strong>Yes.</strong> Core fetchers (RSS, Parliament press, scraper, mail) and each plugin run only when its minimum interval has passed since the last successful run. A schedule such as <em>hourly</em> means the script runs every hour — not that every source hits its upstream every hour.</td>
+                                <td><strong>When due</strong> — same throttle rules as other plugins (intervals vary; see Diagnostics for windows).</td>
+                                <td>Hands-off background updates; combines with retention at the end of the script on the mothership.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Timeline Refresh</strong><br><span class="meta-text">(top bar on Index / Filter)</span></td>
+                                <td><strong>No</strong> — throttles are bypassed for the steps that run.</td>
+                                <td><strong>Skipped</strong> — keeps the browser request fast; legislation APIs can be heavy.</td>
+                                <td>Quick pull for feeds, press, scraper, mail, and Swiss parliament calendar (<code>parl_ch</code>) without waiting for cron.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Settings → Diagnostics → Refresh all</strong></td>
+                                <td><strong>No</strong> — full manual run.</td>
+                                <td><strong>Included</strong> — every enabled Lex plugin runs.</td>
+                                <td>When you need legislation or case law updated immediately, or you are checking a source after changing config.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <p class="meta-text" style="margin-top: 1rem;">Per-module buttons on <strong>Feeds</strong>, <strong>Scraper</strong>, <strong>Mail</strong>, and <strong>Lex</strong> run only that slice of the pipeline (mothership). Module pages also list one-plugin-at-a-time actions alongside &ldquo;Refresh all Lex sources.&rdquo;</p>
+                <p class="meta-text">Throttle numbers and last-run status: <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=diagnostics">Settings → Diagnostics</a><?= $satellite ? ' (mothership only)' : '' ?>.</p>
             </section>
 
             <footer class="about-footer">
