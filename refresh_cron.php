@@ -18,6 +18,10 @@
  *   - CLI only. A browser-triggered run would be a DoS vector; we refuse.
  *   - Satellite mode is a no-op. Satellites read entries cross-DB from the
  *     mothership; they have no upstreams to refresh.
+ *   - Overlap guard: a MySQL advisory lock ({@see CronMutexRepository}) ensures
+ *     only one master-cron tick runs per database at a time. If your scheduler
+ *     fires more often than a tick can finish (e.g. every minute with slow/chunked
+ *     work), overlapping invocations exit 0 immediately instead of duplicating fetches.
  */
 
 declare(strict_types=1);
@@ -30,6 +34,7 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/bootstrap.php';
 
+use Seismo\Repository\CronMutexRepository;
 use Seismo\Service\RefreshAllService;
 use Seismo\Service\RetentionService;
 
@@ -76,6 +81,19 @@ try {
     $log('[seismo] DB connection failed: ' . $e->getMessage() . "\n", true);
     exit(1);
 }
+
+$cronMutex = new CronMutexRepository($pdo);
+if (!$cronMutex->tryAcquireRefreshCron()) {
+    $log("[seismo] skipped — another refresh_cron tick is still running (advisory lock).\n");
+    exit(0);
+}
+register_shutdown_function(static function () use ($cronMutex): void {
+    try {
+        $cronMutex->releaseRefreshCron();
+    } catch (\Throwable) {
+        // Connection may already be gone; MySQL also releases locks when the session ends.
+    }
+});
 
 $start = microtime(true);
 $log('[seismo] master cron tick @ ' . gmdate('Y-m-d\TH:i:s\Z') . "\n");
