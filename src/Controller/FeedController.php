@@ -316,6 +316,46 @@ final class FeedController
         $this->redirect(['view' => 'sources']);
     }
 
+    public function toggleDisabled(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirect(['view' => 'sources']);
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirect(['view' => 'sources']);
+
+            return;
+        }
+        if (isSatellite()) {
+            $_SESSION['error'] = 'Satellite mode — feed configuration is managed on the mothership only.';
+            $this->redirect(['view' => 'sources']);
+
+            return;
+        }
+
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $_SESSION['error'] = 'Invalid feed.';
+            $this->redirect(['view' => 'sources']);
+
+            return;
+        }
+
+        try {
+            $repo    = new FeedRepository(getDbConnection());
+            $nowOff = $repo->toggleDisabled($id);
+            $_SESSION['success'] = $nowOff ? 'Feed disabled — refresh will skip it until you enable it again.' : 'Feed enabled.';
+        } catch (\Throwable $e) {
+            error_log('Seismo feed_toggle_disabled: ' . $e->getMessage());
+            $_SESSION['error'] = $e->getMessage();
+        }
+
+        $this->redirect(['view' => 'sources']);
+    }
+
     private function redirectAfterFeedRefresh(): void
     {
         $v = trim((string)($_POST['return_view'] ?? ''));

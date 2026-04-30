@@ -310,6 +310,48 @@ final class ScraperController
         $this->redirect(['view' => 'sources']);
     }
 
+    public function toggleDisabled(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirect(['view' => 'sources']);
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirect(['view' => 'sources']);
+
+            return;
+        }
+        if (isSatellite()) {
+            $_SESSION['error'] = 'Satellite mode — scraper configuration is managed on the mothership only.';
+            $this->redirect(['view' => 'sources']);
+
+            return;
+        }
+
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $_SESSION['error'] = 'Invalid scraper id.';
+            $this->redirect(['view' => 'sources']);
+
+            return;
+        }
+
+        try {
+            $repo   = new ScraperConfigRepository(getDbConnection());
+            $nowOff = $repo->toggleDisabled($id);
+            $_SESSION['success'] = $nowOff
+                ? 'Scraper source disabled — refresh will skip it until you enable it again.'
+                : 'Scraper source enabled.';
+        } catch (\Throwable $e) {
+            error_log('Seismo scraper_toggle_disabled: ' . $e->getMessage());
+            $_SESSION['error'] = $e->getMessage();
+        }
+
+        $this->redirect(['view' => 'sources']);
+    }
+
     /**
      * @param array<string, scalar|null> $query
      */

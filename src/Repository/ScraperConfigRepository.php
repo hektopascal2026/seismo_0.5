@@ -130,6 +130,24 @@ final class ScraperConfigRepository
         ]);
     }
 
+    /**
+     * Flip `disabled` for an existing scraper config (sources table quick toggle).
+     *
+     * @return bool New disabled state (true = disabled).
+     */
+    public function toggleDisabled(int $id): bool
+    {
+        $this->assertNotSatellite();
+        $existing = $this->findById($id);
+        if ($existing === null) {
+            throw new \InvalidArgumentException('Scraper config not found.');
+        }
+        $next = !empty($existing['disabled']) ? 0 : 1;
+        $this->update($id, ['disabled' => $next]);
+
+        return $next === 1;
+    }
+
     public function delete(int $id): void
     {
         $this->assertNotSatellite();

@@ -166,6 +166,24 @@ final class FeedRepository
         ]);
     }
 
+    /**
+     * Flip `disabled` for an existing feed (_sources table quick toggle).
+     *
+     * @return bool New disabled state (true = disabled).
+     */
+    public function toggleDisabled(int $id): bool
+    {
+        $this->assertNotSatellite();
+        $existing = $this->findById($id);
+        if ($existing === null) {
+            throw new \InvalidArgumentException('Feed not found.');
+        }
+        $next = !empty($existing['disabled']) ? 0 : 1;
+        $this->update($id, ['disabled' => $next]);
+
+        return $next === 1;
+    }
+
     public function delete(int $id): void
     {
         $this->assertNotSatellite();

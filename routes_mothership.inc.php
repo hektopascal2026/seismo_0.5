@@ -248,6 +248,11 @@ $router->register(
     false
 );
 $router->register(
+    'feed_toggle_disabled',
+    \Seismo\Controller\FeedController::class . '::toggleDisabled',
+    false
+);
+$router->register(
     'feed_preview',
     \Seismo\Controller\FeedController::class . '::preview',
     false
@@ -270,6 +275,11 @@ $router->register(
 $router->register(
     'scraper_delete',
     \Seismo\Controller\ScraperController::class . '::delete',
+    false
+);
+$router->register(
+    'scraper_toggle_disabled',
+    \Seismo\Controller\ScraperController::class . '::toggleDisabled',
     false
 );
 $router->register(

@@ -137,20 +137,36 @@ $sourcesQs = 'action=scraper&view=sources';
                     <tr>
                         <th>ID</th>
                         <th>Name</th>
+                        <th>Active</th>
                         <th>URL</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($configsList as $row): ?>
-                    <tr>
+                    <?php $sourceActive = empty($row['disabled']); ?>
+                    <tr class="<?= $sourceActive ? '' : 'data-table-row-muted' ?>">
                         <td><?= (int)$row['id'] ?></td>
                         <td><?= e((string)$row['name']) ?></td>
+                        <td><?= $sourceActive ? '<span class="pill pill-on">yes</span>' : '<span class="pill pill-off">no</span>' ?></td>
                         <td class="data-table-url"><a href="<?= e((string)$row['url']) ?>" target="_blank" rel="noopener"><?= e((string)$row['url']) ?></a></td>
                         <td>
                             <?php if (!$satellite): ?>
                             <div class="admin-table-actions">
                                 <a href="<?= e($basePath) ?>/index.php?action=scraper&amp;view=sources&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary btn-sm">Edit</a>
+                                <?php if ($sourceActive): ?>
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_toggle_disabled" class="admin-inline-form">
+                                    <?= $csrfField ?>
+                                    <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                                    <button type="submit" class="btn btn-warning btn-sm" title="Stop scraping this URL until re-enabled">Disable</button>
+                                </form>
+                                <?php else: ?>
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_toggle_disabled" class="admin-inline-form">
+                                    <?= $csrfField ?>
+                                    <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                                    <button type="submit" class="btn btn-secondary btn-sm">Enable</button>
+                                </form>
+                                <?php endif; ?>
                                 <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_delete" class="admin-inline-form" onsubmit="return confirm('Delete this scraper config?');">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
@@ -164,7 +180,7 @@ $sourcesQs = 'action=scraper&view=sources';
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($configsList === []): ?>
-                    <tr class="data-table-empty"><td colspan="4">No scraper configs.</td></tr>
+                    <tr class="data-table-empty"><td colspan="5">No scraper configs.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

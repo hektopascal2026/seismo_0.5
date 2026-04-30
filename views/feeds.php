@@ -147,21 +147,37 @@ $sourcesQs = 'action=feeds&view=sources';
                         <th>ID</th>
                         <th>Title</th>
                         <th>Type</th>
+                        <th>Active</th>
                         <th>URL</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($feedsList as $row): ?>
-                    <tr>
+                    <?php $feedActive = empty($row['disabled']); ?>
+                    <tr class="<?= $feedActive ? '' : 'data-table-row-muted' ?>">
                         <td><?= (int)$row['id'] ?></td>
                         <td><?= e((string)$row['title']) ?></td>
                         <td><?= e((string)($row['source_type'] ?? '')) ?></td>
+                        <td><?= $feedActive ? '<span class="pill pill-on">yes</span>' : '<span class="pill pill-off">no</span>' ?></td>
                         <td class="data-table-url"><a href="<?= e((string)$row['url']) ?>" target="_blank" rel="noopener"><?= e((string)$row['url']) ?></a></td>
                         <td>
                             <?php if (!$satellite): ?>
                             <div class="admin-table-actions">
                                 <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary btn-sm">Edit</a>
+                                <?php if ($feedActive): ?>
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_toggle_disabled" class="admin-inline-form">
+                                    <?= $csrfField ?>
+                                    <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                                    <button type="submit" class="btn btn-warning btn-sm" title="Stop fetching this feed until re-enabled">Disable</button>
+                                </form>
+                                <?php else: ?>
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_toggle_disabled" class="admin-inline-form">
+                                    <?= $csrfField ?>
+                                    <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                                    <button type="submit" class="btn btn-secondary btn-sm">Enable</button>
+                                </form>
+                                <?php endif; ?>
                                 <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_delete" class="admin-inline-form" onsubmit="return confirm('Delete this feed and its items?');">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
@@ -175,7 +191,7 @@ $sourcesQs = 'action=feeds&view=sources';
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($feedsList === []): ?>
-                    <tr class="data-table-empty"><td colspan="5">No feeds defined.</td></tr>
+                    <tr class="data-table-empty"><td colspan="6">No feeds defined.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
