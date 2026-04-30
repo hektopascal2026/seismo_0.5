@@ -99,6 +99,22 @@ final class SystemConfigRepository
         $this->cache[$key] = $value;
     }
 
+    /**
+     * Remove a row when present. Used for clearing chunked-refresh cursors.
+     */
+    public function delete(string $key): void
+    {
+        try {
+            $stmt = $this->pdo->prepare('DELETE FROM system_config WHERE config_key = ?');
+            $stmt->execute([$key]);
+        } catch (PDOException $e) {
+            if (!self::isMissingTable($e)) {
+                throw $e;
+            }
+        }
+        unset($this->cache[$key]);
+    }
+
     private function selectOne(string $table, string $key): ?string
     {
         try {

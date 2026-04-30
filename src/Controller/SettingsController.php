@@ -13,6 +13,7 @@ use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\MagnituLabelRepository;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Service\CoreRunner;
 use Seismo\Service\RetentionService;
 
 final class SettingsController
@@ -93,6 +94,9 @@ final class SettingsController
 
         $rawNavThrottle = $config->get(self::KEY_NAV_LEADING_THROTTLE);
         $navLeadingThrottleOn = $rawNavThrottle === '1' || $rawNavThrottle === 'true';
+
+        $legacyRssScraperRefresh = !isSatellite()
+            && $config->get(CoreRunner::CONFIG_KEY_LEGACY_RSS_SCRAPER_REFRESH) === '1';
 
         $pageError = null;
         $rows      = [];
@@ -357,6 +361,16 @@ final class SettingsController
             $config = new SystemConfigRepository(getDbConnection());
             $config->set(self::KEY_DASHBOARD_LIMIT, (string)$n);
             $config->set(self::KEY_NAV_LEADING_THROTTLE, $navThrottle ? '1' : '0');
+
+            if (!isSatellite()) {
+                $oldLegacy = $config->get(CoreRunner::CONFIG_KEY_LEGACY_RSS_SCRAPER_REFRESH) === '1';
+                $newLegacy = (string)($_POST['legacy_rss_scraper_refresh'] ?? '0') === '1';
+                $config->set(CoreRunner::CONFIG_KEY_LEGACY_RSS_SCRAPER_REFRESH, $newLegacy ? '1' : '0');
+                if ($oldLegacy !== $newLegacy) {
+                    CoreRunner::clearChunkedFeedRefreshState($config);
+                }
+            }
+
             $_SESSION['success'] = 'Settings saved.';
         } catch (\Throwable $e) {
             error_log('Seismo settings_save: ' . $e->getMessage());

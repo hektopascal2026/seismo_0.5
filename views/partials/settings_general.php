@@ -13,6 +13,7 @@
  * @var ?string $adminPasswordPasteBlock
  * @var bool $sessionAuthEnabled
  * @var bool $navLeadingThrottleOn
+ * @var bool $legacyRssScraperRefresh
  */
 
 declare(strict_types=1);
@@ -37,6 +38,17 @@ declare(strict_types=1);
                         Throttle rapid navigation (500ms lock after each main-menu or Settings tab click; reduces duplicate full-page requests on slow or strict hosts; first click is never delayed)
                     </label>
                 </div>
+                <?php if (empty($satellite)): ?>
+                <div class="admin-form-field">
+                    <label>
+                        <input type="checkbox" name="legacy_rss_scraper_refresh" value="1" <?= !empty($legacyRssScraperRefresh) ? 'checked' : '' ?>>
+                        Legacy RSS &amp; scraper refresh (fetch every source in one run — can hit PHP time limits with hundreds of feeds)
+                    </label>
+                    <p class="admin-intro" style="margin-top:0.5rem;">
+                        Default is <strong>chunked</strong> refresh: each cron tick (and each manual refresh up to a short time budget) pulls a limited batch; the cycle continues in the background. Turn this on only if you need the old single-pass behaviour.
+                    </p>
+                </div>
+                <?php endif; ?>
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success">Save</button>
                 </div>

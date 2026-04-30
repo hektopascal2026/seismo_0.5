@@ -83,4 +83,29 @@ final class PluginRunResult
     {
         return $this->status === 'ok';
     }
+
+    /**
+     * Outcome of {@see \Seismo\Service\CoreRunner} throttle check — must not
+     * be treated like a partial chunked cycle when looping web refresh.
+     */
+    public function isThrottleSkipped(): bool
+    {
+        return $this->status === 'skipped'
+            && $this->message !== null
+            && str_contains($this->message, 'Throttled');
+    }
+
+    /**
+     * Copy with a different `plugin_run_log` persistence flag (chunked partial
+     * runs vs cycle-complete rows).
+     */
+    public function withPersist(bool $persistToPluginRunLog): self
+    {
+        return new self(
+            $this->status,
+            $this->count,
+            $this->message,
+            $persistToPluginRunLog
+        );
+    }
 }

@@ -39,6 +39,26 @@ final class FeedItemRepository
     }
 
     /**
+     * RSS + Substack feeds with {@see listFeedsForRssRefresh()} filters, for
+     * chunked refresh: stable cursor by primary key.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listFeedsForRssRefreshAfterId(int $afterId, int $limit): array
+    {
+        $limit   = max(1, min($limit, self::MAX_LIMIT));
+        $afterId = max(0, $afterId);
+        $sql = 'SELECT * FROM ' . entryTable('feeds') . '
+            WHERE disabled = 0
+              AND source_type IN (\'rss\', \'substack\')
+              AND id > ?
+            ORDER BY id ASC
+            LIMIT ' . (int)$limit;
+
+        return $this->selectAssocList($sql, [$afterId]);
+    }
+
+    /**
      * Swiss Parliament press list (`source_type = parl_press`) — one logical
      * feed row; refreshed by {@see \Seismo\Service\CoreRunner::ID_PARL_PRESS}.
      *
@@ -90,6 +110,37 @@ final class FeedItemRepository
             LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
 
         return $this->selectOrEmpty($sql);
+    }
+
+    /**
+     * Scraper feeds (same contract as {@see listFeedsForScraperRefresh()}) with
+     * `id > afterId` for chunked refresh.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listFeedsForScraperRefreshAfterId(int $afterId, int $limit): array
+    {
+        $limit   = max(1, min($limit, self::MAX_LIMIT));
+        $afterId = max(0, $afterId);
+        $feeds = entryTable('feeds');
+        $sc    = entryTable('scraper_configs');
+        $sql = "SELECT f.*,
+            (SELECT sc2.link_pattern FROM {$sc} sc2
+                WHERE sc2.url = f.url AND sc2.disabled = 0 ORDER BY sc2.id ASC LIMIT 1) AS scraper_link_pattern,
+            (SELECT sc3.date_selector FROM {$sc} sc3
+                WHERE sc3.url = f.url AND sc3.disabled = 0 ORDER BY sc3.id ASC LIMIT 1) AS scraper_date_selector,
+            (SELECT sc4.exclude_selectors FROM {$sc} sc4
+                WHERE sc4.url = f.url AND sc4.disabled = 0 ORDER BY sc4.id ASC LIMIT 1) AS scraper_exclude_selectors
+            FROM {$feeds} f
+            WHERE f.disabled = 0
+              AND f.id > ?
+              AND EXISTS (
+                SELECT 1 FROM {$sc} sc0 WHERE sc0.url = f.url AND sc0.disabled = 0
+              )
+            ORDER BY f.id ASC
+            LIMIT " . (int)$limit;
+
+        return $this->selectAssocList($sql, [$afterId]);
     }
 
     /**
@@ -383,6 +434,26 @@ final class FeedItemRepository
             throw $e;
         }
 
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * @param list<mixed> $params
+     * @return list<array<string, mixed>>
+     */
+    private function selectAssocList(string $sql, array $params): array
+    {
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            throw $e;
+        }
+
+        /** @var list<array<string, mixed>> */
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }
