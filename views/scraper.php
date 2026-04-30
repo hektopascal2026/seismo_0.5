@@ -164,7 +164,7 @@ $sourcesQs = 'action=scraper&view=sources';
                                 <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_toggle_disabled" class="admin-inline-form">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
-                                    <button type="submit" class="btn btn-secondary btn-sm">Enable</button>
+                                    <button type="submit" class="btn btn-success btn-sm">Enable</button>
                                 </form>
                                 <?php endif; ?>
                                 <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_delete" class="admin-inline-form" onsubmit="return confirm('Delete this scraper config?');">
