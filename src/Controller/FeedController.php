@@ -11,6 +11,7 @@ use Seismo\Repository\FeedRepository;
 use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\RefreshAllService;
+use Seismo\Service\RefreshMutexBusyException;
 
 final class FeedController
 {
@@ -99,6 +100,11 @@ final class FeedController
         try {
             $pdo     = getDbConnection();
             $results = RefreshAllService::boot($pdo)->runFeedModuleCoreFetchers(true);
+        } catch (RefreshMutexBusyException $e) {
+            $_SESSION['error'] = $e->getMessage();
+            $this->redirectAfterFeedRefresh();
+
+            return;
         } catch (\Throwable $e) {
             error_log('Seismo refresh_feed_sources: ' . $e->getMessage());
             $_SESSION['error'] = 'Refresh failed: ' . $e->getMessage();

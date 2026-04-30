@@ -22,6 +22,8 @@
  *     only one master-cron tick runs per database at a time. If your scheduler
  *     fires more often than a tick can finish (e.g. every minute with slow/chunked
  *     work), overlapping invocations exit 0 immediately instead of duplicating fetches.
+ *     Web UI refresh uses the same lock via {@see RefreshAllService} so manual refresh
+ *     cannot race cron on chunked RSS/scraper cursors.
  */
 
 declare(strict_types=1);
@@ -99,7 +101,7 @@ $start = microtime(true);
 $log('[seismo] master cron tick @ ' . gmdate('Y-m-d\TH:i:s\Z') . "\n");
 $log('[seismo] log file: ' . $seismoLogPath . "\n");
 
-$results = RefreshAllService::boot($pdo)->runAll(false);
+$results = RefreshAllService::boot($pdo)->runAll(false, false, true);
 
 $errorCount = 0;
 foreach ($results as $result) {

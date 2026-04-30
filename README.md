@@ -6,7 +6,7 @@ Behind the scenes it runs a **deterministic recipe scorer** (keywords, source we
 
 The codebase targets **PHP 8.2**, **MariaDB/MySQL**, and **vanilla PHP** (no Redis, no background worker daemons): one web app plus a **CLI cron** entry is enough for typical shared hosting.
 
-**0.5.2** adds **per-module refresh** on **Feeds**, **Scraper**, **Mail**, and **Lex** (one click runs only that area’s ingest), and keeps the **timeline** toolbar refresh light by skipping **Lex** legislation pulls (use **Settings → Diagnostics** or **cron** for a full run). **0.5.1** added **previews** on those module pages to validate sources before saving.
+**0.5.3** makes **RSS and scraper** refresh **chunked by default** (bounded batches per cron tick or per manual-refresh time budget, with cursor state in `system_config`) so shared hosts stay within PHP time limits with hundreds of sources. **`refresh_cron.php`** acquires a **MySQL advisory lock** so overlapping cron invocations (e.g. Plesk every minute while a tick is still running) exit immediately instead of duplicating fetches. **Settings → General** offers an opt-in **legacy** mode that restores the old single-pass sweep for RSS + scraper. **0.5.2** added **per-module refresh** on **Feeds**, **Scraper**, **Mail**, and **Lex** (one click runs only that area’s ingest), and keeps the **timeline** toolbar refresh light by skipping **Lex** legislation pulls (use **Settings → Diagnostics** or **cron** for a full run). **0.5.1** added **previews** on those module pages to validate sources before saving.
 
 ---
 
@@ -82,6 +82,8 @@ Use these for **LLM briefings**, **n8n**, **Raycast**, or **cron + curl** — th
 ### Operations & safety
 
 - **Master refresh** — Web **Refresh** (Timeline or **Settings → Diagnostics**) and **`refresh_cron.php`** share **`RefreshAllService::runAll()`** so cron and the UI stay aligned (plugins + core fetchers + retention hooks as implemented).
+- **RSS & scraper (default)** — Ingest runs in **chunks** (a limited number of feeds per cron tick; manual refresh loops chunks for a short wall-clock budget). Cycle progress is stored under `refresh_chunk:*` keys in **`system_config`**. A completed rotation is what writes **`plugin_run_log`** for `core:rss` / `core:scraper`, so module **throttles** still apply between full cycles. **Legacy single-pass** for those two fetchers is opt-in under **Settings → General**.
+- **Cron overlap & web refresh** — **`refresh_cron.php`** uses **`GET_LOCK`** / **`RELEASE_LOCK`** (via **`CronMutexRepository`**, name scoped by database) so only **one** master-cron tick runs per DB at a time; a second overlapping process logs *skipped* and exits **0**. **Diagnostics “Refresh all”**, **Feeds**/**Scraper** module refresh, and per-fetcher refresh for **`core:rss`** / **`core:scraper`** acquire the **same** lock via **`RefreshAllService`**, so manual refresh cannot race cron on chunked RSS/scraper cursor rows.
 - **Retention** — Per-family policies (defaults e.g. 180 days for feeds/mail; Lex/Leg often unlimited); dry-run before destructive prune.
 - **Session auth** — **Off by default** (`SEISMO_ADMIN_PASSWORD_HASH` unset). Turn it on in `config.local.php` when the instance is exposed; Magnitu and export keys stay **Bearer**-based and independent.
 - **Migrations** — Versioned PHP classes under `src/Migration/`; run via CLI `php migrate.php` or **`?action=migrate`** with `SEISMO_MIGRATE_KEY` when SSH is unavailable.
@@ -149,6 +151,8 @@ Register **one** CLI job (example cadence):
 
 The script refuses HTTP — it is meant for the host crontab only. It respects per-plugin **throttles**; the web **Refresh** buttons pass **`force=true`** and bypass throttles for interactive use.
 
+If the scheduler fires **more often than a single tick can finish** (common with **every-minute** crons and slow networks), a second PHP process **does not** run the pipeline in parallel: it tries the advisory lock, prints that the tick was skipped, and exits **0** so your mailer is not spammed with false failures. RSS/scraper **chunking** (see above) is what keeps each tick short enough for typical shared-host `max_execution_time` limits.
+
 ### 6. Magnitu & export keys
 
 After the app runs, seed keys in **`system_config`** (Settings UI **Magnitu** tab, or SQL):
@@ -181,7 +185,7 @@ Full **Magnitu / export** request shapes live in **`.cursor/rules/magnitu-integr
 ```
 index.php              # Front controller: session, router, AuthGate
 bootstrap.php          # config.local.php, UTC, Composer autoload, Seismo\ autoload, helpers
-refresh_cron.php       # CLI-only master refresh (+ retention tail)
+refresh_cron.php       # CLI-only master refresh (+ retention tail); MySQL lock against overlap
 src/Controller/        # HTTP orchestration — no SQL
 src/Repository/        # All application SQL + entryTable() for satellite reads
 src/Service/           # RefreshAllService, plugin registry, HTTP client, retention

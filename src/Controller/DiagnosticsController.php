@@ -14,6 +14,7 @@ use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\CoreRunner;
 use Seismo\Service\PluginRegistry;
 use Seismo\Service\RefreshAllService;
+use Seismo\Service\RefreshMutexBusyException;
 
 /**
  * Diagnostics page — plugin-run status surface.
@@ -193,12 +194,20 @@ final class DiagnosticsController
 
             return;
         }
-        $config->set(self::KEY_LAST_REFRESH_AT, (string)time());
 
         $skipLexPlugins = $this->timelineRefreshRequestsSkipLex();
 
         try {
             $results = RefreshAllService::boot($pdo)->runAll(true, $skipLexPlugins);
+        } catch (RefreshMutexBusyException $e) {
+            $msg = $e->getMessage();
+            $_SESSION['error'] = $msg;
+            if ($ajax) {
+                $this->jsonRefreshResponse(409, false, $msg, $msg);
+            }
+            $this->redirectAfterRefresh();
+
+            return;
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics refresh_all: ' . $e->getMessage());
             $msg = 'Refresh all failed: ' . $e->getMessage();
@@ -210,6 +219,8 @@ final class DiagnosticsController
 
             return;
         }
+
+        $config->set(self::KEY_LAST_REFRESH_AT, (string)time());
 
         $okCount = 0;
         $warnCount = 0;
@@ -341,11 +352,19 @@ final class DiagnosticsController
 
             return;
         }
-        $config->set(self::KEY_LAST_REFRESH_AT, (string)time());
 
         $startedAt = microtime(true);
         try {
             $results = RefreshAllService::boot($pdo)->runAll(true, true);
+        } catch (RefreshMutexBusyException $e) {
+            http_response_code(409);
+            echo json_encode([
+                'ok' => false,
+                'error' => $e->getMessage(),
+                'busy' => true,
+            ]);
+
+            return;
         } catch (\Throwable $e) {
             error_log('Seismo refresh_all_remote: ' . $e->getMessage());
             http_response_code(500);
@@ -353,6 +372,8 @@ final class DiagnosticsController
 
             return;
         }
+
+        $config->set(self::KEY_LAST_REFRESH_AT, (string)time());
 
         $hasErrors = false;
         $hasWarn = false;
@@ -406,6 +427,11 @@ final class DiagnosticsController
             $result = in_array($id, $coreIds, true)
                 ? $refresh->runCoreFetcher($id, true)
                 : $refresh->runPlugin($id, true);
+        } catch (RefreshMutexBusyException $e) {
+            $_SESSION['error'] = $e->getMessage();
+            $this->redirectToDiagnostics();
+
+            return;
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics refresh_plugin: ' . $e->getMessage());
             $_SESSION['error'] = 'Refresh ' . $id . ' failed: ' . $e->getMessage();

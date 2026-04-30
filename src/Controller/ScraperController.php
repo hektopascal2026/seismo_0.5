@@ -12,6 +12,7 @@ use Seismo\Repository\ScraperConfigRepository;
 use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\RefreshAllService;
+use Seismo\Service\RefreshMutexBusyException;
 
 final class ScraperController
 {
@@ -96,6 +97,11 @@ final class ScraperController
         try {
             $pdo     = getDbConnection();
             $results = RefreshAllService::boot($pdo)->runScraperModuleCoreFetcher(true);
+        } catch (RefreshMutexBusyException $e) {
+            $_SESSION['error'] = $e->getMessage();
+            $this->redirectAfterScraperRefresh();
+
+            return;
         } catch (\Throwable $e) {
             error_log('Seismo refresh_scraper_sources: ' . $e->getMessage());
             $_SESSION['error'] = 'Refresh failed: ' . $e->getMessage();

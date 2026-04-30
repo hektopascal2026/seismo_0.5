@@ -211,7 +211,16 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.5.2 (Current)</strong> <span class="v-date">Apr 2026</span></div>
+                        <div class="v-header"><strong>v0.5.3 (Current)</strong> <span class="v-date">Apr 2026</span></div>
+                        <div class="v-title">Robust refresh for many sources</div>
+                        <ul>
+                            <li><strong>Chunked RSS &amp; scraper (default):</strong> each cron tick pulls a bounded batch and saves cursor state in <code>system_config</code>, so hundreds of feeds stay within typical PHP time limits; a full rotation still respects the usual throttle windows between completed cycles.</li>
+                            <li><strong>Cron overlap guard:</strong> <code>refresh_cron.php</code> uses a MySQL advisory lock so a second overlapping run (e.g. every-minute cron while the first tick is still busy) exits quietly instead of duplicating upstream fetches.</li>
+                            <li><strong>Legacy mode:</strong> Settings → General can restore the previous single-pass RSS + scraper sweep when you explicitly need it.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.5.2</strong> <span class="v-date">Apr 2026</span></div>
                         <div class="v-title">Operations &amp; refresh UX</div>
                         <ul>
                             <li><strong>Per-module refresh:</strong> Feeds, Scraper, Mail, and Lex pages run only their ingest pipeline; Leg keeps its Parlament CH control.</li>
@@ -238,7 +247,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 <div class="about-grid">
                     <div class="about-grid-item">
                         <strong>Refresh &amp; cron</strong>
-                        <p>All paths use the same ingest pipeline (<code>RefreshAllService::runAll()</code>). How often each source actually hits its upstream differs — see <strong>§ IX</strong> below.</p>
+                        <p>All paths use the same ingest pipeline (<code>RefreshAllService::runAll()</code>). How often each source actually hits its upstream differs — see <strong>§ IX</strong> below (including <strong>chunked</strong> RSS/scraper and the <strong>cron overlap lock</strong>).</p>
                     </div>
                     <div class="about-grid-item">
                         <strong>Retention</strong>
@@ -321,7 +330,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <tbody>
                             <tr>
                                 <td><strong>CLI <code>refresh_cron.php</code></strong><br><span class="meta-text">(e.g. Plesk cron; often every 5–60&nbsp;min)</span></td>
-                                <td><strong>Yes.</strong> Core fetchers (RSS, Parliament press, scraper, mail) and each plugin run only when its minimum interval has passed since the last successful run. A schedule such as <em>hourly</em> means the script runs every hour — not that every source hits its upstream every hour.</td>
+                                <td><strong>Yes.</strong> Core fetchers (RSS, Parliament press, scraper, mail) and each plugin run only when its minimum interval has passed since the last successful run. A schedule such as <em>hourly</em> means the script runs every hour — not that every source hits its upstream every hour. <strong>RSS and scraper</strong> default to <strong>chunked</strong> batches per tick (with cursor state in <code>system_config</code>); only a <strong>completed cycle</strong> counts as the successful run for those throttles. The same MySQL advisory lock used here also protects <strong>manual</strong> refresh (timeline, Diagnostics, Feeds, Scraper), so a browser refresh cannot run chunked RSS/scraper in parallel with cron.</td>
                                 <td><strong>When due</strong> — same throttle rules as other plugins (intervals vary; see Diagnostics for windows).</td>
                                 <td>Hands-off background updates; combines with retention at the end of the script on the mothership.</td>
                             </tr>

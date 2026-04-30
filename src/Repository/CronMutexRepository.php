@@ -7,12 +7,16 @@ namespace Seismo\Repository;
 use PDO;
 
 /**
- * MySQL/MariaDB named locks for CLI cron mutual exclusion.
+ * MySQL/MariaDB named locks for ingest mutual exclusion (CLI cron + web refresh).
  *
  * Chunked RSS/scraper refresh persists cursor state only after a batch finishes.
- * If Plesk fires another `refresh_cron.php` while the first tick is still
- * running, both processes could read the same cursor and duplicate upstream fetches.
- * A session-scoped advisory lock prevents overlapping master-cron ticks on this DB.
+ * Overlapping PHP processes (two cron ticks, or cron plus a browser refresh) could
+ * otherwise read the same cursor and duplicate upstream fetches.
+ *
+ * `refresh_cron.php` acquires this lock for the whole script; {@see \Seismo\Service\RefreshAllService}
+ * acquires the same lock for web paths that run RSS/scraper chunk ingest (`runAll`, module Feeds/Scraper
+ * refresh, Diagnostics refresh for `core:rss` / `core:scraper`). Pass `runAll(..., mutexHeldExternally: true)`
+ * when the caller already holds the lock.
  *
  * Lock names are scoped per {@see DB_NAME} so two Seismo databases on one server
  * do not block each other.

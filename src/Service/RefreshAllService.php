@@ -10,6 +10,7 @@ use Seismo\Config\CalendarConfigStore;
 use Seismo\Config\LexConfigStore;
 use Seismo\Core\Scoring\ScoringService;
 use Seismo\Repository\CalendarEventRepository;
+use Seismo\Repository\CronMutexRepository;
 use Seismo\Repository\EmailIngestRepository;
 use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\FeedItemRepository;
@@ -44,6 +45,13 @@ use Seismo\Repository\PluginRunLogRepository;
  * Slice 4: {@see CoreRunner} runs first (RSS/Substack, scraper, IMAP mail),
  * then registered plugins. Same `runAll()` entry point for web + CLI cron.
  *
+ * ## Refresh mutex (RSS/scraper chunk cursors)
+ *
+ * Web refresh and `refresh_cron.php` share chunked ingest state in `system_config`.
+ * {@see CronMutexRepository} serialises overlapping runs: cron holds the lock for the
+ * whole script (including retention); `runAll(..., true)` skips an inner acquire/release.
+ * Module refresh buttons acquire the same lock so they cannot race cron or each other.
+ *
  * After ingest, {@see recipeRescoreAfterIngest()} runs the deterministic recipe
  * scorer ({@see ScoringService}) so new rows get `entry_scores` without waiting
  * for a Magnitu `magnitu_recipe` POST.
@@ -60,6 +68,7 @@ final class RefreshAllService
         private readonly CoreRunner $coreRunner,
         private readonly SystemConfigRepository $systemConfig,
         private readonly EntryScoreRepository $entryScores,
+        private readonly \PDO $pdo,
     ) {
     }
 
@@ -69,54 +78,68 @@ final class RefreshAllService
      * @param bool $force If true, ignore the per-plugin throttle (web "Refresh all").
      * @param bool $skipLexPlugins If true, skip plugins with {@see SourceFetcherInterface::getEntryType()}
      *                            `lex_item` (timeline toolbar Refresh — Lex stays on Diagnostics / cron).
+     * @param bool $refreshMutexHeldExternally When true, do not acquire/release {@see CronMutexRepository}
+     *                                         (caller already holds the lock — used by `refresh_cron.php`).
      * @return array<string, PluginRunResult>
+     * @throws RefreshMutexBusyException When another ingest holds the advisory lock (web paths only).
      */
-    public function runAll(bool $force = false, bool $skipLexPlugins = false): array
+    public function runAll(bool $force = false, bool $skipLexPlugins = false, bool $refreshMutexHeldExternally = false): array
     {
-        $results = $this->coreRunner->runAll($force);
-        foreach ($this->registry->all() as $id => $plugin) {
-            if ($skipLexPlugins && $plugin->getEntryType() === 'lex_item') {
-                $results[$id] = PluginRunResult::skipped(
-                    'Skipped — timeline refresh omits Lex sources (use Diagnostics or refresh_cron.php).',
-                    false
-                );
-                continue;
+        /** @var array<string, PluginRunResult> */
+        return $this->executeUnderRefreshMutex($refreshMutexHeldExternally, function () use ($force, $skipLexPlugins): array {
+            $results = $this->coreRunner->runAll($force);
+            foreach ($this->registry->all() as $id => $plugin) {
+                if ($skipLexPlugins && $plugin->getEntryType() === 'lex_item') {
+                    $results[$id] = PluginRunResult::skipped(
+                        'Skipped — timeline refresh omits Lex sources (use Diagnostics or refresh_cron.php).',
+                        false
+                    );
+                    continue;
+                }
+                $results[$id] = $this->runOne($plugin, $force);
             }
-            $results[$id] = $this->runOne($plugin, $force);
-        }
 
-        $this->recipeRescoreAfterIngest();
+            $this->recipeRescoreAfterIngest();
 
-        return $results;
+            return $results;
+        });
     }
 
     /**
      * Feeds page: RSS/Substack + Parliament press (not scraper or mail).
      *
      * @return array<string, PluginRunResult>
+     * @throws RefreshMutexBusyException
      */
     public function runFeedModuleCoreFetchers(bool $force = true): array
     {
-        $results = [
-            CoreRunner::ID_RSS         => $this->coreRunner->runOne(CoreRunner::ID_RSS, $force),
-            CoreRunner::ID_PARL_PRESS => $this->coreRunner->runOne(CoreRunner::ID_PARL_PRESS, $force),
-        ];
-        $this->recipeRescoreAfterIngest();
+        /** @var array<string, PluginRunResult> */
+        return $this->executeUnderRefreshMutex(false, function () use ($force): array {
+            $results = [
+                CoreRunner::ID_RSS         => $this->coreRunner->runOne(CoreRunner::ID_RSS, $force),
+                CoreRunner::ID_PARL_PRESS => $this->coreRunner->runOne(CoreRunner::ID_PARL_PRESS, $force),
+            ];
+            $this->recipeRescoreAfterIngest();
 
-        return $results;
+            return $results;
+        });
     }
 
     /**
      * @return array<string, PluginRunResult>
+     * @throws RefreshMutexBusyException
      */
     public function runScraperModuleCoreFetcher(bool $force = true): array
     {
-        $results = [
-            CoreRunner::ID_SCRAPER => $this->coreRunner->runOne(CoreRunner::ID_SCRAPER, $force),
-        ];
-        $this->recipeRescoreAfterIngest();
+        /** @var array<string, PluginRunResult> */
+        return $this->executeUnderRefreshMutex(false, function () use ($force): array {
+            $results = [
+                CoreRunner::ID_SCRAPER => $this->coreRunner->runOne(CoreRunner::ID_SCRAPER, $force),
+            ];
+            $this->recipeRescoreAfterIngest();
 
-        return $results;
+            return $results;
+        });
     }
 
     /**
@@ -372,13 +395,47 @@ final class RefreshAllService
 
     /**
      * Run a single core fetcher (`core:rss`, `core:parl_press`, `core:scraper`, `core:mail`).
+     *
+     * @throws RefreshMutexBusyException When locking {@see CoreRunner::ID_RSS} or {@see CoreRunner::ID_SCRAPER} while busy.
      */
-    public function runCoreFetcher(string $coreId, bool $force = true): PluginRunResult
+    public function runCoreFetcher(string $coreId, bool $force = true, bool $refreshMutexHeldExternally = false): PluginRunResult
     {
-        $result = $this->coreRunner->runOne($coreId, $force);
-        $this->recipeRescoreAfterIngest();
+        $chunkStateCore = in_array($coreId, [CoreRunner::ID_RSS, CoreRunner::ID_SCRAPER], true);
 
-        return $result;
+        /** @var PluginRunResult */
+        return $this->executeUnderRefreshMutex($refreshMutexHeldExternally || !$chunkStateCore, function () use ($coreId, $force): PluginRunResult {
+            $result = $this->coreRunner->runOne($coreId, $force);
+            $this->recipeRescoreAfterIngest();
+
+            return $result;
+        });
+    }
+
+    /**
+     * Serialize ingest that mutates chunked RSS/scraper cursor rows in `system_config`,
+     * so web refresh cannot race `refresh_cron.php` (or another tab).
+     *
+     * @template T
+     * @param callable(): T $fn
+     * @return T
+     */
+    private function executeUnderRefreshMutex(bool $mutexHeldExternally, callable $fn): mixed
+    {
+        if (isSatellite() || $mutexHeldExternally) {
+            return $fn();
+        }
+        $mutex = new CronMutexRepository($this->pdo);
+        if (!$mutex->tryAcquireRefreshCron()) {
+            throw new RefreshMutexBusyException(RefreshMutexBusyException::defaultMessage());
+        }
+        try {
+            return $fn();
+        } finally {
+            try {
+                $mutex->releaseRefreshCron();
+            } catch (\Throwable) {
+            }
+        }
     }
 
     /**
@@ -413,6 +470,7 @@ final class RefreshAllService
             ),
             $systemConfig,
             new EntryScoreRepository($pdo),
+            $pdo,
         );
     }
 }
