@@ -56,10 +56,10 @@ final class LexConfigStore
         foreach (self::PLUGIN_BLOCKS as $block) {
             $stored = $this->config->getJson(SystemConfigRepository::PLUGIN_PREFIX . $block, []);
             if ($stored !== []) {
-                $merged[$block] = array_replace_recursive(
-                    is_array($defaults[$block] ?? null) ? $defaults[$block] : [],
-                    $stored
-                );
+                $baseBlock = is_array($defaults[$block] ?? null) ? $defaults[$block] : [];
+                // Stored wins per key so list-shaped fields (e.g. fr.natures) replace defaults
+                // entirely — array_replace_recursive would keep leftover default indices.
+                $merged[$block] = array_merge($baseBlock, $stored);
             }
         }
 
@@ -121,7 +121,11 @@ final class LexConfigStore
     /**
      * Merge a single plugin block into `system_config` (`plugin:<block>`).
      *
-     * @param array<string, mixed> $partial
+     * Uses {@see array_merge()} (not `array_replace_recursive`) so list-shaped
+     * keys like `fr.natures` or `ch.resource_types` are replaced wholesale when
+     * the admin saves a shorter list — recursive merge would keep stale indices.
+     *
+     * @param array<string, mixed> $partial Full block from the controller (same keys as defaults).
      */
     public function savePluginBlock(string $block, array $partial): void
     {
@@ -133,7 +137,7 @@ final class LexConfigStore
             SystemConfigRepository::PLUGIN_PREFIX . $block,
             is_array($defaults[$block] ?? null) ? $defaults[$block] : []
         );
-        $merged = array_replace_recursive($existing, $partial);
+        $merged = array_merge($existing, $partial);
         $this->config->setJson(SystemConfigRepository::PLUGIN_PREFIX . $block, $merged);
     }
 
