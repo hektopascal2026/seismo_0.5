@@ -369,7 +369,9 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         </div>
                         <?php else: ?>
                         <div class="entry-header">
-                            <?php if ($showSourceTag): ?>
+                            <?php if ($source === 'ch'): ?>
+                                <span class="entry-lex-ch-mark" title="Fedlex (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
+                            <?php elseif ($showSourceTag): ?>
                                 <span class="entry-tag entry-tag--lex-source">
                                     <?= e($sourceEmoji) ?> <?= e($sourceLabel) ?>
                                 </span>

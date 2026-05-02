@@ -194,7 +194,11 @@ $entryLoopIndex                 = 0;
                             </div>
                             <?php else: ?>
                             <div class="entry-header">
-                                <span class="entry-tag entry-tag--lex-source"><?= $lexSourceEmoji ?> <?= $lexSourceLabel ?></span>
+                                <?php if ($lexSource === 'ch'): ?>
+                                    <span class="entry-lex-ch-mark" title="Fedlex (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
+                                <?php else: ?>
+                                    <span class="entry-tag entry-tag--lex-source"><?= $lexSourceEmoji ?> <?= $lexSourceLabel ?></span>
+                                <?php endif; ?>
                                 <span class="entry-tag entry-tag--lex-doc"><?= htmlspecialchars($lexDocType) ?></span>
                                 <?php if ($relevanceScore !== null): ?>
                                     <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
