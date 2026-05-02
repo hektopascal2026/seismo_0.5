@@ -358,19 +358,34 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         $isEuOnlyRow = ($source === 'eu' && !$isParlSwissLex);
                         $useLexJurisdictionRow = $isParlSwissLex || $isEuOnlyRow;
                         $docType = (string)($item['document_type'] ?? 'Legislation');
-                        $itemUrl = (string)($item['eurlex_url'] ?? '#');
+                        $itemUrl = trim((string)($item['eurlex_url'] ?? ''));
+                        if ($itemUrl === '') {
+                            $itemUrl = trim((string)($item['work_uri'] ?? ''));
+                        }
+                        $lexHasUrl = seismo_is_navigable_url($itemUrl);
+                        $lexDesc = trim((string)($item['description'] ?? ''));
+                        $lexPreview = mb_substr($lexDesc, 0, 300);
+                        if (mb_strlen($lexDesc) > 300) {
+                            $lexPreview .= '...';
+                        }
+                        $lexHasMore = mb_strlen($lexDesc) > 300;
+                        $lexHeadingTitle = function_exists('seismo_lex_card_heading_title')
+                            ? seismo_lex_card_heading_title($item)
+                            : trim((string)($item['title'] ?? ''));
+                        $lexSkipDescPreview = ($lexHeadingTitle !== '' && $lexDesc !== '' && $lexHeadingTitle === $lexDesc);
                     ?>
                     <div class="entry-card">
                         <?php if ($useLexJurisdictionRow): ?>
                         <div class="entry-header entry-header--lex-eu">
-                            <span class="entry-tag entry-tag--lex-doc"><?= e($docType) ?></span>
-                            <div class="entry-header--lex-eu-right">
+                            <div class="entry-header--lex-eu-left">
                                 <?php if ($isParlSwissLex): ?>
                                 <span class="entry-lex-ch-mark" title="Bundeshaus Medien (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
                                 <?php else: ?>
                                 <span class="entry-lex-eu-mark" title="EUR-Lex (EU)"><span class="entry-lex-eu-mark__flag" aria-hidden="true">🇪🇺</span><span class="entry-lex-eu-mark__text">EU</span></span>
                                 <?php endif; ?>
+                                <span class="entry-lex-eu-doc-type"><?= e($docType) ?></span>
                             </div>
+                            <div class="entry-header--lex-eu-right"></div>
                         </div>
                         <?php else: ?>
                         <div class="entry-header">
@@ -387,9 +402,11 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         </div>
                         <?php endif; ?>
                         <h3 class="entry-title">
-                            <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener">
-                                <?= e($lexHeadingTitle) ?>
-                            </a>
+                            <?php if ($lexHasUrl): ?>
+                            <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener"><?= e($lexHeadingTitle) ?></a>
+                            <?php else: ?>
+                            <?= e($lexHeadingTitle) ?>
+                            <?php endif; ?>
                         </h3>
                         <?php if ($lexDesc !== '' && !$lexSkipDescPreview): ?>
                             <div class="entry-content entry-preview"><?= nl2br(e($lexPreview)) ?></div>
@@ -403,7 +420,9 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                                     <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                 <?php endif; ?>
                                 <span class="entry-meta-mono"><?= e((string)($item['celex'] ?? '')) ?></span>
+                                <?php if ($lexHasUrl): ?>
                                 <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
+                                <?php endif; ?>
                             </div>
                             <?php if (!empty($item['document_date'])): ?>
                                 <span class="entry-date"><?= e(date('d.m.Y', strtotime((string)$item['document_date']))) ?></span>
