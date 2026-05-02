@@ -52,6 +52,7 @@ final class LexRechtBundPlugin implements SourceFetcherInterface
         $lookback = max(1, (int)($config['lookback_days'] ?? 90));
         $sinceUtc = new DateTimeImmutable('-' . $lookback . ' days', new DateTimeZone('UTC'));
         $maxItems = max(1, min((int)($config['limit'] ?? 100), 200));
+        $excludeTypes = self::excludeDocumentTypesFromConfig($config);
 
         $pie = new SimplePie();
         $pie->set_feed_url($feedUrl);
@@ -89,12 +90,17 @@ final class LexRechtBundPlugin implements SourceFetcherInterface
             $celex = 'de_rss_' . substr(hash('sha256', $link), 0, 40);
             $docDate = $pub !== null ? $pub->format('Y-m-d') : null;
 
+            $docType = self::guessDocumentType($title);
+            if (self::documentTypeIsExcluded($docType, $excludeTypes)) {
+                continue;
+            }
+
             $rows[] = [
                 'celex' => $celex,
                 'title' => $title,
                 'description' => $description,
                 'document_date' => $docDate,
-                'document_type' => self::guessDocumentType($title),
+                'document_type' => $docType,
                 'eurlex_url' => $link,
                 'work_uri' => $link,
                 'source' => 'de',
@@ -161,5 +167,42 @@ final class LexRechtBundPlugin implements SourceFetcherInterface
         }
 
         return 'BGBl';
+    }
+
+    /**
+     * Lowercased exclusions; empty means nothing is filtered.
+     *
+     * @return list<string>
+     */
+    private static function excludeDocumentTypesFromConfig(array $config): array
+    {
+        if (!array_key_exists('exclude_document_types', $config)) {
+            return ['bekanntmachung'];
+        }
+        $raw = $config['exclude_document_types'];
+        if (!is_array($raw)) {
+            return ['bekanntmachung'];
+        }
+        $out = [];
+        foreach ($raw as $v) {
+            if (is_string($v)) {
+                $t = mb_strtolower(trim($v));
+                if ($t !== '' && mb_strlen($t) <= 64) {
+                    $out[] = $t;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** @param list<string> $excludedLower */
+    private static function documentTypeIsExcluded(string $guessedDocType, array $excludedLower): bool
+    {
+        if ($excludedLower === []) {
+            return false;
+        }
+
+        return in_array(mb_strtolower(trim($guessedDocType)), $excludedLower, true);
     }
 }

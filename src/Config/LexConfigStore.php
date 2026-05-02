@@ -184,6 +184,8 @@ final class LexConfigStore
                 'feed_url' => 'https://www.recht.bund.de/rss/feeds/rss_bgbl-1-2.xml?nn=211452',
                 'lookback_days' => 90,
                 'limit' => 100,
+                /** Matched case-insensitively to the derived category (title heuristics). Empty = skip none. */
+                'exclude_document_types' => ['Bekanntmachung'],
                 'notes' => '',
             ],
             'ch_bger' => [

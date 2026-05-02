@@ -281,6 +281,29 @@ final class LexController
             $de['feed_url'] = trim((string)($_POST['de_feed_url'] ?? $de['feed_url'] ?? ''));
             $de['lookback_days'] = max(1, (int)($_POST['de_lookback_days'] ?? $de['lookback_days'] ?? 90));
             $de['limit'] = max(1, min((int)($_POST['de_limit'] ?? $de['limit'] ?? 100), 200));
+
+            $exRaw = trim((string)($_POST['de_exclude_document_types'] ?? ''));
+            if ($exRaw === '') {
+                $de['exclude_document_types'] = [];
+            } else {
+                $chunks = preg_split('/[\s,;]+/u', $exRaw) ?: [];
+                $excludeList = [];
+                foreach ($chunks as $chunk) {
+                    if (!is_string($chunk)) {
+                        continue;
+                    }
+                    $t = trim($chunk);
+                    if ($t === '') {
+                        continue;
+                    }
+                    if (mb_strlen($t) > 64) {
+                        $t = mb_substr($t, 0, 64);
+                    }
+                    $excludeList[] = $t;
+                }
+                $de['exclude_document_types'] = array_values(array_unique($excludeList));
+            }
+
             $de['notes'] = trim((string)($_POST['de_notes'] ?? $de['notes'] ?? ''));
 
             $store->savePluginBlock('de', $de);

@@ -39,6 +39,11 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
     }
     $chResourceTypesStr = implode(', ', $ids);
 }
+
+$deExcludeStr = '';
+if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_document_types'])) {
+    $deExcludeStr = implode(', ', array_map(static fn ($v): string => (string)$v, $deCfg['exclude_document_types']));
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -231,6 +236,11 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                 <div class="admin-form-field">
                     <label>Row limit (max 200)<br>
                     <input type="number" name="de_limit" value="<?= (int)($deCfg['limit'] ?? 100) ?>" min="1" max="200" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Exclude derived document types<br>
+                    <input type="text" name="de_exclude_document_types" value="<?= e($deExcludeStr) ?>" autocomplete="off" class="search-input" style="width:100%;" placeholder="e.g. Bekanntmachung"></label>
+                    <p class="admin-hint">Comma- or semicolon-separated. Each RSS item is labelled from its title only: Verordnung, Gesetz, Bekanntmachung, or BGBl (everything else). Case-insensitive. Leave empty to ingest all types (existing DB rows are unchanged).</p>
                 </div>
                 <div class="admin-form-field">
                     <label>Notes<br>
