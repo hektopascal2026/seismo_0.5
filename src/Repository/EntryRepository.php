@@ -57,18 +57,11 @@ final class EntryRepository
      * Hard cap on the final timeline size.
      *
      * Per-source queries each take up to {@see mergePerSourceFetchCap()}
-     * (≤ MAX_LIMIT) rows before merge+sort, so worst-case memory stays roughly
+     * ({@see MAX_LIMIT} rows each) before merge+sort, so worst-case memory stays roughly
      *   5 families × MAX_LIMIT rows × ~10 KB/row ≈ 10 MB
      * — comfortably under the 128 MB shared-hosting default.
      */
     public const MAX_LIMIT = 200;
-
-    /**
-     * Per-family fetch multiplier for the merged timeline. We fetch more than
-     * `limit` so each family has a chance to appear after the global sort, but
-     * we must stay fast enough for shared-host timeouts.
-     */
-    private const MERGE_FANOUT = 6;
 
     /**
      * Leg (`calendar_events`) merge window into the blended dashboard feed.
@@ -96,7 +89,7 @@ final class EntryRepository
      * Merged newest-first timeline across every entry family.
      *
      * **Paging caveat.** Per-source fetches use {@see mergePerSourceFetchCap()}
-     * (≈ `MERGE_FANOUT × limit`, bounded by {@see MAX_LIMIT}). The final page
+     * ({@see MAX_LIMIT} rows each). The final page
      * is still sliced from the globally sorted pool — relevance sort pushes
      * unscored rows after Magnitu-scored ones (see Settings → sort-by-relevance).
      *
@@ -136,7 +129,7 @@ final class EntryRepository
 
         $this->attachScores($items);
         $this->sortMergedTimeline($items, $sortByRelevance);
-        $items = array_slice($items, $offset, $limit);
+        $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
 
@@ -184,7 +177,7 @@ final class EntryRepository
 
         $this->attachScores($items);
         $this->sortMergedTimeline($items, $sortByRelevance);
-        $items = array_slice($items, $offset, $limit);
+        $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
 
@@ -386,6 +379,90 @@ final class EntryRepository
             $items,
             static fn (array $a, array $b): int => ($b['date'] ?? 0) <=> ($a['date'] ?? 0)
         );
+    }
+
+    /**
+     * After global merge sort, take the visible window. For the first page we
+     * reserve roughly even slots across the four entry families so Lex / mail / Leg
+     * are not squeezed off the dashboard when feeds dominate
+     * chronologically — while still filling remaining slots in global order.
+     *
+     * Deeper pages use a plain slice (still bounded by the per-family merge pool).
+     *
+     * @param array<int, array<string, mixed>> $sortedItems
+     * @return array<int, array<string, mixed>>
+     */
+    private function sliceFairMergedTimeline(
+        array $sortedItems,
+        int $offset,
+        int $limit,
+        bool $sortByRelevance
+    ): array {
+        if ($offset > 0) {
+            return array_slice($sortedItems, $offset, $limit);
+        }
+        if ($limit < 4 || $sortedItems === []) {
+            return array_slice($sortedItems, 0, $limit);
+        }
+
+        $families = ['feed_item', 'email', 'lex_item', 'calendar_event'];
+        $inPool   = array_fill_keys($families, 0);
+        foreach ($sortedItems as $it) {
+            $et = (string)($it['entry_type'] ?? '');
+            if (isset($inPool[$et])) {
+                $inPool[$et]++;
+            }
+        }
+        $withData = [];
+        foreach ($families as $f) {
+            if ($inPool[$f] > 0) {
+                $withData[] = $f;
+            }
+        }
+        if ($withData === []) {
+            return [];
+        }
+
+        $nFam  = count($withData);
+        $base  = intdiv($limit, $nFam);
+        $extra = $limit % $nFam;
+        $quota = array_fill_keys($families, 0);
+        foreach ($withData as $i => $f) {
+            $quota[$f] = min($inPool[$f], $base + ($i < $extra ? 1 : 0));
+        }
+
+        $key = static fn (array $i): string => ($i['entry_type'] ?? '') . ':' . (int)($i['entry_id'] ?? 0);
+
+        $picked     = [];
+        $pickedKeys = [];
+        foreach ($sortedItems as $it) {
+            $et = (string)($it['entry_type'] ?? '');
+            if (!isset($quota[$et]) || $quota[$et] <= 0) {
+                continue;
+            }
+            $k = $key($it);
+            if (isset($pickedKeys[$k])) {
+                continue;
+            }
+            $picked[] = $it;
+            $pickedKeys[$k] = true;
+            $quota[$et]--;
+        }
+        foreach ($sortedItems as $it) {
+            if (count($picked) >= $limit) {
+                break;
+            }
+            $k = $key($it);
+            if (isset($pickedKeys[$k])) {
+                continue;
+            }
+            $picked[]       = $it;
+            $pickedKeys[$k] = true;
+        }
+
+        $this->sortMergedTimeline($picked, $sortByRelevance);
+
+        return $picked;
     }
 
     /**
@@ -597,12 +674,17 @@ final class EntryRepository
             return $this->selectPreparedOrEmpty($sql, $excludedTags);
         }
 
-        $sql = 'SELECT e.*, st.tag AS sender_tag
-                FROM ' . entryTable('emails') . ' e
-                LEFT JOIN ' . entryTable('sender_tags') . ' st
-                  ON st.from_email = e.from_email AND st.removed_at IS NULL
-                ' . $orderBy . '
-                LIMIT ' . (int)$limit;
+        $st  = entryTable('sender_tags');
+        $sql = 'SELECT e.*, (
+                SELECT st0.tag FROM ' . $st . ' st0
+                WHERE st0.from_email = e.from_email
+                  AND st0.removed_at IS NULL
+                ORDER BY st0.tag ASC
+                LIMIT 1
+            ) AS sender_tag
+            FROM ' . entryTable('emails') . ' e
+            ' . $orderBy . '
+            LIMIT ' . (int)$limit;
 
         return $this->selectOrEmpty($sql);
     }
@@ -863,13 +945,18 @@ final class EntryRepository
             return $this->selectPreparedOrEmpty($sql, $params);
         }
 
-        $sql = 'SELECT e.*, st.tag AS sender_tag
-                FROM ' . entryTable('emails') . ' e
-                LEFT JOIN ' . entryTable('sender_tags') . ' st
-                  ON st.from_email = e.from_email AND st.removed_at IS NULL
-                WHERE ' . $where . '
-                ' . $orderBy . '
-                LIMIT ' . (int)$limit;
+        $st  = entryTable('sender_tags');
+        $sql = 'SELECT e.*, (
+                SELECT st0.tag FROM ' . $st . ' st0
+                WHERE st0.from_email = e.from_email
+                  AND st0.removed_at IS NULL
+                ORDER BY st0.tag ASC
+                LIMIT 1
+            ) AS sender_tag
+            FROM ' . entryTable('emails') . ' e
+            WHERE ' . $where . '
+            ' . $orderBy . '
+            LIMIT ' . (int)$limit;
 
         return $this->selectPreparedOrEmpty($sql, $params);
     }
@@ -1020,11 +1107,16 @@ final class EntryRepository
         $out = [];
         foreach ($this->chunkIds($ids, 400) as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
-            $sql = 'SELECT e.*, st.tag AS sender_tag
-                    FROM ' . entryTable('emails') . ' e
-                    LEFT JOIN ' . entryTable('sender_tags') . ' st
-                      ON st.from_email = e.from_email AND st.removed_at IS NULL
-                    WHERE e.id IN (' . $ph . ')';
+            $st  = entryTable('sender_tags');
+            $sql = 'SELECT e.*, (
+                    SELECT st0.tag FROM ' . $st . ' st0
+                    WHERE st0.from_email = e.from_email
+                      AND st0.removed_at IS NULL
+                    ORDER BY st0.tag ASC
+                    LIMIT 1
+                ) AS sender_tag
+                FROM ' . entryTable('emails') . ' e
+                WHERE e.id IN (' . $ph . ')';
             foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
                 $out[] = $row;
             }
@@ -2165,13 +2257,12 @@ final class EntryRepository
 
     /**
      * Newest-first rows per SQL family merged into {@see getLatestTimeline()}
-     * and {@see searchTimeline()}. Fetch a widened window so new items from a
-     * quieter family still surface in the blended first page.
+     * and {@see searchTimeline()}. Always use {@see MAX_LIMIT}: a smaller cap
+     * starves quieter families before the global sort (feeds crowd out Lex/mail).
      */
     private function mergePerSourceFetchCap(int $limit, int $offset): int
     {
-        $w = max(1, $limit + max(0, $offset));
-        return min(self::MAX_LIMIT, max($w, $w * self::MERGE_FANOUT));
+        return self::MAX_LIMIT;
     }
 
     /**

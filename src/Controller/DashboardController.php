@@ -22,9 +22,10 @@ final class DashboardController
     public const DEFAULT_LIMIT_FALLBACK = 30;
 
     /**
-     * Deep-paging guard — see EntryRepository::getLatestTimeline().
+     * Deep-paging guard — merged timeline pool is bounded per family in
+     * {@see EntryRepository::getLatestTimeline()}; offset only pages within that pool.
      */
-    private const MAX_OFFSET = 0;
+    private const MAX_OFFSET = 5000;
 
     /**
      * Session cache for the three `SELECT DISTINCT` queries that feed the
