@@ -355,8 +355,8 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         if ($isParlSwissLex) {
                             $linkLabel = 'parlament.ch →';
                         }
-                        $isEuOnlyRow = ($source === 'eu' && !$isParlSwissLex);
-                        $useLexJurisdictionRow = $isParlSwissLex || $isEuOnlyRow;
+                        /** 0.4 hid CELEX / outbound link for Parl MM dossiers — keep for legacy lex rows */
+                        $hideParlMmLexFooterIds = in_array($source, ['parl_mm', 'parl_sda'], true);
                         $docType = (string)($item['document_type'] ?? 'Legislation');
                         $itemUrl = trim((string)($item['eurlex_url'] ?? ''));
                         if ($itemUrl === '') {
@@ -369,25 +369,21 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                             $lexPreview .= '...';
                         }
                         $lexHasMore = mb_strlen($lexDesc) > 300;
-                        $lexHeadingTitle = function_exists('seismo_lex_card_heading_title')
-                            ? seismo_lex_card_heading_title($item)
-                            : trim((string)($item['title'] ?? ''));
+                        /**
+                         * 0.4 always used `$item['title']`. EUR-Lex often stores CELEX as title with real
+                         * prose in `description`; use the helper only for eu (dashboard behaviour).
+                         */
+                        if (($item['source'] ?? 'eu') === 'eu' && function_exists('seismo_lex_card_heading_title')) {
+                            $lexHeadingTitle = seismo_lex_card_heading_title($item);
+                        } else {
+                            $lexHeadingTitle = trim((string)($item['title'] ?? ''));
+                            if ($lexHeadingTitle === '' && function_exists('seismo_lex_card_heading_title')) {
+                                $lexHeadingTitle = seismo_lex_card_heading_title($item);
+                            }
+                        }
                         $lexSkipDescPreview = ($lexHeadingTitle !== '' && $lexDesc !== '' && $lexHeadingTitle === $lexDesc);
                     ?>
                     <div class="entry-card">
-                        <?php if ($useLexJurisdictionRow): ?>
-                        <div class="entry-header entry-header--lex-eu">
-                            <div class="entry-header--lex-eu-left">
-                                <?php if ($isParlSwissLex): ?>
-                                <span class="entry-lex-ch-mark" title="Bundeshaus Medien (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
-                                <?php else: ?>
-                                <span class="entry-lex-eu-mark" title="EUR-Lex (EU)"><span class="entry-lex-eu-mark__flag" aria-hidden="true">🇪🇺</span><span class="entry-lex-eu-mark__text">EU</span></span>
-                                <?php endif; ?>
-                                <span class="entry-lex-eu-doc-type"><?= e($docType) ?></span>
-                            </div>
-                            <div class="entry-header--lex-eu-right"></div>
-                        </div>
-                        <?php else: ?>
                         <div class="entry-header">
                             <?php if ($source === 'ch'): ?>
                                 <span class="entry-lex-ch-mark" title="Fedlex (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
@@ -400,7 +396,6 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                                 <?= e($docType) ?>
                             </span>
                         </div>
-                        <?php endif; ?>
                         <h3 class="entry-title">
                             <?php if ($lexHasUrl): ?>
                             <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener"><?= e($lexHeadingTitle) ?></a>
@@ -419,9 +414,11 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                                 <?php if ($lexHasMore && !$lexSkipDescPreview): ?>
                                     <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                 <?php endif; ?>
-                                <span class="entry-meta-mono"><?= e((string)($item['celex'] ?? '')) ?></span>
-                                <?php if ($lexHasUrl): ?>
-                                <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
+                                <?php if (!$hideParlMmLexFooterIds): ?>
+                                    <span class="entry-meta-mono"><?= e((string)($item['celex'] ?? '')) ?></span>
+                                    <?php if ($lexHasUrl): ?>
+                                        <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                             <?php if (!empty($item['document_date'])): ?>
