@@ -357,10 +357,14 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         }
                         /** 0.4 hid CELEX / outbound link for Parl MM dossiers — keep for legacy lex rows */
                         $hideParlMmLexFooterIds = in_array($source, ['parl_mm', 'parl_sda'], true);
-                        /** EUR-Lex: CELEX surplus to title; DE RSS synthetic key not human-facing */
+                        /** EUR-Lex: CELEX surplus to title; DE RSS synthetic key; FR JORFTEXT API id — not footer labels */
                         $lexLexPageFooterMonoHide = ($source === 'eu' && !$isParlSwissLex)
-                            || ($source === 'de' && str_starts_with($celexRow, 'de_rss_'));
+                            || ($source === 'de' && str_starts_with($celexRow, 'de_rss_'))
+                            || ($source === 'fr' && preg_match('/^JORFTEXT[0-9]+/i', $celexRow));
                         $docType = (string)($item['document_type'] ?? 'Legislation');
+                        if ($source === 'eu' && function_exists('seismo_lex_eu_document_type_for_display')) {
+                            $docType = seismo_lex_eu_document_type_for_display($item);
+                        }
                         $itemUrl = trim((string)($item['eurlex_url'] ?? ''));
                         if ($itemUrl === '') {
                             $itemUrl = trim((string)($item['work_uri'] ?? ''));

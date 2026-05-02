@@ -135,6 +135,31 @@ if (!function_exists('seismo_lex_card_heading_title')) {
     }
 }
 
+if (!function_exists('seismo_lex_eu_document_type_for_display')) {
+    /**
+     * Grey-pill text for EUR-Lex cards: uses {@see lex_items.document_type}
+     * when refresh stored a concrete class; otherwise derives the typology
+     * letter from CELEX so older "EU legislation" rows still differentiate.
+     */
+    function seismo_lex_eu_document_type_for_display(array $lexItem): string
+    {
+        if (($lexItem['source'] ?? '') !== 'eu') {
+            $f = trim((string)($lexItem['document_type'] ?? ''));
+
+            return $f !== '' ? $f : 'Legislation';
+        }
+        $stored = trim((string)($lexItem['document_type'] ?? ''));
+        if ($stored !== '' && strcasecmp($stored, 'EU legislation') !== 0) {
+            return mb_substr($stored, 0, 100);
+        }
+
+        return \Seismo\Plugin\LexEu\LexEuPlugin::resolveEuDocumentTypeLabel(
+            (string)($lexItem['celex'] ?? ''),
+            null
+        );
+    }
+}
+
 if (!function_exists('seismo_highlight_search_term')) {
     /**
      * Wrap matches of $searchQuery in a <mark> while escaping everything else.

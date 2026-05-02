@@ -69,6 +69,57 @@ final class LexEuPlugin implements SourceFetcherInterface
         return 'http://publications.europa.eu/ontology/cdm#' . $m[1];
     }
 
+    /**
+     * Grey-pill label for EUR-Lex items: prefers Cellar {@see cdm:resource_legal_type}
+     * (R/L/D/… ) and falls back to the same letter parsed from canonical CELEX.
+     */
+    public static function resolveEuDocumentTypeLabel(string $celexId, ?string $cellarResourceLegalLetter): string
+    {
+        $letter = trim((string)$cellarResourceLegalLetter);
+        if ($letter !== '') {
+            $letter = strtoupper(mb_substr($letter, 0, 1));
+        } else {
+            $parsed = self::resourceLegalTypeLetterFromCelex($celexId);
+            $letter = $parsed ?? '';
+        }
+        $label = self::resourceLegalTypeLetterToLabel($letter);
+
+        return $label !== '' ? $label : 'EU legislation';
+    }
+
+    /** @return string|null */
+    private static function resourceLegalTypeLetterFromCelex(string $celexId): ?string
+    {
+        $u = strtoupper(trim($celexId));
+        if ($u !== '' && preg_match('/^\d\d{4}([A-Z])/u', $u, $m)) {
+            return $m[1];
+        }
+
+        return null;
+    }
+
+    private static function resourceLegalTypeLetterToLabel(string $letter): string
+    {
+        return match ($letter) {
+            'R' => 'Regulation',
+            'L' => 'Directive',
+            'D' => 'Decision',
+            'B' => 'Budget',
+            'F', 'H', 'I', 'M' => 'Recommendation',
+            'J' => 'Joint action',
+            'A', 'Z' => 'International agreement',
+            'E', 'Y' => 'Opinion',
+            'C', 'X' => 'Decision',
+            'G' => 'Budget',
+            'N' => 'Notice',
+            'P' => 'Protocol',
+            'S' => 'Statement',
+            'T' => 'Treaty',
+            'O', 'W' => 'EU legal act',
+            default => '',
+        };
+    }
+
     public function fetch(array $config): array
     {
         $lookback = max(1, (int)($config['lookback_days'] ?? 90));
@@ -90,11 +141,12 @@ final class LexEuPlugin implements SourceFetcherInterface
         PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
         PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
-        SELECT ?work ?celex ?docDate (MAX(?titlePick) AS ?title)
+        SELECT ?work ?celex ?docDate (MAX(?titlePick) AS ?title) (SAMPLE(?legalLetter) AS ?legalLetter)
         WHERE {
             ?work a <' . $classIri . '> .
             ?work cdm:work_id_document ?celex .
             ?work cdm:work_date_document ?docDate .
+            OPTIONAL { ?work cdm:resource_legal_type ?legalLetter . }
             FILTER(REGEX(STR(?celex), "^celex:[0-9]"))
             FILTER(?docDate >= "' . $sinceDate . '"^^xsd:date && ?docDate <= "' . $until . '"^^xsd:date)
             {
@@ -136,12 +188,17 @@ final class LexEuPlugin implements SourceFetcherInterface
             $langPath = self::eurLexPathLang($lang);
             $eurlexUrl = 'https://eur-lex.europa.eu/legal-content/' . $langPath . '/TXT/HTML/?uri=CELEX:' . rawurlencode($celexId);
 
+            $docLabel = self::resolveEuDocumentTypeLabel(
+                $celexId,
+                trim((string)($row->legalLetter ?? '')) !== '' ? trim((string)$row->legalLetter) : null
+            );
+
             $rows[] = [
                 'celex' => $celexId,
                 'title' => $title,
                 'description' => null,
                 'document_date' => (string)($row->docDate ?? ''),
-                'document_type' => 'EU legislation',
+                'document_type' => $docLabel,
                 'eurlex_url' => $eurlexUrl,
                 'work_uri' => $workUri,
                 'source' => 'eu',

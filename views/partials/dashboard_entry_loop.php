@@ -127,6 +127,11 @@ $entryLoopIndex                 = 0;
                                 $lexSourceLabel = 'EU';
                             }
                             $lexDocType = $lexItem['document_type'] ?? 'Legislation';
+                            if (($lexSource === 'eu')) {
+                                $lexDocType = function_exists('seismo_lex_eu_document_type_for_display')
+                                    ? seismo_lex_eu_document_type_for_display($lexItem)
+                                    : ($lexDocType !== '' ? $lexDocType : 'EU legislation');
+                            }
                             $lexUrl = trim((string)($lexItem['eurlex_url'] ?? ''));
                             if ($lexUrl === '') {
                                 $lexUrl = trim((string)($lexItem['work_uri'] ?? ''));
@@ -172,7 +177,8 @@ $entryLoopIndex                 = 0;
                             }
 
                             $lexFooterMonoHide = ($lexSource === 'eu' && !$isParlSwissLex)
-                                || ($lexSource === 'de' && str_starts_with($lexCelexRaw, 'de_rss_'));
+                                || ($lexSource === 'de' && str_starts_with($lexCelexRaw, 'de_rss_'))
+                                || ($lexSource === 'fr' && preg_match('/^JORFTEXT[0-9]+/i', $lexCelexRaw));
 
                             $lexDesc = trim($lexItem['description'] ?? '');
                             $lexPreview = mb_substr($lexDesc, 0, 300);
