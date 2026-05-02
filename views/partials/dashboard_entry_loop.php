@@ -136,7 +136,8 @@ $entryLoopIndex                 = 0;
                             $isJus = in_array($lexSource, ['ch_bger', 'ch_bge', 'ch_bvger']);
                             
                             // For JUS items: parse readable case number from slug
-                            $lexCelexDisplay = $lexItem['celex'] ?? '';
+                            $lexCelexRaw = (string)($lexItem['celex'] ?? '');
+                            $lexCelexDisplay = $lexCelexRaw;
                             if ($isJus && preg_match('/^CH_(?:BGer|BGE|BVGE)_\d{3}_(.+)_\d{4}-\d{2}-\d{2}$/', $lexCelexDisplay, $m)) {
                                 $rawCn = $m[1];
                                 $isBVGer = (strpos($lexCelexDisplay, 'CH_BVGE_') === 0);
@@ -169,6 +170,9 @@ $entryLoopIndex                 = 0;
                             if ($isParlSwissLex) {
                                 $lexLinkLabel = 'parlament.ch →';
                             }
+
+                            $lexFooterMonoHide = ($lexSource === 'eu' && !$isParlSwissLex)
+                                || ($lexSource === 'de' && str_starts_with($lexCelexRaw, 'de_rss_'));
 
                             $lexDesc = trim($lexItem['description'] ?? '');
                             $lexPreview = mb_substr($lexDesc, 0, 300);
@@ -239,7 +243,9 @@ $entryLoopIndex                 = 0;
                                     <?php if (!empty($lexDesc) && $lexHasMore && !$lexSkipDescPreview): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                     <?php endif; ?>
-                                    <span class="entry-meta-mono<?= $isJus ? ' entry-meta-mono--jus' : '' ?>"><?= htmlspecialchars($lexCelexDisplay) ?></span>
+                                    <?php if (!$lexFooterMonoHide): ?>
+                                    <span class="entry-meta-mono<?= $isJus ? ' entry-meta-mono--jus' : '' ?>"><?= htmlspecialchars((string)$lexCelexDisplay) ?></span>
+                                    <?php endif; ?>
                                     <?php if ($lexHasUrl): ?>
                                     <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= $lexLinkLabel ?></a>
                                     <?php endif; ?>

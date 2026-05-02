@@ -357,6 +357,9 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         }
                         /** 0.4 hid CELEX / outbound link for Parl MM dossiers — keep for legacy lex rows */
                         $hideParlMmLexFooterIds = in_array($source, ['parl_mm', 'parl_sda'], true);
+                        /** EUR-Lex: CELEX surplus to title; DE RSS synthetic key not human-facing */
+                        $lexLexPageFooterMonoHide = ($source === 'eu' && !$isParlSwissLex)
+                            || ($source === 'de' && str_starts_with($celexRow, 'de_rss_'));
                         $docType = (string)($item['document_type'] ?? 'Legislation');
                         $itemUrl = trim((string)($item['eurlex_url'] ?? ''));
                         if ($itemUrl === '') {
@@ -414,11 +417,11 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                                 <?php if ($lexHasMore && !$lexSkipDescPreview): ?>
                                     <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                 <?php endif; ?>
-                                <?php if (!$hideParlMmLexFooterIds): ?>
+                                <?php if (!$hideParlMmLexFooterIds && !$lexLexPageFooterMonoHide): ?>
                                     <span class="entry-meta-mono"><?= e((string)($item['celex'] ?? '')) ?></span>
-                                    <?php if ($lexHasUrl): ?>
+                                <?php endif; ?>
+                                <?php if ($lexHasUrl && !$hideParlMmLexFooterIds): ?>
                                         <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
-                                    <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                             <?php if (!empty($item['document_date'])): ?>

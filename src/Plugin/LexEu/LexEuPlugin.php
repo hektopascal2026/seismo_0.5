@@ -84,8 +84,8 @@ final class LexEuPlugin implements SourceFetcherInterface
         $langUri = 'http://publications.europa.eu/resource/authority/language/' . $lang;
         $until = gmdate('Y-m-d', strtotime('+1 day'));
 
-        // Prefer the configured language; if no expression uses it, take any
-        // expression title (OPTIONAL+language often returned only CELEX in DB).
+        // Expression titles attach via expression_belongs_to_work → work (not
+        // work_has_expression → expression) for Cellar budgets / many act types.
         $sparqlQuery = '
         PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
         PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
@@ -98,14 +98,14 @@ final class LexEuPlugin implements SourceFetcherInterface
             FILTER(REGEX(STR(?celex), "^celex:[0-9]"))
             FILTER(?docDate >= "' . $sinceDate . '"^^xsd:date && ?docDate <= "' . $until . '"^^xsd:date)
             {
-                ?work cdm:work_has_expression ?ex .
+                ?ex cdm:expression_belongs_to_work ?work .
                 ?ex cdm:expression_title ?titlePick .
                 ?ex cdm:expression_uses_language <' . $langUri . '> .
             } UNION {
-                ?work cdm:work_has_expression ?ex2 .
+                ?ex2 cdm:expression_belongs_to_work ?work .
                 ?ex2 cdm:expression_title ?titlePick .
                 FILTER NOT EXISTS {
-                    ?work cdm:work_has_expression ?ex3 .
+                    ?ex3 cdm:expression_belongs_to_work ?work .
                     ?ex3 cdm:expression_uses_language <' . $langUri . '> .
                 }
             }
