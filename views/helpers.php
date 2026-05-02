@@ -109,6 +109,32 @@ if (!function_exists('seismo_is_navigable_url')) {
     }
 }
 
+if (!function_exists('seismo_lex_card_heading_title')) {
+    /**
+     * Primary heading for Lex cards. EU rows often stored CELEX as `title` when
+     * SPARQL returned no language-matched expression — prefer `description` then.
+     */
+    function seismo_lex_card_heading_title(array $lexItem): string
+    {
+        $source = (string)($lexItem['source'] ?? '');
+        $title  = trim((string)($lexItem['title'] ?? ''));
+        $celex  = strtoupper(preg_replace('/\s+/', '', (string)($lexItem['celex'] ?? '')));
+        $desc   = trim((string)($lexItem['description'] ?? ''));
+
+        if ($source === 'eu' && $desc !== '') {
+            $tNorm = strtoupper(preg_replace('/\s+/', '', $title));
+            if ($title === '' || $tNorm === $celex || preg_match('/^\d{4,}[A-Z][0-9A-Z]+$/i', $title)) {
+                return $desc;
+            }
+        }
+        if ($title !== '') {
+            return $title;
+        }
+
+        return (string)($lexItem['celex'] ?? '');
+    }
+}
+
 if (!function_exists('seismo_highlight_search_term')) {
     /**
      * Wrap matches of $searchQuery in a <mark> while escaping everything else.

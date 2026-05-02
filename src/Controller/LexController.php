@@ -170,6 +170,9 @@ final class LexController
             $ch['lookback_days'] = max(1, (int)($_POST['ch_lookback_days'] ?? $ch['lookback_days'] ?? 90));
             $ch['limit'] = max(1, (int)($_POST['ch_limit'] ?? $ch['limit'] ?? 100));
             $ch['notes'] = trim((string)($_POST['ch_notes'] ?? $ch['notes'] ?? ''));
+            if (($_POST['ch_fedlex_settings_form'] ?? '') === '1') {
+                $ch['ingest_vernehmlassungen'] = isset($_POST['ch_ingest_vernehmlassungen']);
+            }
 
             $rtRaw = trim((string)($_POST['ch_resource_types'] ?? ''));
             if ($rtRaw !== '') {

@@ -821,12 +821,28 @@ textarea.search-input.setup-code-preview {
     background-color: #f5f5f5;
 }
 
-/* EUR-Lex (EU) timeline cards: document type left, brand mark top-right */
+/* EUR-Lex (EU) timeline cards: EU pill + grey doc type left, score top-right */
 .entry-header--lex-eu {
     width: 100%;
     flex-wrap: wrap;
     justify-content: space-between;
+    align-items: center;
     gap: 8px 10px;
+}
+
+.entry-header--lex-eu .entry-header--lex-eu-left {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    min-width: 0;
+}
+
+.entry-lex-eu-doc-type {
+    color: #666666;
+    font-size: 0.85rem;
+    font-weight: 500;
+    line-height: 1.25;
 }
 
 .entry-header--lex-eu .entry-header--lex-eu-right {

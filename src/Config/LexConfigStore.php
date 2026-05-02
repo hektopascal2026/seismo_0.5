@@ -158,6 +158,8 @@ final class LexConfigStore
                 'language' => 'DEU',
                 'lookback_days' => 90,
                 'limit' => 100,
+                // Fedlex consultation procedures (`jolux:Consultation`); persists in Fedlex Settings.
+                'ingest_vernehmlassungen' => true,
                 'resource_types' => [
                     ['id' => 21, 'label' => 'Bundesgesetz'],
                     ['id' => 22, 'label' => 'Dringliches Bundesgesetz'],

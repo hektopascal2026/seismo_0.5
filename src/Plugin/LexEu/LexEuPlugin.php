@@ -84,23 +84,33 @@ final class LexEuPlugin implements SourceFetcherInterface
         $langUri = 'http://publications.europa.eu/resource/authority/language/' . $lang;
         $until = gmdate('Y-m-d', strtotime('+1 day'));
 
+        // Prefer the configured language; if no expression uses it, take any
+        // expression title (OPTIONAL+language often returned only CELEX in DB).
         $sparqlQuery = '
         PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
         PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
-        SELECT DISTINCT ?work ?celex ?docDate ?title
+        SELECT ?work ?celex ?docDate (MAX(?titlePick) AS ?title)
         WHERE {
             ?work a <' . $classIri . '> .
             ?work cdm:work_id_document ?celex .
             ?work cdm:work_date_document ?docDate .
             FILTER(REGEX(STR(?celex), "^celex:[0-9]"))
             FILTER(?docDate >= "' . $sinceDate . '"^^xsd:date && ?docDate <= "' . $until . '"^^xsd:date)
-            OPTIONAL {
-                ?work cdm:work_has_expression ?expr .
-                ?expr cdm:expression_title ?title .
-                ?expr cdm:expression_uses_language <' . $langUri . '> .
+            {
+                ?work cdm:work_has_expression ?ex .
+                ?ex cdm:expression_title ?titlePick .
+                ?ex cdm:expression_uses_language <' . $langUri . '> .
+            } UNION {
+                ?work cdm:work_has_expression ?ex2 .
+                ?ex2 cdm:expression_title ?titlePick .
+                FILTER NOT EXISTS {
+                    ?work cdm:work_has_expression ?ex3 .
+                    ?ex3 cdm:expression_uses_language <' . $langUri . '> .
+                }
             }
         }
+        GROUP BY ?work ?celex ?docDate
         ORDER BY DESC(?docDate)
         LIMIT ' . $limit . '
     ';

@@ -176,19 +176,25 @@ $entryLoopIndex                 = 0;
                             $lexHasMore = mb_strlen($lexDesc) > 300;
                             $isEuLexCard = ($lexSource === 'eu' && !$isParlSwissLex);
                             $useLexJurisdictionHeader = $isParlSwissLex || $isEuLexCard;
+                            $lexHeadingTitle = function_exists('seismo_lex_card_heading_title')
+                                ? seismo_lex_card_heading_title($lexItem)
+                                : trim((string)($lexItem['title'] ?? ''));
+                            $lexSkipDescPreview = ($lexHeadingTitle !== '' && $lexDesc !== '' && $lexHeadingTitle === $lexDesc);
                         ?>
                         <div class="entry-card">
                             <?php if ($useLexJurisdictionHeader): ?>
                             <div class="entry-header entry-header--lex-eu">
-                                <span class="entry-tag entry-tag--lex-doc"><?= htmlspecialchars($lexDocType) ?></span>
-                                <div class="entry-header--lex-eu-right">
-                                    <?php if ($relevanceScore !== null): ?>
-                                        <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                    <?php endif; ?>
+                                <div class="entry-header--lex-eu-left">
                                     <?php if ($isParlSwissLex): ?>
                                     <span class="entry-lex-ch-mark" title="Bundeshaus Medien (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
                                     <?php else: ?>
                                     <span class="entry-lex-eu-mark" title="EUR-Lex (EU)"><span class="entry-lex-eu-mark__flag" aria-hidden="true">🇪🇺</span><span class="entry-lex-eu-mark__text">EU</span></span>
+                                    <?php endif; ?>
+                                    <span class="entry-lex-eu-doc-type"><?= htmlspecialchars($lexDocType) ?></span>
+                                </div>
+                                <div class="entry-header--lex-eu-right">
+                                    <?php if ($relevanceScore !== null): ?>
+                                        <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -209,20 +215,20 @@ $entryLoopIndex                 = 0;
                                 <?php if ($lexHasUrl): ?>
                                     <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener">
                                         <?php if (!empty($searchQuery)): ?>
-                                            <?= seismo_highlight_search_term($lexItem['title'], $searchQuery) ?>
+                                            <?= seismo_highlight_search_term($lexHeadingTitle, $searchQuery) ?>
                                         <?php else: ?>
-                                            <?= htmlspecialchars($lexItem['title']) ?>
+                                            <?= htmlspecialchars($lexHeadingTitle) ?>
                                         <?php endif; ?>
                                     </a>
                                 <?php else: ?>
                                     <?php if (!empty($searchQuery)): ?>
-                                        <?= seismo_highlight_search_term($lexItem['title'], $searchQuery) ?>
+                                        <?= seismo_highlight_search_term($lexHeadingTitle, $searchQuery) ?>
                                     <?php else: ?>
-                                        <?= htmlspecialchars($lexItem['title']) ?>
+                                        <?= htmlspecialchars($lexHeadingTitle) ?>
                                     <?php endif; ?>
                                 <?php endif; ?>
                             </h3>
-                            <?php if (!empty($lexDesc)): ?>
+                            <?php if (!empty($lexDesc) && !$lexSkipDescPreview): ?>
                                 <div class="entry-content entry-preview"><?= nl2br(htmlspecialchars($lexPreview)) ?></div>
                                 <?php if ($lexHasMore): ?>
                                     <div class="entry-full-content"><?= nl2br(htmlspecialchars($lexDesc)) ?></div>
@@ -230,7 +236,7 @@ $entryLoopIndex                 = 0;
                             <?php endif; ?>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
-                                    <?php if (!empty($lexDesc) && $lexHasMore): ?>
+                                    <?php if (!empty($lexDesc) && $lexHasMore && !$lexSkipDescPreview): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                     <?php endif; ?>
                                     <span class="entry-meta-mono<?= $isJus ? ' entry-meta-mono--jus' : '' ?>"><?= htmlspecialchars($lexCelexDisplay) ?></span>

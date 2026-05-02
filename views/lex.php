@@ -179,8 +179,13 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
             <h2 class="section-title">Fedlex settings (CH only)</h2>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_ch" class="admin-form-card admin-form-card-narrow">
                 <?= $csrfField ?>
+                <input type="hidden" name="ch_fedlex_settings_form" value="1">
                 <div class="admin-form-field">
                     <label><input type="checkbox" name="ch_enabled" value="1" <?= !empty($chCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
+                </div>
+                <div class="admin-form-field">
+                    <?php $vmIngest = \Seismo\Plugin\LexFedlex\LexFedlexPlugin::ingestVernehmlassungen($chCfg); ?>
+                    <label><input type="checkbox" name="ch_ingest_vernehmlassungen" value="1" <?= $vmIngest ? 'checked' : '' ?>> Vernehmlassungen (consultation procedures via SPARQL)</label>
                 </div>
                 <div class="admin-form-field">
                     <label>Language (Fedlex expression)<br>
@@ -383,18 +388,10 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         <?php endif; ?>
                         <h3 class="entry-title">
                             <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener">
-                                <?= e((string)($item['title'] ?? '')) ?>
+                                <?= e($lexHeadingTitle) ?>
                             </a>
                         </h3>
-                        <?php
-                            $lexDesc = trim((string)($item['description'] ?? ''));
-                            $lexPreview = mb_substr($lexDesc, 0, 300);
-                            if (mb_strlen($lexDesc) > 300) {
-                                $lexPreview .= '...';
-                            }
-                            $lexHasMore = mb_strlen($lexDesc) > 300;
-                        ?>
-                        <?php if ($lexDesc !== ''): ?>
+                        <?php if ($lexDesc !== '' && !$lexSkipDescPreview): ?>
                             <div class="entry-content entry-preview"><?= nl2br(e($lexPreview)) ?></div>
                             <?php if ($lexHasMore): ?>
                                 <div class="entry-full-content"><?= nl2br(e($lexDesc)) ?></div>
@@ -402,7 +399,7 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
                         <?php endif; ?>
                         <div class="entry-actions">
                             <div class="entry-actions-main">
-                                <?php if ($lexHasMore): ?>
+                                <?php if ($lexHasMore && !$lexSkipDescPreview): ?>
                                     <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                 <?php endif; ?>
                                 <span class="entry-meta-mono"><?= e((string)($item['celex'] ?? '')) ?></span>
@@ -443,6 +440,16 @@ if (!empty($chCfg['resource_types']) && is_array($chCfg['resource_types'])) {
             if (!card) return;
             var full = card.querySelector('.entry-full-content');
             if (full && full.style.display === 'block') {
+                collapseEntry(card, btn);
+            } else {
+                expandEntry(card, btn);
+            }
+        });
+    })();
+    </script>
+</body>
+</html>
+le.display === 'block') {
                 collapseEntry(card, btn);
             } else {
                 expandEntry(card, btn);
