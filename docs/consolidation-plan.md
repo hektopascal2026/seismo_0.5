@@ -1,5 +1,7 @@
 # Seismo 0.5 — consolidation plan
 
+> **Status (2026-05-11): 0.5 consolidation closed.** Every numbered slice in this document (0 → 1 → 1.5b → 2 → 3 → 4 → 5 → 5a → 6 → 7 → 7a → 8 → 9 → 10) is **shipped**. There is no Slice 11. Ongoing work is **operational maintenance and product follow-ups** (e.g. the **Open decisions** at the bottom of this file, and post-Slice 10 entries on top of `README-REORG.md`), not "still finishing the rewrite". Pre-agreed graduation paths (async rescore in Slice 5b, FULLTEXT search, "test fetch" for core fetchers) remain documented here so they can be picked up *if* observed pain warrants them — not as work owed before declaring the consolidation done.
+
 Living document. Captures the architectural north star and the **order of work** when porting from 0.4. Update as decisions change.
 
 ## Goals (non-negotiable)
@@ -124,7 +126,7 @@ A strict five-phase waterfall risks **nothing runnable** until late. Instead: st
 
 - `MagnituConfigRepository`, `ScoringService` (out of `config.php`).
 - API controllers (`magnitu_entries`, `magnitu_scores`, `magnitu_recipe`, `magnitu_labels`, `magnitu_status`).
-- Satellite keys, Leg API exclusion stays intentional until we decide otherwise.
+- Satellite keys. **Leg is included in the Magnitu / export contract** — `magnitu_entries`, `magnitu_scores`, `magnitu_labels`, `magnitu_status`, and `export_entries` / `export_briefing` all accept and emit `calendar_event` (see `.cursor/rules/magnitu-integration.mdc` and `.cursor/rules/calendar-events.mdc`).
 - **Read-only export key.** Second API key alongside the Magnitu one: `export:api_key` (read-only; can pull entries/briefings, cannot write scores/labels). Two-key model for v0.5; a scopes table is graduation-path, not now.
 - **Export endpoints.** `?action=export_briefing&since=<iso8601>&format=markdown|json` and `?action=export_entries&since_id=<id>&format=json`. Filters by timestamp or id so the client tracks its own "last seen" state (stateless — Option A). Bearer-token auth, read-only key only.
 - **Formatters.** `Seismo\Formatter\MarkdownBriefingFormatter`, `Seismo\Formatter\JsonExportFormatter`. Both consume raw repository output; neither has SQL or HTML. A view or export controller picks one and renders it with the appropriate `Content-Type`.
@@ -311,7 +313,7 @@ Revisit a templating engine only if real pain emerges (duplicated markup, escapi
 - **Per-feed full-text backfill** — when to add "readability" / scraper fetch for thin RSS items (see Fetcher output contract). Product/settings decision once Slice 3 feed settings exist.
 - **Email schema unification** — **resolved (Slice 4 shipped).** Core mail + repositories use the unified `emails` table; migration shipped with that slice. Further column tweaks are ordinary schema work, not an open “unification” decision.
 - **`ai_view`** — **resolved (Slice 9 shipped).** Not ported in 0.5. `views/about.php` documents the official replacement: read-only export API (`?action=export_briefing` / `export_entries`, Bearer key `export:api_key` in `system_config`).
-- **Magnitu Leg API** — when (or whether) to lift the `calendar_event` exclusion. Product decision, not technical.
+- **Magnitu Leg API** — **resolved (2026-05-11).** Leg (`calendar_event`) is part of the same contract as feed / email / lex across `magnitu_entries`, `magnitu_scores`, `magnitu_labels`, `magnitu_status`, and the export endpoints. The "exclusion stays intentional" wording in the original Slice 5 description was stale — Slice 5 actually shipped with Leg included (`MagnituController::shapeCalendarEvent()`, `MagnituExportRepository::listCalendarEventsSince()`, `EntryScoreRepository::MAGNITU_ENTRY_TYPES`, `MagnituLabelRepository::LABELED_ENTRY_TYPES`, `ScoringService::rescoreCalendarEvents()`). The corresponding `.cursor/rules/` already document the included shape.
 
 ## Machine-readable export — forward-compat shape
 

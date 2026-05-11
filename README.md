@@ -315,7 +315,9 @@ Tests live under **`tests/`**; they assume a configured dev database only when e
 
 This tree is **Seismo 0.5** — a structured port of the earlier **0.4** codebase (same product goals, cleaner boundaries: repositories own SQL, plugins wrap third-party APIs, one refresh pipeline for web + cron).
 
-If you are **diffing behaviour against 0.4** or tracing **where a feature moved**, use **[`README-REORG.md`](README-REORG.md)** — a chronological **migration log** (newest entries first), not the primary product readme. High-level goals and open product follow-ups remain in **[`docs/consolidation-plan.md`](docs/consolidation-plan.md)**.
+**Status (2026-05-11):** the **0.5 consolidation is closed**. Every slice in **[`docs/consolidation-plan.md`](docs/consolidation-plan.md)** (Slices 0 → 10) shipped; subsequent work on this tree is **operational maintenance and product follow-ups**, not unfinished rewrite work. The version line at the top of this README tracks ongoing point releases (currently **0.5.3**).
+
+If you are **diffing behaviour against 0.4** or tracing **where a feature moved**, use **[`README-REORG.md`](README-REORG.md)** — a chronological **migration log** (newest entries first), not the primary product readme. Slice-numbered entries in that log are the consolidation history; entries above its boundary banner are post-consolidation maintenance. High-level goals and remaining product follow-ups (none of them blocking) live in **[`docs/consolidation-plan.md`](docs/consolidation-plan.md)**.
 
 ---
 

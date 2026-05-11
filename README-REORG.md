@@ -7,6 +7,30 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 - References use **file paths**, not line numbers (they drift).
 - In-app About (`views/about.php`) ships in **Slice 9** (user-facing product copy). A final prose-only polish pass may still happen at consolidation close per `documentation-strategy.mdc`.
 
+> **Boundary (2026-05-11): 0.5 consolidation closed.** The slice-numbered work in `docs/consolidation-plan.md` (Slices 0 → 10) is **done**. Entries above this line are **post-consolidation maintenance** — bug fixes, scoring tuning, card enrichments, ergonomics. They still follow the four-part shape so the log stays useful, but they are not part of the rewrite contract. The newest **slice** entry is **Slice 10 — README developer surface + plan hygiene**, further down.
+
+---
+
+## Consolidation closure — lift the Leg "exclusion" wording; mark plan + reorg log closed
+
+**Why.** Two lines in `docs/consolidation-plan.md` still said the Magnitu API "Leg exclusion stays intentional until we decide otherwise" and listed lifting it as an **Open decision**. That wording was stale: Slice 5 shipped with Leg (`calendar_event`) included across every Magnitu / export code path, and both `.cursor/rules/magnitu-integration.mdc` and `.cursor/rules/calendar-events.mdc` have documented the included shape ever since. The plan was the only place still implying Leg was held back.
+
+Separately, the slice-by-slice work has been done since **Slice 10**, but neither `docs/consolidation-plan.md` nor `README-REORG.md` carried an explicit "consolidation closed" marker — readers had to derive that from the slice table. Future-me would have to do the same.
+
+**What moved.**
+- `docs/consolidation-plan.md` — Slice 5 bullet rewritten to say Leg is part of the contract (with the rule files pointed to as the authoritative shape). The corresponding **Open decisions** entry is marked **resolved (2026-05-11)** with the code references that prove it: `MagnituController::shapeCalendarEvent()`, `MagnituExportRepository::listCalendarEventsSince()`, `EntryScoreRepository::MAGNITU_ENTRY_TYPES`, `MagnituLabelRepository::LABELED_ENTRY_TYPES`, `ScoringService::rescoreCalendarEvents()`.
+- `docs/consolidation-plan.md` — new capstone paragraph at the top of the file: 0.5 consolidation is **closed** as of Slice 10; remaining items are operational maintenance and product follow-ups, not "still finishing the rewrite."
+- `README-REORG.md` — new capstone paragraph at the top of the file: a clear boundary between **post-consolidation maintenance** entries (above the boundary) and **slice-numbered consolidation work** (Slice 10 and below).
+- `README.md` — **Consolidation & 0.4 mapping** section gains a one-line **Status** marker so the top-level README also reflects the closure without bloating it.
+
+**New wiring.** None. No code change. No schema change. No `.cursor/rules/` change — both `magnitu-integration.mdc` and `calendar-events.mdc` were already correct.
+
+**Gotchas.**
+- **No "Magnitu Leg API" feature work is implied.** Slice 5 already shipped Leg in the contract; this entry is a documentation reconciliation, not a feature port. Magnitu v3 already pulls `type=calendar_event` and writes back `magnitu_scores` for it (the contract has been stable since Slice 5a's `system_config` rename).
+- **Open decisions / Future polish still has live entries.** `Per-feed full-text backfill`, the post-Slice-4 tuning leftovers (`Title boosting`, `Exact phrase matching`), and the deferred "Test fetch (no save)" for RSS/scraper/mail core fetchers are genuine *future* work, not "consolidation debt". The capstone at the top of `docs/consolidation-plan.md` is explicit about this distinction.
+- **Slice 5b (async recipe rescoring) is still deferred.** Listed in the plan as a pre-agreed graduation path; not work owed at the consolidation boundary.
+- **Uploads.** Docs only — `docs/consolidation-plan.md`, `README-REORG.md`, `README.md`. None ship to satellites (`docs/` is wholesale removed via `satellite-prune.json`); `README-REORG.md` is in `remove_files`; `README.md` is mothership-only documentation. **Satellite: no file uploads required.** Mothership upload optional — these are reference documents, not runtime.
+
 ---
 
 ## Label page — three independent breakages on the host, one slice of fixes
