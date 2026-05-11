@@ -213,6 +213,81 @@ final class RefreshAllService
     }
 
     /**
+     * Adds plugin ids / short reasons after {@see aggregatePluginRunResults()} so operators
+     * see which upstream failed while counts stay headline-sized.
+     *
+     * Skips with identical messages are collapsed to `id1, id2: message` (e.g. many Lex plugins
+     * skipped by timeline refresh share one explanation).
+     *
+     * @param array<string, PluginRunResult> $results
+     */
+    public static function aggregateResultDetailAppendix(array $results, int $maxMessageLen = 160): string
+    {
+        $errors = [];
+        $warns  = [];
+        /** @var array<string, list<string>> */
+        $skippedByMsg = [];
+
+        foreach ($results as $id => $r) {
+            $snippet = self::truncateAggregateDetailMessage((string)($r->message ?? ''), $maxMessageLen);
+            if ($r->status === 'error') {
+                $errors[] = $snippet !== '' ? $id . ': ' . $snippet : $id;
+            } elseif ($r->status === 'warn') {
+                $warns[] = $snippet !== '' ? $id . ': ' . $snippet : $id;
+            } elseif ($r->status === 'skipped') {
+                $skippedByMsg[$snippet] ??= [];
+                $skippedByMsg[$snippet][] = $id;
+            }
+        }
+
+        $chunks = [];
+        if ($errors !== []) {
+            $chunks[] = 'Error — ' . implode('; ', $errors);
+        }
+        if ($warns !== []) {
+            $chunks[] = 'Partial — ' . implode('; ', $warns);
+        }
+        if ($skippedByMsg !== []) {
+            $skippedParts = [];
+            foreach ($skippedByMsg as $msg => $ids) {
+                sort($ids);
+                $idList = implode(', ', $ids);
+                $skippedParts[] = $msg !== '' ? $idList . ': ' . $msg : $idList;
+            }
+            $chunks[] = 'Skipped — ' . implode('; ', $skippedParts);
+        }
+
+        if ($chunks === []) {
+            return '';
+        }
+
+        return ' ' . implode(' ', $chunks);
+    }
+
+    /**
+     * @internal Used by aggregateResultDetailAppendix only.
+     */
+    private static function truncateAggregateDetailMessage(string $message, int $maxLen): string
+    {
+        $plain = trim(preg_replace('/\s+/', ' ', $message) ?? '');
+        if ($plain === '' || $maxLen < 4) {
+            return '';
+        }
+        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            if (mb_strlen($plain, 'UTF-8') <= $maxLen) {
+                return $plain;
+            }
+
+            return rtrim(mb_substr($plain, 0, max(1, $maxLen - 1), 'UTF-8')) . '…';
+        }
+        if (strlen($plain) <= $maxLen) {
+            return $plain;
+        }
+
+        return rtrim(substr($plain, 0, max(1, $maxLen - 1))) . '…';
+    }
+
+    /**
      * Sets {@see $_SESSION} success/error from an aggregate plugin run (module refresh buttons).
      *
      * @param array<string, PluginRunResult> $results
@@ -220,7 +295,8 @@ final class RefreshAllService
     public static function applySessionFlashForAggregateResults(array $results, string $label): void
     {
         $agg = self::aggregatePluginRunResults($results);
-        $msg = $label . ': ' . $agg['summary'] . '.';
+        $detail = self::aggregateResultDetailAppendix($results);
+        $msg = $label . ': ' . $agg['summary'] . '.' . $detail;
         if ($agg['all_failed']) {
             $_SESSION['error'] = $msg;
         } else {

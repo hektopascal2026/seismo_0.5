@@ -222,30 +222,9 @@ final class DiagnosticsController
 
         $config->set(self::KEY_LAST_REFRESH_AT, (string)time());
 
-        $okCount = 0;
-        $warnCount = 0;
-        $errCount = 0;
-        $itemsTotal = 0;
-        foreach ($results as $r) {
-            if ($r->isOk()) {
-                $okCount++;
-                $itemsTotal += $r->count;
-            } elseif ($r->status === 'warn') {
-                $warnCount++;
-                $itemsTotal += $r->count;
-            } elseif ($r->status === 'error') {
-                $errCount++;
-            }
-        }
-        $skipped = count($results) - $okCount - $warnCount - $errCount;
-        $summary = sprintf(
-            'Refresh all: %d ok, %d partial (%d items), %d error, %d skipped.',
-            $okCount,
-            $warnCount,
-            $itemsTotal,
-            $errCount,
-            $skipped
-        );
+        $agg = RefreshAllService::aggregatePluginRunResults($results);
+        $detail = RefreshAllService::aggregateResultDetailAppendix($results);
+        $summary = 'Refresh all: ' . $agg['summary'] . '.' . $detail;
         if ($skipLexPlugins) {
             $summary .= ' Lex legislation plugins were not run — use Settings → Diagnostics → Refresh all, or cron, for those sources.';
         }
