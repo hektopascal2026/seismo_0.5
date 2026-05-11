@@ -5,6 +5,20 @@
  * Lists unlabeled entries from the same export shape as {@see MagnituController}
  * and persists rows to the local {@see MagnituLabelRepository} (never via
  * Bearer `magnitu_labels` from the browser).
+ *
+ * Three small behaviours worth knowing about:
+ *
+ *   1. **CSRF is verified WITHOUT rotation** on `label_save`. A labeler in the
+ *      groove clicks several cards within a few hundred ms; with the default
+ *      rotating verifier, the second/third POSTs were assembled with the
+ *      pre-rotation token and PHP returns 403 by the time it processes them.
+ *      The session cookie is still required and still unguessable; rotation
+ *      bought defence-in-depth at the cost of breaking the UI.
+ *   2. **The session lock is released right after CSRF verify.** Without this,
+ *      PHP's file session handler serialises every concurrent label POST
+ *      from the same browser tab.
+ *   3. **The queue is paginated via `?offset=`** so labelers can keep going
+ *      past the newest 280-per-family window after the initial page is done.
  */
 
 declare(strict_types=1);
@@ -28,9 +42,11 @@ final class MagnituLabelUiController
 
     public function show(): void
     {
-        $csrfField = CsrfToken::field();
+        $csrfField  = CsrfToken::field();
         $pageError  = null;
         $filter     = $this->normaliseFilter($_GET['type'] ?? 'all');
+        $offset     = $this->normaliseOffset($_GET['offset'] ?? 0);
+        $nextOffset = $offset + self::PER_FAMILY;
         $queueJson  = '[]';
 
         try {
@@ -38,7 +54,7 @@ final class MagnituLabelUiController
             $export    = new MagnituExportRepository($pdo);
             $labelRepo = new MagnituLabelRepository($pdo);
             $labeled   = $labelRepo->listLabeledKeys();
-            $raw       = $this->gatherEntries($export, $filter);
+            $raw       = $this->gatherEntries($export, $filter, $offset);
             $unlabeled = [];
             foreach ($raw as $e) {
                 $k = $e['entry_type'] . ':' . $e['entry_id'];
@@ -75,11 +91,19 @@ final class MagnituLabelUiController
 
             return;
         }
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(false)) {
             http_response_code(403);
-            echo json_encode(['ok' => false, 'error' => 'Invalid or expired CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
 
             return;
+        }
+
+        // We have nothing more to read from / write to $_SESSION. Releasing
+        // the lock here means rapid consecutive label POSTs from the same
+        // browser tab don't serialise behind one another — see class
+        // docblock note #2.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
         }
 
         $entryType = (string)($_POST['entry_type'] ?? '');
@@ -109,10 +133,8 @@ final class MagnituLabelUiController
             return;
         }
 
-        echo json_encode([
-            'ok'   => true,
-            'csrf' => CsrfToken::ensure(),
-        ], JSON_UNESCAPED_UNICODE);
+        // Token is not rotated; no need to ship a fresh one to the client.
+        echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
     }
 
     private function normaliseFilter(mixed $raw): string
@@ -125,10 +147,24 @@ final class MagnituLabelUiController
         return 'all';
     }
 
+    private function normaliseOffset(mixed $raw): int
+    {
+        if (is_string($raw) || is_int($raw)) {
+            $n = (int)$raw;
+            if ($n < 0) {
+                return 0;
+            }
+            // Soft cap so a malicious URL can't trigger a huge OFFSET scan.
+            return min($n, 100000);
+        }
+
+        return 0;
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
-    private function gatherEntries(MagnituExportRepository $export, string $filter): array
+    private function gatherEntries(MagnituExportRepository $export, string $filter, int $offset): array
     {
         $entries = [];
         $lim     = self::PER_FAMILY;
@@ -136,21 +172,21 @@ final class MagnituLabelUiController
 
         if ($filter === 'all' || $filter === 'feed_item') {
             $cap = $filter === 'all' ? $lim : $one;
-            foreach ($export->listFeedItemsSince(null, $cap) as $row) {
+            foreach ($export->listFeedItemsForLabeling($cap, $offset) as $row) {
                 $entries[] = MagnituController::shapeFeedItem($row);
             }
         }
         if ($filter === 'all' || $filter === 'lex_item') {
             $cap = $filter === 'all' ? $lim : $one;
-            foreach ($export->listLexItemsSince(null, $cap) as $row) {
+            foreach ($export->listLexItemsForLabeling($cap, $offset) as $row) {
                 $entries[] = MagnituController::shapeLexItem($row);
             }
         }
         if ($filter === 'all') {
-            foreach ($export->listEmailsSince(null, $lim) as $row) {
+            foreach ($export->listEmailsForLabeling($lim, $offset) as $row) {
                 $entries[] = MagnituController::shapeEmail($row);
             }
-            foreach ($export->listCalendarEventsSince(null, $lim) as $row) {
+            foreach ($export->listCalendarEventsForLabeling($lim, $offset) as $row) {
                 $entries[] = MagnituController::shapeCalendarEvent($row);
             }
         }

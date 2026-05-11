@@ -6,6 +6,8 @@
  * @var string $queueJson JSON array of magnitu_entries-shaped rows
  * @var ?string $pageError
  * @var string $filter all|lex_item|feed_item
+ * @var int $offset     Current per-family OFFSET into the export queue
+ * @var int $nextOffset $offset + PER_FAMILY — used by the "fetch older" links
  */
 
 declare(strict_types=1);
@@ -20,6 +22,13 @@ $activeNav      = 'label';
 $bp = $basePath . '/index.php';
 $filterQs = static function (string $t) use ($bp): string {
     return $bp . '?' . http_build_query(['action' => 'label', 'type' => $t]);
+};
+$pageUrl = static function (string $t, int $off) use ($bp): string {
+    $qs = ['action' => 'label', 'type' => $t];
+    if ($off > 0) {
+        $qs['offset'] = $off;
+    }
+    return $bp . '?' . http_build_query($qs);
 };
 ?>
 <!DOCTYPE html>
@@ -99,6 +108,13 @@ $filterQs = static function (string $t) use ($bp): string {
             <a href="<?= e($filterQs('feed_item')) ?>" class="<?= $filter === 'feed_item' ? 'active' : '' ?>">News</a>
         </nav>
 
+        <?php if ($offset > 0): ?>
+            <p class="admin-intro" style="font-size:0.75rem; color:#666; margin-top:-0.5rem;">
+                Showing items from offset <?= e((string)$offset) ?> per family.
+                <a href="<?= e($filterQs($filter)) ?>">Back to newest</a>
+            </p>
+        <?php endif; ?>
+
         <?php if ($pageError !== null): ?>
             <div class="message message-error"><?= e($pageError) ?></div>
         <?php endif; ?>
@@ -129,8 +145,15 @@ $filterQs = static function (string $t) use ($bp): string {
             var entries;
             try { entries = JSON.parse(dataEl.textContent || '[]'); } catch (e) { entries = []; }
 
+            var nextPageUrl = <?= json_encode($pageUrl($filter, $nextOffset), JSON_UNESCAPED_SLASHES) ?>;
+
             if (!entries.length) {
-                mount.innerHTML = '<div class="empty-state"><p><strong>All caught up</strong> — nothing unlabeled in this filter, or Seismo has no entries yet. Try another filter or check back after new items arrive.</p></div>';
+                mount.innerHTML =
+                    '<div class="empty-state">' +
+                        '<p><strong>All caught up</strong> — nothing unlabeled in this slice. ' +
+                            'Try another filter, <a href="' + nextPageUrl + '">fetch older items</a>, ' +
+                            'or check back after new items arrive.</p>' +
+                    '</div>';
                 return;
             }
 
@@ -150,7 +173,12 @@ $filterQs = static function (string $t) use ($bp): string {
                 area.innerHTML = '';
                 var batch = entries.splice(0, 20);
                 if (!batch.length) {
-                    mount.innerHTML = '<div class="empty-state"><p><strong>Done</strong> — queue empty for this load. <a href="' + <?= json_encode($bp . '?action=label', JSON_UNESCAPED_SLASHES) ?> + '&type=' + <?= json_encode($filter, JSON_UNESCAPED_SLASHES) ?> + '">Reload</a> to fetch more.</p></div>';
+                    mount.innerHTML =
+                        '<div class="empty-state">' +
+                            '<p><strong>Done with this batch.</strong> ' +
+                                '<a href="' + nextPageUrl + '">Fetch older items</a>' +
+                            '</p>' +
+                        '</div>';
                     return;
                 }
                 batch.forEach(function(entry) {

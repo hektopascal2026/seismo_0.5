@@ -221,6 +221,146 @@ final class MagnituExportRepository
         return $out;
     }
 
+    // ------------------------------------------------------------------
+    // Lightweight readers for the in-app labelling queue
+    // (`MagnituLabelUiController::gatherEntries`).
+    //
+    // The main `list*Since` methods above ship the **full** row to satisfy
+    // the Magnitu v3 sync contract: `feed_items.content`, both email body
+    // columns, full `calendar_events.content`. The label UI only renders
+    // title + description trimmed to 220 chars + source meta, so eagerly
+    // loading several hundred KB per row for 4×280 rows can OOM the page
+    // on a 128 MB shared host (symptom: blank label page).
+    //
+    // These `listFor Labeling*` helpers return the same row shape the
+    // `MagnituController::shape*()` helpers consume — just with `content`
+    // omitted / blanked and email bodies SUBSTRINGed in SQL. They also
+    // accept an `$offset` so the controller can paginate past the newest
+    // 280-per-family window.
+    // ------------------------------------------------------------------
+
+    /**
+     * Lightweight feed_items for the labelling queue. Skips `fi.content`.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listFeedItemsForLabeling(int $limit, int $offset = 0): array
+    {
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+        $sql = 'SELECT fi.id, fi.title, fi.description, fi.link, fi.author,
+                       fi.published_date,
+                       f.title       AS feed_title,
+                       f.category    AS feed_category,
+                       f.source_type AS source_type
+                  FROM ' . entryTable('feed_items') . ' fi
+                  JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
+                 WHERE f.disabled = 0
+                   AND fi.hidden = 0
+                 ORDER BY fi.published_date DESC
+                 LIMIT ' . $limit . ' OFFSET ' . $offset;
+
+        return $this->selectOrEmpty($sql, []);
+    }
+
+    /**
+     * Lightweight emails for the labelling queue. Truncates body columns to
+     * `$bodyChars` (default 800) in SQL so the entire 100 KB newsletter
+     * never reaches PHP memory.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listEmailsForLabeling(int $limit, int $offset = 0, int $bodyChars = 800): array
+    {
+        $limit     = $this->clampLimit($limit);
+        $offset    = max(0, $offset);
+        $bodyChars = max(64, $bodyChars);
+        $table     = entryTable(getEmailTableName());
+
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                  WHERE TABLE_SCHEMA = ' . entryDbSchemaExpr() . '
+                    AND TABLE_NAME = ?'
+            );
+            $stmt->execute([getEmailTableName()]);
+            $cols = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (PDOException $e) {
+            return [];
+        }
+        if ($cols === []) {
+            return [];
+        }
+
+        $dateCol = $this->pickColumn($cols, ['date_utc', 'date_received', 'created_at', 'date_sent']);
+        if ($dateCol === null) {
+            return [];
+        }
+        $textBodyCol  = $this->pickColumn($cols, ['text_body', 'body_text']);
+        $htmlBodyCol  = $this->pickColumn($cols, ['html_body', 'body_html']);
+        $fromEmailCol = $this->pickColumn($cols, ['from_email', 'from_addr']);
+        $fromNameExpr = in_array('from_name', $cols, true) ? 'e.from_name' : "''";
+
+        if ($textBodyCol === null || $htmlBodyCol === null || $fromEmailCol === null) {
+            return [];
+        }
+
+        $sql = "SELECT e.id,
+                       e.subject,
+                       e.`{$fromEmailCol}`                          AS from_email,
+                       {$fromNameExpr}                              AS from_name,
+                       SUBSTRING(e.`{$textBodyCol}`, 1, {$bodyChars}) AS text_body,
+                       SUBSTRING(e.`{$htmlBodyCol}`, 1, {$bodyChars}) AS html_body,
+                       e.`{$dateCol}`                               AS entry_date,
+                       COALESCE(st.tag, 'unclassified')             AS sender_tag
+                  FROM {$table} e
+             LEFT JOIN " . entryTable('sender_tags') . " st
+                    ON st.from_email = e.`{$fromEmailCol}`
+                   AND st.removed_at IS NULL
+                   AND st.disabled = 0
+                 ORDER BY e.`{$dateCol}` DESC
+                 LIMIT {$limit} OFFSET {$offset}";
+
+        return $this->selectOrEmpty($sql, []);
+    }
+
+    /**
+     * Lightweight lex_items for the labelling queue. Same columns as the
+     * sync method — lex rows are already small, only `$offset` is new.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listLexItemsForLabeling(int $limit, int $offset = 0): array
+    {
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+        $sql = 'SELECT id, celex, title, description, document_date, document_type, eurlex_url, source
+                  FROM ' . entryTable('lex_items') . '
+                 ORDER BY document_date DESC
+                 LIMIT ' . $limit . ' OFFSET ' . $offset;
+
+        return $this->selectOrEmpty($sql, []);
+    }
+
+    /**
+     * Lightweight calendar_events for the labelling queue. Skips `content`.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listCalendarEventsForLabeling(int $limit, int $offset = 0): array
+    {
+        $limit  = $this->clampLimit($limit);
+        $offset = max(0, $offset);
+        $table  = entryTable('calendar_events');
+        $sql    = "SELECT id, source, title, description, event_date, event_end_date,
+                          event_type, status, council, url
+                     FROM {$table}
+                    ORDER BY (event_date IS NULL), event_date DESC, id DESC
+                    LIMIT {$limit} OFFSET {$offset}";
+
+        return $this->selectOrEmpty($sql, []);
+    }
+
     /**
      * Per-type entry counts used by `?action=magnitu_status`.
      *
