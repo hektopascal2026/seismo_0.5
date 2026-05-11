@@ -8,6 +8,8 @@ The codebase targets **PHP 8.2**, **MariaDB/MySQL**, and **vanilla PHP** (no Red
 
 **0.5.3** makes **RSS and scraper** refresh **chunked by default** (bounded batches per cron tick or per manual-refresh time budget, with cursor state in `system_config`) so shared hosts stay within PHP time limits with hundreds of sources. **`refresh_cron.php`** acquires a **MySQL advisory lock** so overlapping cron invocations (e.g. Plesk every minute while a tick is still running) exit immediately instead of duplicating fetches. **Settings → General** offers an opt-in **legacy** mode that restores the old single-pass sweep for RSS + scraper. **0.5.2** added **per-module refresh** on **Feeds**, **Scraper**, **Mail**, and **Lex** (one click runs only that area’s ingest), and keeps the **timeline** toolbar refresh light by skipping **Lex** legislation pulls (use **Settings → Diagnostics** or **cron** for a full run). **0.5.1** added **previews** on those module pages to validate sources before saving.
 
+**May 2026 tuning** — recipe scoring was clustering visibly around 48–52 (the formula’s no-signal attractor) after the n-gram expansion shipped on Apr 21. Three small adjustments to restore signal-to-noise are documented under **[Scoring tuning (May 2026)](#scoring-tuning-may-2026)** below: recipe n-gram window rolled back **5 → 3**, default alert threshold lowered **0.75 → 0.60**, and a one-time operational nudge to cycle Magnitu sync. None of these change schema or the API contract.
+
 ---
 
 ## Features
@@ -71,6 +73,75 @@ For a **satellite** tied to a Magnitu profile:
 2. In Magnitu, **pull entries** always uses the **global** mothership connection (shared article pool). **Pull labels** and **push** (scores, recipe, labels) use the profile’s **satellite URL + API key** when both are set, so label work and model output round-trip to **that** satellite only — not mixed with another host. Magnitu rejects an incomplete pair (URL without key or the reverse).
 
 Authoritative HTTP details: **`.cursor/rules/magnitu-integration.mdc`**.
+
+### Scoring tuning (May 2026)
+
+`RecipeScorer` is a deterministic fallback for entries that **Magnitu v3** has not (yet) scored. Its math is a softmax over per-class keyword sums weighted by `class_weights = [1.0, 0.66, 0.33, 0.0]` for `[investigation_lead, important, background, noise]`. For an entry with **zero matches** the formula resolves to:
+
+```
+relevance = 0.25 × (1.0 + 0.66 + 0.33 + 0.0) = 0.4975  → badge shown as 50
+```
+
+That **0.4975 "no-signal" attractor** is where every recipe-scored row gravitates unless several anchor concepts fire in the same direction. With current recipe magnitudes (typical unigram weight 0.12, multi-word 0.24), a single match shifts the badge by ~2 points — so it is structurally easy for the timeline to look "all 48–52".
+
+In April 2026 two changes amplified that:
+
+- **N-gram window expanded from 2 → 5** (`RecipeScorer::MAX_NGRAM`). Per article, this roughly **doubled** the matched-token count, and many recipe entries have *conflicting* class-weights across `background`/`important`/`investigation_lead` ("iran", "trump", "ukraine", "in der schweiz", …). More matches in conflicting directions softens the softmax distribution toward uniform — i.e. toward 50.
+- **Swiss dictionary expansion** added French / Italian / English aliases for recipe German keywords, which is *good* for surfacing foreign-language coverage but compounds the same dilution.
+
+This section documents the **May 2026 mitigations** applied to `seismo_0.5`. Each is small and reversible. None changes schema or the **Magnitu v3** HTTP contract.
+
+#### 1. Recipe n-gram window: 5 → 3
+
+`src/Core/Scoring/RecipeScorer.php` — `MAX_NGRAM` constant.
+
+```php
+private const MAX_NGRAM = 3;   // was 5
+```
+
+Trigrams cover every signal-bearing concept in the current recipe (e.g. `member states only`, `third country`, `eu eea`, `equivalence decision`). The 4- and 5-grams the distiller emits tend to be format boilerplate (`category bekanntmachung bekanntmachung`, `english tight query`, …) that fire indiscriminately across an entire source — they fragment the softmax denominator without adding usable signal.
+
+This intentionally **diverges** from Magnitu's distiller token window (which still emits up to 5-grams). The deterministic Seismo fallback is allowed to be a more conservative subset of the same feature space — Magnitu's full ML output overlays it via the precedence rule in `EntryScoreRepository::upsertRecipeScore()` and is the source of truth for any entry it has scored.
+
+When **Magnitu v3** trims its distillation to anchor-concept-floor weights (open product follow-up), Seismo's `MAX_NGRAM` may revisit either direction; the rollback to 3 is the right default until then.
+
+#### 2. Alert threshold default: 0.75 → 0.60
+
+`system_config.alert_threshold` is what the timeline ("alert" badge), `MagnituHighlightsController`, and each module page's "score≥threshold" pill compare against. Existing installs keep whatever the admin had saved — only **new installs** and **fallback paths** (config row missing) see the new default.
+
+Existing files updated (form default + the parallel `0.75` fallbacks across controllers):
+
+| Where | What |
+|---|---|
+| `views/partials/settings_magnitu.php` | Form default in the **Settings → Magnitu** number input. |
+| `src/Controller/DashboardController.php` (`resolveAlertThreshold`) | Fallback when `system_config.alert_threshold` is null/empty. |
+| `src/Controller/MagnituAdminController.php` (`saveConfig`) | POST-body default if the form submits an empty `alert_threshold`. |
+| `src/Controller/MagnituHighlightsController.php` (`show`) | Local initialisation before reading `system_config`. |
+| `src/Controller/FeedController.php`, `MailController.php`, `ScraperController.php` | Local initialisation (badge rendering) before reading `system_config`. |
+
+**To apply the new default on an existing instance:** open **Settings → Magnitu**, change the **Alert threshold** field from `0.75` to `0.60`, and **Save preferences**. There is no migration — your stored value is what wins.
+
+Rationale: with current recipe weights, even a strong document hitting three anchor concepts at full weight (e.g. `member states only` 0.235 + `third country` 0.193 + `eu eea` 0.193 in `investigation_lead`) lands at relevance ≈ 0.58. Reaching 0.75 requires logits that the current distiller does not produce in practice. Lowering to 0.60 makes the threshold operationally meaningful — it now corresponds to "two or three anchor-concept matches in the same direction" rather than "essentially never". Raise it again once Magnitu's distiller emits **floor-weighted anchor concepts** for `third_country_discrimination`, `equivalence_loss`, `single_market_carveout`, etc.
+
+#### 3. Cycle Magnitu sync after deploy
+
+Every entry currently scored only by the recipe sits at its recipe score until Magnitu's next sync POSTs `magnitu_scores` for it. The precedence rule in `EntryScoreRepository::upsertRecipeScore()` already makes Magnitu's score win — but you have to trigger Magnitu to post.
+
+Operational checklist after this tuning lands:
+
+1. Confirm **`?action=magnitu_status`** reports a recent `last_sync_at` and that `scores.magnitu` is comparable to (or larger than) `scores.recipe`. If `scores.recipe ≫ scores.magnitu`, the visible badges are still mostly the deterministic fallback.
+2. From the Magnitu v3 install (sibling checkout), run its **sync** (push scores). This walks all entries Magnitu has not yet scored and POSTs `magnitu_scores` back to Seismo.
+3. (Optional, only if you want a clean baseline) **Settings → Magnitu → Danger zone → Clear all scores** wipes `entry_scores` entirely. The next ingest will recipe-score new entries; the next Magnitu sync will overlay ML scores. **Warning:** this is genuinely destructive — manual training labels in `magnitu_labels` are unaffected, but every "Magnitu badge ≥ alert_threshold" you've ever seen in the timeline disappears until Magnitu re-posts.
+
+#### Strategic context: why these are tuning, not a fix
+
+The 48–52 cluster is a *symptom* of a structural mismatch the May 2026 tuning **does not** resolve:
+
+- The recipe is distilled from a logistic regression trained on 822 labels with `investigation_lead` represented in only 64 of them (≈ 8 %). The classifier's `f1_macro = 0.44` means the recipe weights are *correctly* small — there is no strong signal in the label set for the model to learn.
+- The model's calibration step (`temperature = 2.45`) intentionally *softens* its raw probabilities to compensate for over-confidence. Seismo's recipe applies plain `T=1` softmax to the same weights, which would normally produce *more* peaked probabilities — except the weights are too small to peak anywhere.
+- Anchor concepts that **do** match the product mission ("Swiss firms carved out by foreign EU/EEA-only legislation") **are present** in the recipe (`member states only` IL+0.235, `third country` IL+0.193, `eu eea` IL+0.193, `drittstaaten` IL+0.120, `equivalence decision` IL+0.150, …) but their magnitudes are roughly **one third** of what's needed to clear a meaningful alert threshold.
+
+The structural fix is **Magnitu-side**: add a curated concept dictionary in `distiller.py` with **floor weights** (e.g. ≥ 0.6 for the IL column of `third_country_discrimination` family terms across all four languages). The LR can lift those further when labels confirm, but cannot suppress them below the floor. Until that ships, the Seismo-side tuning above is what makes the existing recipe operationally useful.
 
 ### Export API (machine-readable)
 

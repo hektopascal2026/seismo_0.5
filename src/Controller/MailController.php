@@ -31,7 +31,7 @@ final class MailController
         $subscriptionFilter   = null;
         $editRow              = null;
         $pageError            = null;
-        $alertThreshold       = 0.75;
+        $alertThreshold       = 0.60;
 
         try {
             $pdo = getDbConnection();

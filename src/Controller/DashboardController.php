@@ -378,7 +378,12 @@ final class DashboardController
 
     /**
      * Magnitu "alert" badge threshold (0.0–1.0). Stored in `system_config`;
-     * defaults to 0.75 when unset (matches Magnitu settings form default).
+     * defaults to **0.60** when unset (matches Magnitu settings form default).
+     *
+     * Lowered from 0.75 in May 2026 — with the current recipe weights (typical
+     * unigram = 0.12, multi-word = 0.24), 0.75 is unreachable in practice;
+     * 0.60 corresponds roughly to "two or three anchor-concept matches in one
+     * document". See README "Scoring tuning (May 2026)".
      */
     private function resolveAlertThreshold(): float
     {
@@ -392,7 +397,7 @@ final class DashboardController
             // fall through
         }
 
-        return 0.75;
+        return 0.60;
     }
 
     /**

@@ -24,7 +24,7 @@ final class MagnituHighlightsController
 
         $allItems       = [];
         $pageError      = null;
-        $alertThreshold = 0.75;
+        $alertThreshold = 0.60;
 
         try {
             $pdo    = getDbConnection();

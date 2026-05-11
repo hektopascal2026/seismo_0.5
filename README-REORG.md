@@ -9,6 +9,26 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Scoring tuning — n-gram window 5→3, alert threshold 0.75→0.60
+
+**Why.** Recipe-scored entries were clustering visibly at 48–52 in the timeline. Two structural causes: (1) the formula `Σ P(class_i) × class_weight_i` with default `class_weights = [1.0, 0.66, 0.33, 0.0]` resolves to **0.4975** for any unmatched entry (the "no-signal" attractor — displayed as 50); (2) the April 2026 expansion of `RecipeScorer::MAX_NGRAM` from 2 → 5 roughly doubled per-article matched-token count, and because many recipe keywords carry conflicting class signs (`iran`, `trump`, `ukraine`, `in der schweiz`, …) the softmax denominator softens toward uniform — i.e. toward 50. A complementary issue is that the recipe weights are too small for the 0.75 alert threshold to be reachable in practice: even three strong anchor concepts in one document (`member states only` + `third country` + `eu eea`) reach relevance ≈ 0.58.
+
+**What moved.**
+- `src/Core/Scoring/RecipeScorer.php` — `MAX_NGRAM` **5 → 3** with expanded docblock explaining the intentional divergence from Magnitu's distiller token window. Inline comment in the tokenisation loop notes the rollback.
+- `src/Controller/DashboardController.php` (`resolveAlertThreshold`), `src/Controller/MagnituAdminController.php` (`saveConfig` POST default), `src/Controller/MagnituHighlightsController.php`, `src/Controller/FeedController.php`, `src/Controller/MailController.php`, `src/Controller/ScraperController.php` — fallback when `system_config.alert_threshold` is null/empty changed **0.75 → 0.60**.
+- `views/partials/settings_magnitu.php` — form default in **Settings → Magnitu** changed `'0.75'` → `'0.60'` and the field hint now references the README tuning section so operators understand the move.
+- `README.md` — new section **Scoring tuning (May 2026)** between *Magnitu highlights* and *Export API*, plus a one-line pointer in the top-of-readme version paragraph. Section explains the no-signal attractor math, documents both fixes, names the operational follow-up (cycle Magnitu sync, optionally Danger zone → Clear all scores), and frames the structural fix as a Magnitu-side concept-floor distiller change.
+
+**New wiring.** None. No schema change, no API change. The deterministic scorer's tokenisation contract with Magnitu's distiller (`distiller.py` in the sibling **Magnitu v3** checkout) is intentionally **narrower** in Seismo: distiller still emits up to 5-grams in the recipe JSON, Seismo only fires on unigrams/bigrams/trigrams. `EntryScoreRepository::upsertRecipeScore()`'s precedence rule (Magnitu ML overlays recipe) is unchanged — Magnitu's ML output is still authoritative for any entry it has scored.
+
+**Gotchas.**
+- **Existing installs keep their saved `alert_threshold`.** Only new installs (and fallback paths where `system_config.alert_threshold` is null/empty) see 0.60. To apply on a running mothership: **Settings → Magnitu**, change the field, **Save preferences**.
+- **Mothership-only files.** Per `satellite-prune.json`, **`src/Controller/MagnituAdminController.php`** is removed from satellite bundles; the satellite upload list omits it. All other touched files (RecipeScorer, the read-only controllers, the view partial, README) ship to both.
+- **Re-upload `RecipeScorer.php` is enough to change visible scores on next ingest** — `RefreshAllService::recipeRescoreAfterIngest()` rescores only unscored rows. To rescore the whole tail with the trigram tokeniser, use **Settings → Magnitu → Danger zone → Clear all scores** (destructive — also wipes prior Magnitu badges until Magnitu re-pushes).
+- **Not a fix for the underlying weakness.** The recipe is distilled from an LR with `f1_macro = 0.44` over 822 labels (64 of them `investigation_lead`), so anchor weights stay small. Structural improvement is a Magnitu-side concept-floor in `distiller.py` (open product follow-up — see README "Strategic context").
+
+---
+
 ## Scraper: deleted sources no longer re-ingest on refresh (mothership)
 
 **Why.** Deleting a row in **Scraper → Sources** only removed it from `scraper_configs`. Matching `feeds` rows could remain with `source_type = 'scraper'`. `FeedItemRepository::listFeedsForScraperRefresh()` previously treated `source_type = 'scraper'` as enough to run **core:scraper**, even when the `scraper_configs` row was already gone — so **orphan** feeds still ingested (e.g. after **Settings → Diagnostics → Refresh all** on the mothership, or a **satellite** “Refresh” that calls `refresh_all_remote` on the mothership). Ingest looked like “deleted sources came back”.

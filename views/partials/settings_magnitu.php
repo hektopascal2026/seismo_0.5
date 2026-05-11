@@ -123,10 +123,10 @@ declare(strict_types=1);
                         <div>
                             <label for="alert_threshold" class="magnitu-field-label">Alert threshold (0.0 – 1.0)</label>
                             <input type="number" id="alert_threshold" name="alert_threshold"
-                                   value="<?= e((string)($magnituConfig['alert_threshold'] ?? '0.75')) ?>"
+                                   value="<?= e((string)($magnituConfig['alert_threshold'] ?? '0.60')) ?>"
                                    min="0" max="1" step="0.05"
                                    class="search-input" style="width:100%;">
-                            <div class="magnitu-field-hint">Entries scoring above this will be flagged as alerts once the dashboard reads this value.</div>
+                            <div class="magnitu-field-hint">Entries scoring above this will be flagged as alerts. Default lowered from 0.75 → 0.60 in May 2026 (see README "Scoring tuning"); raise it again once Magnitu's distiller emits stronger anchor-concept weights.</div>
                         </div>
                         <div>
                             <label class="magnitu-field-label">Default sort</label>

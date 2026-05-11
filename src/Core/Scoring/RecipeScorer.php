@@ -33,10 +33,25 @@ final class RecipeScorer
     private const SWISS_DICTIONARY_PATH = '/config/swiss_dictionary.json';
 
     /**
-     * Upper bound for n-gram phrases (unigrams through this many words). Matches
-     * longest CLIR dictionary translations; keep in sync with distiller if needed.
+     * Upper bound for n-gram phrases (unigrams through this many words).
+     *
+     * Set to **3** intentionally — see README section "Scoring tuning (May 2026)".
+     *
+     * Magnitu's distiller currently emits some 4- and 5-grams (e.g.
+     * `"category bekanntmachung bekanntmachung"`, `"english tight query"`). Those
+     * tend to be boilerplate matches that fire on every article from a given
+     * source, fragment the softmax denominator, and pull relevance toward the
+     * 0.4975 "no-signal" attractor of the formula
+     * `Σ P(class_i) × class_weight_i` with `class_weights = [1.0, 0.66, 0.33, 0]`.
+     *
+     * Trigrams cover every signal-bearing concept in the current recipe
+     * (e.g. `"member states only"`, `"third country"`, `"eu eea"`,
+     * `"equivalence decision"`) without that dilution. Keep in mind this
+     * intentionally diverges from Magnitu's distiller token window — the
+     * deterministic Seismo fallback is allowed to be a more conservative
+     * subset of the same feature space.
      */
-    private const MAX_NGRAM = 5;
+    private const MAX_NGRAM = 3;
 
     /**
      * Score one entry. Returns null when the recipe is missing / empty
@@ -73,6 +88,7 @@ final class RecipeScorer
         ) ?: [];
 
         // Unigrams through MAX_NGRAM-grams (space-joined), same shape as recipe/dictionary keys.
+        // MAX_NGRAM = 3 (intentional 5 → 3 rollback, see class docblock).
         $tokens = [];
         $count  = count($words);
         for ($i = 0; $i < $count; $i++) {

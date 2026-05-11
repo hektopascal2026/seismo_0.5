@@ -33,7 +33,7 @@ final class FeedController
         $feedsList  = [];
         $editRow    = null;
         $pageError  = null; // set on catch
-        $alertThreshold = 0.75;
+        $alertThreshold = 0.60;
 
         try {
             $pdo = getDbConnection();
