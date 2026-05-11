@@ -8,7 +8,7 @@ The codebase targets **PHP 8.2**, **MariaDB/MySQL**, and **vanilla PHP** (no Red
 
 **0.5.3** makes **RSS and scraper** refresh **chunked by default** (bounded batches per cron tick or per manual-refresh time budget, with cursor state in `system_config`) so shared hosts stay within PHP time limits with hundreds of sources. **`refresh_cron.php`** acquires a **MySQL advisory lock** so overlapping cron invocations (e.g. Plesk every minute while a tick is still running) exit immediately instead of duplicating fetches. **Settings → General** offers an opt-in **legacy** mode that restores the old single-pass sweep for RSS + scraper. **0.5.2** added **per-module refresh** on **Feeds**, **Scraper**, **Mail**, and **Lex** (one click runs only that area’s ingest), and keeps the **timeline** toolbar refresh light by skipping **Lex** legislation pulls (use **Settings → Diagnostics** or **cron** for a full run). **0.5.1** added **previews** on those module pages to validate sources before saving.
 
-**May 2026 tuning** — recipe scoring was clustering visibly around 48–52 (the formula’s no-signal attractor) after the n-gram expansion shipped on Apr 21. Three small adjustments to restore signal-to-noise are documented under **[Scoring tuning (May 2026)](#scoring-tuning-may-2026)** below: recipe n-gram window rolled back **5 → 3**, default alert threshold lowered **0.75 → 0.60**, and a one-time operational nudge to cycle Magnitu sync. None of these change schema or the API contract.
+**May 2026 tuning** — recipe scoring was clustering visibly around 48–52 (the formula’s no-signal attractor) after the n-gram expansion shipped on Apr 21. Three Seismo-side adjustments plus a Magnitu-side floor-weight fix restore signal-to-noise — documented under **[Scoring tuning (May 2026)](#scoring-tuning-may-2026)** below: recipe n-gram window rolled back **5 → 3**, default alert threshold lowered **0.75 → 0.60**, a one-time operational nudge to cycle Magnitu sync, and curated anchor concepts now ship at their seeded weights instead of being squashed by the export cap. None of these change schema or the API contract.
 
 ---
 
@@ -133,15 +133,32 @@ Operational checklist after this tuning lands:
 2. From the Magnitu v3 install (sibling checkout), run its **sync** (push scores). This walks all entries Magnitu has not yet scored and POSTs `magnitu_scores` back to Seismo.
 3. (Optional, only if you want a clean baseline) **Settings → Magnitu → Danger zone → Clear all scores** wipes `entry_scores` entirely. The next ingest will recipe-score new entries; the next Magnitu sync will overlay ML scores. **Warning:** this is genuinely destructive — manual training labels in `magnitu_labels` are unaffected, but every "Magnitu badge ≥ alert_threshold" you've ever seen in the timeline disappears until Magnitu re-posts.
 
-#### Strategic context: why these are tuning, not a fix
+#### 4. Floor-weighted anchor concepts (Magnitu-side, shipped May 2026)
 
-The 48–52 cluster is a *symptom* of a structural mismatch the May 2026 tuning **does not** resolve:
+Editorial premise: *every important Swiss story carries an international / trade / IR angle.* The curated phrase list in **`magnitu v3/distiller.py`** `LEGAL_TEMPLATE_PHRASES` (e.g. `member states only` IL+0.55, `third country` IL+0.45, `equivalence decision` IL+0.35, plus EU procedural priors `implementing act` noise+0.35, `corrigendum` noise+0.30, …) is the explicit encoding of that premise. Until May 2026 those seeded weights were being silently squashed back down to `recipe_max_phrase_abs = 0.24` by `_stabilize_export_weights`, so the editorial signal effectively disappeared on its way into the exported recipe.
 
-- The recipe is distilled from a logistic regression trained on 822 labels with `investigation_lead` represented in only 64 of them (≈ 8 %). The classifier's `f1_macro = 0.44` means the recipe weights are *correctly* small — there is no strong signal in the label set for the model to learn.
+`distiller._apply_floor_weights()` (new) runs after the cap step and restores each `(phrase, class)` pair in `LEGAL_TEMPLATE_PHRASES` to its seeded value when the cap clipped it lower. The cap still applies to every other learned coefficient and to user-configured `legal_signal_patterns` — the floor is reserved for the curated editorial list. Symmetric across signs: diagnostic IL phrases get sharper signal, EU procedural boilerplate (`implementing act`, `corrigendum`, `annex amendment`) gets sharper noise suppression at the same time.
+
+Effect on the PHP softmax in `RecipeScorer`, holding the rest of the recipe constant:
+
+| Anchor phrases firing | Pre-fix relevance (0.24 cap) | Post-fix relevance (seed value, e.g. 0.55) |
+|---|---|---|
+| 0 (no-signal attractor) | 0.498 | 0.498 |
+| 1 strong diagnostic | 0.529 | 0.575 |
+| 2 strong diagnostics | 0.567 | 0.668 |
+| 3 strong diagnostics | 0.602 | 0.754 |
+
+**No operator action required.** The next Magnitu sync (or **Settings → Magnitu → Regenerate recipe**) ships a recipe with the seeded weights present; Seismo's `RecipeScorer` reads them on the following refresh tick. **Alert threshold stays at 0.60** for now — single-anchor entries still don't badge (0.575 < 0.60), two+ anchors do. Raise to 0.70 manually in **Settings → Magnitu** if Lex-heavy Highlights become noisy after a Magnitu sync cycle; lower to 0.55 if anchors aren't surfacing enough.
+
+To roll back: delete `_apply_floor_weights()` and its single call site in `distill_recipe()` (Magnitu side); no Seismo change needed.
+
+#### Strategic context: what these address, what still remains
+
+The 48–52 cluster had two compounding causes; the May 2026 round resolves the second:
+
+- The recipe is distilled from a logistic regression trained on 822 labels with `investigation_lead` represented in only 64 of them (≈ 8 %). The classifier's `f1_macro = 0.44` means the recipe weights are *correctly* small — there is no strong signal in the label set for the model to learn. **Still unresolved**; only more / better labelling (Gemini synthetic batching, manual training) moves this.
 - The model's calibration step (`temperature = 2.45`) intentionally *softens* its raw probabilities to compensate for over-confidence. Seismo's recipe applies plain `T=1` softmax to the same weights, which would normally produce *more* peaked probabilities — except the weights are too small to peak anywhere.
-- Anchor concepts that **do** match the product mission ("Swiss firms carved out by foreign EU/EEA-only legislation") **are present** in the recipe (`member states only` IL+0.235, `third country` IL+0.193, `eu eea` IL+0.193, `drittstaaten` IL+0.120, `equivalence decision` IL+0.150, …) but their magnitudes are roughly **one third** of what's needed to clear a meaningful alert threshold.
-
-The structural fix is **Magnitu-side**: add a curated concept dictionary in `distiller.py` with **floor weights** (e.g. ≥ 0.6 for the IL column of `third_country_discrimination` family terms across all four languages). The LR can lift those further when labels confirm, but cannot suppress them below the floor. Until that ships, the Seismo-side tuning above is what makes the existing recipe operationally useful.
+- Curated anchor concepts (`member states only`, `eu eea`, `equivalence decision`, EU procedural priors, …) **were** the editorial-premise floor, but were being squashed to the 0.24 export cap. **Resolved by #4 above.** The LR can still lift these further when labels confirm; it can no longer suppress them below the floor.
 
 ### Export API (machine-readable)
 
