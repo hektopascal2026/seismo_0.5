@@ -9,6 +9,25 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Highlights — include recipe scores, not only Magnitu
+
+**Why.** Highlights only listed entries with `score_source = 'magnitu'`, so a Leg / Lex / feed item that Seismo had already recipe-scored above the alert threshold was invisible there until **Magnitu v3** completed its own pull → score → push cycle. With v3 running on a separate schedule (and sometimes offline for long stretches during model rebuilds), pertinent items routinely failed to reach Highlights even though they carried a deterministic score the user trusted. Recipe scoring already runs at the end of every ingest (`RefreshAllService::recipeRescoreAfterIngest()`), so the data is there — the filter was the bottleneck.
+
+**What moved.**
+- `src/Repository/EntryRepository.php` — renamed `getMagnituHighlightsTimeline()` → `getHighlightsTimeline()`; widened the WHERE filter from `score_source = 'magnitu'` to `score_source IN ('magnitu', 'recipe')`. Private helper `hydrateTimelineFromMagnituScoreRowsPreservingOrder()` renamed to `hydrateTimelineFromHighlightScoreRowsPreservingOrder()` for parity. Docblock updated to call out the new semantics and why the precedence rule keeps it safe (one row per `(entry_type, entry_id)`).
+- `src/Controller/MagnituHighlightsController.php` — calls the renamed repo method; empty-state hint key `'magnitu_highlights'` → `'highlights'`; class docblock rewritten to describe the widened scope and explain why the class name + `?action=magnitu` route are kept for URL stability (the nav label already reads "Highlights").
+- `views/magnitu.php` — page title "Magnitu highlights" → "Highlights"; subtitle "ML scores ≥ N%" → "Scores ≥ N%"; intro paragraph adds Leg to the family list and explicitly says both Magnitu and recipe scores qualify; empty-state hint key updated to match the controller.
+
+**New wiring.** None at the route or storage layer. `entry_scores` already enforces a PK on `(entry_type, entry_id)` and the upsert in `EntryScoreRepository::upsertRecipeScore()` preserves any prior Magnitu row, so widening the read filter cannot duplicate or down-grade scores — once Magnitu's ML output arrives the row flips back to `score_source = 'magnitu'` and the same item now ranks by the ML score it just received.
+
+**Gotchas.**
+- **Threshold reachability.** Per the May 2026 tuning entry below, the recipe attractor for no-signal content is ≈ 0.50 and the alert threshold default is 0.60. With the 3-gram window the bar for a recipe item to enter Highlights is "two or three anchor-concept matches in one document" — strong but achievable, especially for Leg (motion titles match keywords cleanly). Operators wanting a tighter Highlights list can raise `alert_threshold` under **Settings → Magnitu** without code changes.
+- **Score badges already work for recipe.** `views/partials/dashboard_entry_loop.php` reads `relevance_score` and `predicted_label` directly and never branched on `score_source`, so badge rendering needed no changes. Cards in the Highlights view look identical regardless of source.
+- **Empty-state copy updated.** The hint now also nudges the operator toward "wait for the next refresh to recipe-score new items" instead of only Magnitu, matching the new behaviour.
+- **Uploads.** Both files in `src/` and the view ship to **mothership and satellite** — `entry_scores` is local on every install so each satellite computes Highlights against its own scoring state. None of the touched paths are in `satellite-prune.json`.
+
+---
+
 ## Scoring tuning — n-gram window 5→3, alert threshold 0.75→0.60
 
 **Why.** Recipe-scored entries were clustering visibly at 48–52 in the timeline. Two structural causes: (1) the formula `Σ P(class_i) × class_weight_i` with default `class_weights = [1.0, 0.66, 0.33, 0.0]` resolves to **0.4975** for any unmatched entry (the "no-signal" attractor — displayed as 50); (2) the April 2026 expansion of `RecipeScorer::MAX_NGRAM` from 2 → 5 roughly doubled per-article matched-token count, and because many recipe keywords carry conflicting class signs (`iran`, `trump`, `ukraine`, `in der schweiz`, …) the softmax denominator softens toward uniform — i.e. toward 50. A complementary issue is that the recipe weights are too small for the 0.75 alert threshold to be reachable in practice: even three strong anchor concepts in one document (`member states only` + `third country` + `eu eea`) reach relevance ≈ 0.58.

@@ -1,6 +1,6 @@
 <?php
 /**
- * Magnitu highlights — entries with Magnitu score ≥ alert threshold (Slice 7a).
+ * Highlights — entries with a score (Magnitu or recipe) ≥ alert threshold.
  *
  * @var array<int, array<string, mixed>> $allItems
  * @var string $csrfField
@@ -21,8 +21,8 @@ declare(strict_types=1);
 $basePath = getBasePath();
 $accent   = seismoBrandAccent();
 
-$headerTitle    = 'Magnitu highlights';
-$headerSubtitle = 'ML scores ≥ ' . round($alertThreshold * 100) . '% (alert threshold)';
+$headerTitle    = 'Highlights';
+$headerSubtitle = 'Scores ≥ ' . round($alertThreshold * 100) . '% (alert threshold)';
 $activeNav      = 'magnitu';
 ?>
 <!DOCTYPE html>
@@ -51,9 +51,10 @@ $activeNav      = 'magnitu';
         <?php endif; ?>
 
         <p class="admin-intro">
-            Feed, email, and Lex entries whose current score is Magnitu-sourced and at or above your
-            <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=magnitu">alert threshold</a>.
-            Sorted newest-first. <a href="<?= e($basePath) ?>/index.php?action=index">← Timeline</a>
+            Feed, email, Lex, and Leg entries whose current score is at or above your
+            <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=magnitu">alert threshold</a>
+            — Magnitu (ML) and recipe scores both qualify. Sorted newest-first.
+            <a href="<?= e($basePath) ?>/index.php?action=index">← Timeline</a>
         </p>
 
         <?php if ($dashboardError !== null): ?>
@@ -73,10 +74,10 @@ $activeNav      = 'magnitu';
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
                 <div class="empty-state">
-                    <?php if ($emptyTimelineHint === 'magnitu_highlights'): ?>
+                    <?php if ($emptyTimelineHint === 'highlights'): ?>
                         <p>No entries match this threshold yet. Lower the alert threshold under
                             <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=magnitu">Settings → Magnitu</a>,
-                            or wait for Magnitu to score more items.</p>
+                            wait for the next refresh to recipe-score new items, or for Magnitu to score more items.</p>
                     <?php else: ?>
                         <p>No entries to show.</p>
                     <?php endif; ?>

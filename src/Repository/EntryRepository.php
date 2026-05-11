@@ -185,16 +185,24 @@ final class EntryRepository
     }
 
     /**
-     * Dashboard "Magnitu highlights": entries whose current score is Magnitu-sourced
-     * and at/above the configured alert threshold.
+     * Dashboard **Highlights**: entries whose current score (Magnitu **or** recipe)
+     * is at/above the configured alert threshold.
      *
-     * This list must not silently drop scored rows: page from `entry_scores`
-     * ordered by the entry's own timestamp (family-specific) and hydrate only
-     * the current window.
+     * Both score sources are surfaced — `entry_scores` has a unique PK on
+     * `(entry_type, entry_id)` and the precedence rule in
+     * {@see EntryScoreRepository::upsertRecipeScore()} guarantees there is at most
+     * one row per entry, so widening the filter cannot duplicate rows. Recipe
+     * scores are intentionally included so an item can reach Highlights from
+     * Seismo alone, without waiting for **Magnitu v3** to pull, score, and push
+     * back. Magnitu's ML output remains authoritative once it arrives (the
+     * UPSERT in `EntryScoreRepository` overwrites the recipe row).
+     *
+     * Ordered by the entry's own timestamp (family-specific) and hydrated only
+     * for the current window so scored rows are never silently dropped.
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getMagnituHighlightsTimeline(float $alertThreshold, int $limit, int $offset = 0): array
+    public function getHighlightsTimeline(float $alertThreshold, int $limit, int $offset = 0): array
     {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
@@ -230,7 +238,7 @@ final class EntryRepository
                    ON es.entry_type = \'lex_item\' AND li.id = es.entry_id
                  LEFT JOIN ' . $ce . ' ce
                    ON es.entry_type = \'calendar_event\' AND ce.id = es.entry_id
-                 WHERE es.score_source = \'magnitu\'
+                 WHERE es.score_source IN (\'magnitu\', \'recipe\')
                    AND es.relevance_score >= ?
                    AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
                  ORDER BY sort_ts DESC, es.scored_at DESC, es.id DESC
@@ -243,14 +251,14 @@ final class EntryRepository
             return [];
         }
 
-        return $this->hydrateTimelineFromMagnituScoreRowsPreservingOrder($scoreRows);
+        return $this->hydrateTimelineFromHighlightScoreRowsPreservingOrder($scoreRows);
     }
 
     /**
      * @param array<int, array<string, mixed>> $scoreRows
      * @return array<int, array<string, mixed>>
      */
-    private function hydrateTimelineFromMagnituScoreRowsPreservingOrder(array $scoreRows): array
+    private function hydrateTimelineFromHighlightScoreRowsPreservingOrder(array $scoreRows): array
     {
         /** @var array<string, array<string, mixed>> $best */
         $best = [];
