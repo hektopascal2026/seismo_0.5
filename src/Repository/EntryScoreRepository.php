@@ -327,6 +327,13 @@ final class EntryScoreRepository
      * Calendar events (Leg) without a Magnitu score (candidates for recipe
      * rescoring until Magnitu overwrites).
      *
+     * Newest-first order matches the sibling unscored queries
+     * ({@see getUnscoredFeedItems()}, {@see getUnscoredLexItems()},
+     * {@see getUnscoredEmails()}) — without it MariaDB returns InnoDB rows in
+     * PK order (ascending), so a backlog larger than {@see self::MAX_UNSCORED_LIMIT}
+     * unscored Leg rows would keep the newest events out of the recipe
+     * rescore batch until older rows acquire a Magnitu score.
+     *
      * @return array<int, array<string, mixed>>
      */
     public function getUnscoredCalendarEvents(int $limit): array
@@ -340,6 +347,7 @@ final class EntryScoreRepository
                           AND es.entry_id  = ce.id
                           AND es.score_source = \'magnitu\'
                    )
+                 ORDER BY ce.id DESC
                  LIMIT ' . $limit;
 
         return $this->runOrEmpty($sql, 'getUnscoredCalendarEvents');

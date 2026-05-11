@@ -9,6 +9,20 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Leg recipe rescore — deterministic newest-first on backlog
+
+**Why.** `EntryScoreRepository::getUnscoredCalendarEvents()` was the only "find rows without a Magnitu score" query missing an `ORDER BY`; sibling queries for feeds / Lex / emails all use `ORDER BY <table>.id DESC`. Without an explicit sort, MariaDB returns InnoDB rows in primary-key order (ascending), so any Leg backlog larger than `EntryScoreRepository::MAX_UNSCORED_LIMIT = 500` unscored rows keeps the **newest** parliamentary events out of the recipe rescore batch on every cron tick — they only enter the batch after older rows acquire a Magnitu score (which may never happen if Magnitu v3 is offline). Operationally this looked like "freshly ingested Leg items never get a badge". Unlikely to bite small instances today, but it's a real inconsistency with the rest of the unscored-row contract.
+
+**What moved.** `src/Repository/EntryScoreRepository.php` — one-line patch: `ORDER BY ce.id DESC` added before `LIMIT` in `getUnscoredCalendarEvents()`. Docblock extended with a one-paragraph note that names the sibling methods and the InnoDB PK-order fallback so the next reader sees why the clause is non-decorative.
+
+**New wiring.** None. No schema change, no API change, no behavioural change for instances under the 500-row backlog threshold. With the clause in place `ScoringService::rescoreCalendarEvents()` now reliably scores the most recent Leg rows first on every refresh cycle.
+
+**Gotchas.**
+- **Companion to the previous Highlights slice.** Now that Highlights surfaces recipe scores (commit `fc0681f`), the operational visibility of this bug increased — a newest Leg item that was never picked up by the rescorer would also stay out of Highlights even after the recipe filter was widened.
+- **Uploads.** `src/Repository/EntryScoreRepository.php` only — same path on mothership and satellite (not in `satellite-prune.json`). No DB migration; the change is purely SQL ordering inside one repo method.
+
+---
+
 ## Highlights — include recipe scores, not only Magnitu
 
 **Why.** Highlights only listed entries with `score_source = 'magnitu'`, so a Leg / Lex / feed item that Seismo had already recipe-scored above the alert threshold was invisible there until **Magnitu v3** completed its own pull → score → push cycle. With v3 running on a separate schedule (and sometimes offline for long stretches during model rebuilds), pertinent items routinely failed to reach Highlights even though they carried a deterministic score the user trusted. Recipe scoring already runs at the end of every ingest (`RefreshAllService::recipeRescoreAfterIngest()`), so the data is there — the filter was the bottleneck.
