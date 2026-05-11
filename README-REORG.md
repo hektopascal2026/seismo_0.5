@@ -9,6 +9,27 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Lex cards — use stored description; EUR-Lex enriched with EuroVoc subjects
+
+**Why.** Lex cards rendered as "title only" for two compounding reasons. (1) Three plugins (Légifrance, RechtBund, Fedlex Vernehmlassungen) already store a useful `description` — but the recipe scorer ignored it and passed the categorical `document_type` string as the body, so even on Magnitu's behalf the deterministic relevance had no real text to chew on. (2) EUR-Lex, Fedlex consolidated acts, and Jus never populate `description` at all — so even after fixing (1), EU cards stayed sparse. Pairs with the Highlights widening (commit `fc0681f`): scoring quality for Lex was the next bottleneck once recipe scores qualified for the Highlights surface.
+
+**What moved.**
+- `src/Repository/EntryScoreRepository.php` — `getUnscoredLexItems()` now also selects `li.description`. Docblock rewritten to name which plugins populate it and which still don't.
+- `src/Core/Scoring/ScoringService.php` — `rescoreLexItems()` reads `description` as the scoring body when non-empty and falls back to `document_type` otherwise. No precedence change; existing recipe scores are left alone (per the `getUnscoredLexItems()` contract).
+- `src/Plugin/LexEu/LexEuPlugin.php` — primary SPARQL unchanged. New private helper `enrichWithEurovocSubjects()` runs a second bounded query against the same Cellar endpoint with a `VALUES ?work { … }` clause over the URIs returned by the first query, fetching `cdm:work_is_about_concept_eurovoc` `skos:prefLabel` in the configured language with English fallback. Labels are deduplicated, naturally sorted, and concatenated into `description = "Subjects: a • b • c"` (top 12). A `try/catch` keeps a slow or failing second query from masking the main fetch — items still ingest with `description = null` in that case.
+
+**New wiring.** Two SPARQL calls per `LexEu::fetch()` instead of one. Cellar federates EuroVoc, so no new endpoint is needed. `LexItemRepository::upsertBatch()` already includes `description = VALUES(description)` in its `ON DUPLICATE KEY UPDATE`, so existing EUR-Lex rows backfill on the next refresh cycle as long as they're still inside the configured `lookback_days` window — no migration required.
+
+**Gotchas.**
+- **Existing recipe scores are not rescored.** Per `EntryScoreRepository::getUnscoredLexItems()`, recipe rescoring only touches rows that don't already have an `entry_scores` row, and the precedence rule in `upsertRecipeScore()` keeps Magnitu's ML output authoritative. Operators who want to retro-apply the improved scoring across the whole tail can hit **Settings → Magnitu → Danger zone → Clear all scores** — destructive, also wipes Magnitu badges until v3 re-pushes.
+- **EuroVoc language fallback.** When a concept has no `skos:prefLabel` in the configured language (often the case for niche concepts in DE/FR/IT), the second `OPTIONAL` block picks up the English label so descriptions stay informative for non-English admins. Items with no labels in either language stay without a description.
+- **Second SPARQL fails open.** A timeout or 5xx from Cellar on the subject query is logged via `error_log()` and the primary rows are returned unchanged — the failure mode is "EU cards look like before", not "no EU items ingested".
+- **Card rendering unchanged.** `views/partials/dashboard_entry_loop.php` (lines around 241–246) already renders `description` when it's present — no view change needed. Cards that get a description now show a 300-char preview and an Expand button.
+- **Out of scope.** Fedlex SPARQL consolidated acts and Jus (BGer/BGE/BVGer) still ship with `description = null` — those need separate work (deeper jolux probing for Fedlex; per-item HTTP scraping for Jus).
+- **Uploads.** Mothership-only: the two `src/` files are not in `satellite-prune.json` but `src/Plugin/` is — `LexEuPlugin.php` ships only with the mothership bundle. Satellites read enriched rows cross-DB once the mothership has refreshed.
+
+---
+
 ## Leg recipe rescore — deterministic newest-first on backlog
 
 **Why.** `EntryScoreRepository::getUnscoredCalendarEvents()` was the only "find rows without a Magnitu score" query missing an `ORDER BY`; sibling queries for feeds / Lex / emails all use `ORDER BY <table>.id DESC`. Without an explicit sort, MariaDB returns InnoDB rows in primary-key order (ascending), so any Leg backlog larger than `EntryScoreRepository::MAX_UNSCORED_LIMIT = 500` unscored rows keeps the **newest** parliamentary events out of the recipe rescore batch on every cron tick — they only enter the batch after older rows acquire a Magnitu score (which may never happen if Magnitu v3 is offline). Operationally this looked like "freshly ingested Leg items never get a badge". Unlikely to bite small instances today, but it's a real inconsistency with the rest of the unscored-row contract.

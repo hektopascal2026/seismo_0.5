@@ -97,6 +97,14 @@ final class ScoringService
 
     /**
      * @param array<string, mixed> $recipe
+     *
+     * Lex items rarely carry a real body in `lex_items` (no full document text
+     * stored), so we prefer `description` when the fetcher populated one:
+     * Légifrance `resumePrincipal`, RechtBund RSS body, Fedlex draft consultation
+     * lines, and EU EuroVoc subject synopsis. Falls back to the categorical
+     * `document_type` string for sources that still don't fill description
+     * (Fedlex consolidated acts, Jus). Pre-existing recipe scores are not
+     * touched — only rows surfaced by {@see EntryScoreRepository::getUnscoredLexItems()}.
      */
     private function rescoreLexItems(array $recipe, int $version): int
     {
@@ -104,10 +112,14 @@ final class ScoringService
         $done = 0;
         foreach ($rows as $row) {
             $sourceType = 'lex_' . (string)($row['source'] ?? 'eu');
+            $body = trim((string)($row['description'] ?? ''));
+            if ($body === '') {
+                $body = (string)($row['document_type'] ?? '');
+            }
             $result = RecipeScorer::score(
                 $recipe,
                 (string)($row['title'] ?? ''),
-                (string)($row['document_type'] ?? ''),
+                $body,
                 $sourceType,
             );
             if ($result === null) {

@@ -205,6 +205,103 @@ final class LexEuPlugin implements SourceFetcherInterface
             ];
         }
 
+        // Second bounded SPARQL — enrich each work with its EuroVoc subject
+        // labels. Kept as a separate query (not OPTIONAL/GROUP_CONCAT in the
+        // primary fetch) so a slow Cellar response on the deep concept join
+        // cannot collapse the main legislation feed. Failure is logged and
+        // items are still returned without a description.
+        $rows = self::enrichWithEurovocSubjects($sparql, $rows, $lang);
+
+        return $rows;
+    }
+
+    /**
+     * Fetch `cdm:work_is_about_concept_eurovoc` `skos:prefLabel` for every work
+     * we just returned and concatenate the labels into a short `Subjects: …`
+     * description. EUR-Lex Cellar federates EuroVoc, so a single second query
+     * against the same endpoint is enough — no separate EuroVoc client.
+     *
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private static function enrichWithEurovocSubjects(Client $sparql, array $rows, string $lang3): array
+    {
+        if ($rows === []) {
+            return $rows;
+        }
+
+        $workUris = [];
+        foreach ($rows as $r) {
+            $u = trim((string)($r['work_uri'] ?? ''));
+            if ($u !== '') {
+                $workUris[$u] = true;
+            }
+        }
+        if ($workUris === []) {
+            return $rows;
+        }
+
+        $lang2 = self::eurLexPathLang($lang3);
+        $values = implode(' ', array_map(static fn (string $u): string => '<' . $u . '>', array_keys($workUris)));
+
+        // The OPTIONAL English label gives us a graceful fallback for EuroVoc
+        // concepts that aren't translated in the configured language — keeps
+        // the description non-empty for DE/FR/IT operators on niche concepts.
+        $sq = '
+        PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
+        PREFIX skos: <http://www.w3.org/2004/skos/core#>
+
+        SELECT ?work ?primary ?fallback WHERE {
+            VALUES ?work { ' . $values . ' }
+            ?work cdm:work_is_about_concept_eurovoc ?ev .
+            OPTIONAL {
+                ?ev skos:prefLabel ?primary .
+                FILTER(LANGMATCHES(LANG(?primary), "' . $lang2 . '"))
+            }
+            OPTIONAL {
+                ?ev skos:prefLabel ?fallback .
+                FILTER(LANGMATCHES(LANG(?fallback), "EN"))
+            }
+        }';
+
+        try {
+            $subjectResults = $sparql->query($sq);
+        } catch (\Throwable $e) {
+            error_log('LexEuPlugin EuroVoc subject fetch failed (items kept without description): ' . $e->getMessage());
+            return $rows;
+        }
+
+        /** @var array<string, list<string>> $byWork */
+        $byWork = [];
+        foreach ($subjectResults as $sr) {
+            $w = trim((string)($sr->work ?? ''));
+            if ($w === '') {
+                continue;
+            }
+            $label = trim((string)($sr->primary ?? ''));
+            if ($label === '') {
+                $label = trim((string)($sr->fallback ?? ''));
+            }
+            if ($label === '') {
+                continue;
+            }
+            $byWork[$w] ??= [];
+            if (!in_array($label, $byWork[$w], true)) {
+                $byWork[$w][] = $label;
+            }
+        }
+
+        foreach ($rows as &$r) {
+            $w = trim((string)($r['work_uri'] ?? ''));
+            $labels = $byWork[$w] ?? [];
+            if ($labels === []) {
+                continue;
+            }
+            sort($labels, SORT_NATURAL | SORT_FLAG_CASE);
+            $r['description'] = 'Subjects: ' . implode(' • ', array_slice($labels, 0, 12));
+        }
+        unset($r);
+
         return $rows;
     }
 

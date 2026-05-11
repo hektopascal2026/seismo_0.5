@@ -251,15 +251,19 @@ final class EntryScoreRepository
 
     /**
      * Lex items (any source — Fedlex, EU, Légifrance, …) without a Magnitu
-     * score. Document type is returned so RecipeScorer can use it as the
-     * content body in lieu of the (usually empty) lex body column.
+     * score. `description` is returned so {@see ScoringService::rescoreLexItems()}
+     * can use it as the content body where the plugin populated one
+     * (Légifrance `resumePrincipal`, RechtBund RSS description, Fedlex draft
+     * consultations, EU EuroVoc subjects). `document_type` is the legacy
+     * fallback when description is null — Fedlex consolidated acts and Jus
+     * decisions still have no stored body.
      *
      * @return array<int, array<string, mixed>>
      */
     public function getUnscoredLexItems(int $limit): array
     {
         $limit = $this->clampLimit($limit);
-        $sql = 'SELECT li.id, li.title, li.document_type, li.source
+        $sql = 'SELECT li.id, li.title, li.description, li.document_type, li.source
                   FROM ' . entryTable('lex_items') . ' li
                  WHERE NOT EXISTS (
                        SELECT 1 FROM entry_scores es
