@@ -128,11 +128,24 @@ final class LexFedlexPlugin implements SourceFetcherInterface
         }, $typeIds));
 
         $until = date('Y-m-d', strtotime('+1 year'));
+
+        // Slice C (May 2026): enrich Fedlex acts with responsibilityOf
+        // (responsible federal office, 100% coverage on recent SR acts) and
+        // classifiedByTaxonomyEntry (parent / classifying act's full title,
+        // ~97% coverage). Both come back as ?label triples on the entity URI
+        // and are filtered to the configured short language tag via
+        // LANGMATCHES. Folded into the primary fetch via OPTIONAL + GROUP BY
+        // (SAMPLE for responsibility, GROUP_CONCAT for taxonomy) so a single
+        // round-trip per refresh tick still returns one row per act.
         $sparqlQuery = '
         PREFIX jolux: <http://data.legilux.public.lu/resource/ontology/jolux#>
-        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        PREFIX skos:  <http://www.w3.org/2004/02/skos/core#>
+        PREFIX xsd:   <http://www.w3.org/2001/XMLSchema#>
 
-        SELECT DISTINCT ?act ?title ?pubDate ?typeDoc
+        SELECT
+          ?act ?title ?pubDate ?typeDoc
+          (SAMPLE(?respLabelRaw) AS ?respLabel)
+          (GROUP_CONCAT(DISTINCT ?taxLabelRaw; SEPARATOR=" • ") AS ?taxLabel)
         WHERE {
             ?act a jolux:Act .
             ?act jolux:publicationDate ?pubDate .
@@ -142,7 +155,18 @@ final class LexFedlexPlugin implements SourceFetcherInterface
             ?expr jolux:language <http://publications.europa.eu/resource/authority/language/' . $lang . '> .
             FILTER(?typeDoc IN (' . $typeFilter . '))
             FILTER(?pubDate >= "' . $sinceDate . '"^^xsd:date && ?pubDate <= "' . $until . '"^^xsd:date)
+            OPTIONAL {
+                ?act jolux:responsibilityOf ?resp .
+                ?resp skos:prefLabel ?respLabelRaw .
+                FILTER(LANGMATCHES(LANG(?respLabelRaw), "' . $langPath . '"))
+            }
+            OPTIONAL {
+                ?act jolux:classifiedByTaxonomyEntry ?tx .
+                ?tx skos:prefLabel ?taxLabelRaw .
+                FILTER(LANGMATCHES(LANG(?taxLabelRaw), "' . $langPath . '"))
+            }
         }
+        GROUP BY ?act ?title ?pubDate ?typeDoc
         ORDER BY DESC(?pubDate)
         LIMIT ' . $limit . '
     ';
@@ -174,10 +198,14 @@ final class LexFedlexPlugin implements SourceFetcherInterface
             $docType = self::parseFedlexType($typeDoc);
             $fedlexUrl = 'https://www.fedlex.admin.ch/' . $eliId . '/' . $langPath;
 
+            $respLabel = trim((string)($row->respLabel ?? ''));
+            $taxLabel  = trim((string)($row->taxLabel ?? ''));
+            $description = self::composeFedlexDescription($title, $respLabel, $taxLabel);
+
             $rows[] = [
                 'celex' => $eliId,
                 'title' => $title,
-                'description' => null,
+                'description' => $description,
                 'document_date' => $dateDoc,
                 'document_type' => $docType,
                 'eurlex_url' => $fedlexUrl,
@@ -356,6 +384,38 @@ ORDER BY DESC(?eff)
         $title = (string) array_shift($filtered);
 
         return [$title, $filtered !== [] ? implode("\n\n", $filtered) : ''];
+    }
+
+    /**
+     * Compose a description from the SPARQL-enriched responsibility +
+     * taxonomy labels (Slice C). Responsibility is the responsible federal
+     * office; taxonomy entry is the parent / classifying act's full title
+     * (with date), which on amendment acts gives the only hint of the
+     * underlying regime. Format: `"<resp> — <tax>"` when both present.
+     *
+     * The taxonomy label is suppressed when it is verbatim-equal to the
+     * fetched act title — for new consolidated acts the two can collide
+     * exactly and the redundancy would just bloat the card. Otherwise
+     * both are surfaced; the dashboard partial truncates at 300 chars.
+     */
+    public static function composeFedlexDescription(string $title, string $respLabel, string $taxLabel): ?string
+    {
+        $resp = trim($respLabel);
+        $tax  = trim($taxLabel);
+
+        if ($tax !== '' && $tax === trim($title)) {
+            $tax = '';
+        }
+
+        if ($resp === '' && $tax === '') {
+            return null;
+        }
+
+        if ($resp !== '' && $tax !== '') {
+            return $resp . ' — ' . $tax;
+        }
+
+        return $resp !== '' ? $resp : $tax;
     }
 
     /**
