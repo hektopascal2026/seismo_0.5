@@ -104,7 +104,7 @@ $sourcesQs = 'action=scraper&view=sources';
                 <div class="admin-form-field">
                     <label>Date selector <input type="text" name="date_selector" class="search-input" style="width:100%;" value="<?= e((string)($editRow['date_selector'] ?? '')) ?>" placeholder="e.g. .date or //time[@datetime]"></label>
                 </div>
-                <p class="admin-hint">Date: simple CSS (tag, .class, #id, meta[…]) or raw XPath. Preview uses the same extractor as the planned 0.4 port.</p>
+                <p class="admin-hint">Date: simple CSS (tag, .class, #id, meta[…]) or raw XPath. Preview uses the same extractor as production. For SPRIND articles use <code>p.w-max.lining-nums</code> (not bare <code>p.lining-nums</code> on a listing URL). Link mode requires a <strong>non-empty</strong> link pattern (e.g. <code>/worte/magazin/</code>) — empty pattern scrapes only the page URL and dates will be wrong.</p>
                 <div class="admin-form-field">
                     <label>Exclude selectors <textarea name="exclude_selectors" class="search-input" style="width:100%; min-height:5rem; font-family: inherit;" rows="4" placeholder="One per line: .breadcrumb, #page-footer, nav.breadcrumbs"><?= e((string)($editRow['exclude_selectors'] ?? '')) ?></textarea></label>
                 </div>

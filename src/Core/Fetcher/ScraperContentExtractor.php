@@ -121,13 +121,28 @@ final class ScraperContentExtractor
         $xp = new DOMXPath($dom);
         $list = @$xp->query($xpQuery);
         if ($list === false || !($list instanceof DOMNodeList) || $list->length === 0) {
-            return self::tryGermanDateStrings($htmlForFallback);
+            // Do not scan the whole document when the selector matched nothing — listing
+            // pages often contain many teaser dates and the first wins (wrong article date).
+            return null;
         }
 
-        $node = $list->item(0);
-        if ($node === null) {
-            return self::tryGermanDateStrings($htmlForFallback);
+        for ($i = 0; $i < $list->length; $i++) {
+            $node = $list->item($i);
+            if ($node === null) {
+                continue;
+            }
+            $parsed = self::parseDateFromNode($node);
+            if ($parsed !== null) {
+                return $parsed;
+            }
         }
+
+        // Selector matched nodes but none parsed — last resort on this page only.
+        return self::tryGermanDateStrings($htmlForFallback);
+    }
+
+    private static function parseDateFromNode(DOMNode $node): ?string
+    {
         if ($node instanceof DOMElement) {
             $attrOrder = ['datetime', 'content', 'data-date', 'data-datetime', 'date'];
             foreach ($attrOrder as $attr) {
@@ -139,13 +154,15 @@ final class ScraperContentExtractor
                 }
             }
         }
-        $raw = $node->textContent ?? '';
-        $p   = self::strtotimeToDbUtc(trim($raw));
-        if ($p !== null) {
-            return $p;
+        $raw = trim($node->textContent ?? '');
+        if ($raw === '') {
+            return null;
+        }
+        if (preg_match('/^\d{1,2}\.\d{1,2}\.\d{2,4}$/u', $raw)) {
+            return self::strtotimeToDbUtc(str_replace('.', '-', $raw));
         }
 
-        return self::tryGermanDateStrings($htmlForFallback);
+        return self::strtotimeToDbUtc($raw);
     }
 
     private static function tryGermanDateStrings(string $html): ?string
@@ -276,11 +293,17 @@ final class ScraperContentExtractor
 
             return '//*[contains(concat(" ", normalize-space(@class), " "), " ' . $c . ' ")]';
         }
-        if (preg_match('/^([a-z0-9]+)\.([A-Za-z0-9_\-]+)$/i', $s, $m)) {
-            $tag = $m[1];
-            $c   = $m[2];
+        if (preg_match('/^([a-z0-9]+)((?:\.[A-Za-z0-9_\-]+)+)$/i', $s, $m)) {
+            $tag     = $m[1];
+            $classes = array_filter(explode('.', substr($m[2], 1)));
+            if ($classes !== []) {
+                $predicates = [];
+                foreach ($classes as $c) {
+                    $predicates[] = 'contains(concat(" ", normalize-space(@class), " "), " ' . $c . ' ")';
+                }
 
-            return '//' . $tag . '[contains(concat(" ", normalize-space(@class), " "), " ' . $c . ' ")]';
+                return '//' . $tag . '[' . implode(' and ', $predicates) . ']';
+            }
         }
         if (preg_match('/^[a-z0-9]+$/i', $s)) {
             return '//' . $s;

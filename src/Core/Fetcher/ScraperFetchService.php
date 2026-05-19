@@ -279,6 +279,9 @@ final class ScraperFetchService
             if (strpos($absolute, $linkPattern) === false) {
                 continue;
             }
+            if (!$this->hasArticleSlugBeyondListing($listingUrl, $canon)) {
+                continue;
+            }
             $dedupeKey = $this->normalizeUrlForCompare($canon);
             if (isset($seen[$dedupeKey])) {
                 continue;
@@ -305,6 +308,32 @@ final class ScraperFetchService
         $u = rtrim($url, '/');
 
         return strtolower($u);
+    }
+
+    /**
+     * Listing pages match the link pattern too (e.g. `/worte/magazin/`). Require at
+     * least one path segment after the listing directory so we ingest articles, not
+     * the index (which yields title "SPRIND | Magazin" and year-filter chrome).
+     */
+    private function hasArticleSlugBeyondListing(string $listingUrl, string $candidateUrl): bool
+    {
+        $basePath = parse_url($listingUrl, PHP_URL_PATH);
+        $candPath = parse_url($candidateUrl, PHP_URL_PATH);
+        if (!is_string($basePath) || !is_string($candPath)) {
+            return true;
+        }
+        $basePath = rtrim($basePath, '/') ?: '/';
+        $candPath = rtrim($candPath, '/') ?: '/';
+        if ($candPath === $basePath) {
+            return false;
+        }
+        $prefix = $basePath . '/';
+        if (!str_starts_with($candPath, $prefix)) {
+            return false;
+        }
+        $suffix = substr($candPath, strlen($prefix));
+
+        return $suffix !== '' && !str_contains($suffix, '/');
     }
 
     private function resolveAgainstBase(string $base, string $ref): string
