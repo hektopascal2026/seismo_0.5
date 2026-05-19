@@ -390,6 +390,8 @@ final class DiagnosticsController
             return;
         }
 
+        set_time_limit(300);
+
         $id = trim((string)($_POST['plugin_id'] ?? ''));
         $coreIds = [CoreRunner::ID_RSS, CoreRunner::ID_PARL_PRESS, CoreRunner::ID_SCRAPER, CoreRunner::ID_MAIL];
         $registry = new PluginRegistry();

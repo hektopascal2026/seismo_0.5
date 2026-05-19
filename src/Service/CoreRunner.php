@@ -47,8 +47,17 @@ final class CoreRunner
     private const CHUNK_RSS_FEEDS     = 12;
     private const CHUNK_SCRAPER_FEEDS = 8;
 
-    /** Wall-clock seconds for forced (web) runs to keep pulling chunks before yielding. */
-    private const CHUNK_WEB_TIME_BUDGET_SEC = 90;
+    /** Feeds per chunk when Diagnostics / module refresh runs a single `runOne()` pass. */
+    private const CHUNK_SCRAPER_FEEDS_WEB_SINGLE = 3;
+
+    /** Article cap per feed on forced (web) refresh — keeps one HTTP request under proxy limits. */
+    private const CHUNK_WEB_SCRAPER_MAX_ARTICLES = 8;
+
+    /**
+     * Wall-clock seconds for forced (web) "Refresh all" drain loops only.
+     * Stay under typical shared-host 60s proxy/FPM ceilings.
+     */
+    private const CHUNK_WEB_TIME_BUDGET_SEC = 45;
 
     /** Safety cap on chunk iterations per forced HTTP refresh. */
     private const CHUNK_WEB_MAX_LOOPS = 80;
@@ -81,28 +90,32 @@ final class CoreRunner
     public function runAll(bool $force): array
     {
         return [
-            self::ID_RSS         => $this->runRss($force),
+            self::ID_RSS         => $this->runRss($force, $force),
             self::ID_PARL_PRESS  => $this->runParlPress($force),
-            self::ID_SCRAPER     => $this->runScraper($force),
+            self::ID_SCRAPER     => $this->runScraper($force, $force),
             self::ID_MAIL        => $this->runMail($force),
         ];
     }
 
     /**
      * Run one core fetcher by id ({@see self::ID_RSS}, {@see self::ID_SCRAPER}, {@see self::ID_MAIL}).
+     *
+     * Per-fetcher Diagnostics "Refresh now" runs a **single** RSS/scraper chunk so the
+     * HTTP request stays within shared-host timeouts. Use "Refresh all" to drain the
+     * full cursor cycle within {@see self::CHUNK_WEB_TIME_BUDGET_SEC}.
      */
     public function runOne(string $coreId, bool $force): PluginRunResult
     {
         return match ($coreId) {
-            self::ID_RSS        => $this->runRss($force),
+            self::ID_RSS        => $this->runRss($force, false),
             self::ID_PARL_PRESS => $this->runParlPress($force),
-            self::ID_SCRAPER    => $this->runScraper($force),
+            self::ID_SCRAPER    => $this->runScraper($force, false),
             self::ID_MAIL       => $this->runMail($force),
             default             => PluginRunResult::error('Unknown core fetcher id: ' . $coreId),
         };
     }
 
-    private function runRss(bool $force): PluginRunResult
+    private function runRss(bool $force, bool $webDrainFullCycle = false): PluginRunResult
     {
         if (isSatellite()) {
             $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
@@ -114,7 +127,7 @@ final class CoreRunner
             return $this->runRssLegacy($force);
         }
 
-        if ($force) {
+        if ($force && $webDrainFullCycle) {
             $deadline = microtime(true) + self::CHUNK_WEB_TIME_BUDGET_SEC;
             $chunkItemSum = 0;
             $last         = PluginRunResult::ok(0);
@@ -343,7 +356,7 @@ final class CoreRunner
         return $r;
     }
 
-    private function runScraper(bool $force): PluginRunResult
+    private function runScraper(bool $force, bool $webDrainFullCycle = false): PluginRunResult
     {
         if (isSatellite()) {
             $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
@@ -355,12 +368,12 @@ final class CoreRunner
             return $this->runScraperLegacy($force);
         }
 
-        if ($force) {
+        if ($force && $webDrainFullCycle) {
             $deadline = microtime(true) + self::CHUNK_WEB_TIME_BUDGET_SEC;
             $chunkItemSum = 0;
             $last         = PluginRunResult::ok(0);
             for ($i = 0; $i < self::CHUNK_WEB_MAX_LOOPS && microtime(true) < $deadline; $i++) {
-                $last = $this->runScraperChunkedOnce($force);
+                $last = $this->runScraperChunkedOnce($force, self::CHUNK_SCRAPER_FEEDS);
                 if ($last->isThrottleSkipped()) {
                     return $last;
                 }
@@ -375,7 +388,7 @@ final class CoreRunner
             return new PluginRunResult('ok', $chunkItemSum, $msg, false);
         }
 
-        return $this->runScraperChunkedOnce($force);
+        return $this->runScraperChunkedOnce($force, self::CHUNK_SCRAPER_FEEDS_WEB_SINGLE);
     }
 
     private function runScraperLegacy(bool $force): PluginRunResult
@@ -410,13 +423,14 @@ final class CoreRunner
                         $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
                         $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
                         $excludeSels = trim((string)($feed['scraper_exclude_selectors'] ?? ''));
+                        $limits      = $this->scraperFetchLimits($force);
                         $out         = $this->scraper->fetchScraperFeedItems(
                             $url,
                             $linkPattern,
                             $dateSel,
                             $excludeSels,
-                            ScraperFetchService::PRODUCTION_MAX_ARTICLES,
-                            true
+                            $limits['maxArticles'],
+                            $limits['delayBetweenArticles']
                         );
                         if ($out['fatal_error'] !== null) {
                             throw new \RuntimeException($out['fatal_error']);
@@ -450,7 +464,7 @@ final class CoreRunner
         return $r;
     }
 
-    private function runScraperChunkedOnce(bool $force): PluginRunResult
+    private function runScraperChunkedOnce(bool $force, int $chunkFeedLimit = self::CHUNK_SCRAPER_FEEDS): PluginRunResult
     {
         $start = (int)(microtime(true) * 1000);
         try {
@@ -468,7 +482,8 @@ final class CoreRunner
                 $this->zeroScraperAccumulators();
             }
 
-            $batch = $this->feeds->listFeedsForScraperRefreshAfterId($afterId, self::CHUNK_SCRAPER_FEEDS);
+            $chunkFeedLimit = max(1, min($chunkFeedLimit, self::CHUNK_SCRAPER_FEEDS));
+            $batch = $this->feeds->listFeedsForScraperRefreshAfterId($afterId, $chunkFeedLimit);
             if ($batch === []) {
                 if ($afterId > 0) {
                     return $this->finalizeScraperChunkedCycle($start);
@@ -496,13 +511,14 @@ final class CoreRunner
                     $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
                     $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
                     $excludeSels = trim((string)($feed['scraper_exclude_selectors'] ?? ''));
+                    $limits      = $this->scraperFetchLimits($force);
                     $out         = $this->scraper->fetchScraperFeedItems(
                         $url,
                         $linkPattern,
                         $dateSel,
                         $excludeSels,
-                        ScraperFetchService::PRODUCTION_MAX_ARTICLES,
-                        true
+                        $limits['maxArticles'],
+                        $limits['delayBetweenArticles']
                     );
                     if ($out['fatal_error'] !== null) {
                         throw new \RuntimeException($out['fatal_error']);
@@ -522,7 +538,7 @@ final class CoreRunner
             }
 
             $this->addScraperAccumulators($total, $attempted, $failed);
-            if (count($batch) < self::CHUNK_SCRAPER_FEEDS) {
+            if (count($batch) < $chunkFeedLimit) {
                 return $this->finalizeScraperChunkedCycle($start);
             }
             $this->magnituConfig->set(self::K_SCRAPER_AFTER, (string)$maxId);
@@ -744,6 +760,19 @@ final class CoreRunner
         $this->record(self::ID_SCRAPER, $r, $duration);
 
         return $r;
+    }
+
+    /**
+     * @return array{maxArticles: int, delayBetweenArticles: bool}
+     */
+    private function scraperFetchLimits(bool $force): array
+    {
+        return [
+            'maxArticles'          => $force
+                ? self::CHUNK_WEB_SCRAPER_MAX_ARTICLES
+                : ScraperFetchService::PRODUCTION_MAX_ARTICLES,
+            'delayBetweenArticles' => !$force,
+        ];
     }
 
     /**
