@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 use PDO;
+use Seismo\Core\Mail\EmailIngestNormalizer;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
 
 /**
- * INSERT / upsert path for the unified `emails` table (IMAP ingestion).
+ * INSERT / upsert path for the unified `emails` table (IMAP + Gmail API).
  *
  * Retention stays on {@see EmailRepository}; reads stay on {@see EntryRepository}.
  * All SQL uses {@see entryTable()}. Mutating methods refuse satellite mode.
@@ -21,10 +22,6 @@ final class EmailIngestRepository
 
     /**
      * Upsert IMAP-fetched rows keyed by non-null `imap_uid` (unique in schema).
-     *
-     * Each element may contain: imap_uid, message_id, from_addr, to_addr, cc_addr,
-     * subject, from_email, from_name, date_utc, date_received, date_sent,
-     * body_text, body_html, raw_headers, text_body, html_body.
      *
      * @param list<array<string, mixed>> $rows
      */
@@ -39,13 +36,13 @@ final class EmailIngestRepository
 
         $t = entryTable('emails');
         $sql = 'INSERT INTO ' . $t . ' (
-            imap_uid, message_id, from_addr, to_addr, cc_addr,
+            imap_uid, gmail_message_id, message_id, from_addr, to_addr, cc_addr,
             subject, from_email, from_name, date_utc, date_received, date_sent,
-            body_text, body_html, raw_headers, text_body, html_body
+            body_text, body_html, raw_headers, metadata, text_body, html_body
         ) VALUES (
-            ?, ?, ?, ?, ?,
+            ?, NULL, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?
+            ?, ?, ?, NULL, ?, ?
         ) ON DUPLICATE KEY UPDATE
             message_id = VALUES(message_id),
             from_addr = VALUES(from_addr),
@@ -63,8 +60,107 @@ final class EmailIngestRepository
             text_body = VALUES(text_body),
             html_body = VALUES(html_body)';
 
-        $stmt = $this->pdo->prepare($sql);
+        return $this->executeBatch($sql, $rows, static function (array $row): ?int {
+            $uid = isset($row['imap_uid']) ? (int)$row['imap_uid'] : 0;
 
+            return $uid > 0 ? $uid : null;
+        }, static function (array $row): array {
+            return [
+                (int)$row['imap_uid'],
+                $row['message_id'],
+                $row['from_addr'],
+                $row['to_addr'],
+                $row['cc_addr'],
+                $row['subject'],
+                $row['from_email'],
+                $row['from_name'],
+                $row['date_utc'],
+                $row['date_received'],
+                $row['date_sent'],
+                $row['body_text'],
+                $row['body_html'],
+                $row['raw_headers'],
+                $row['text_body'],
+                $row['html_body'],
+            ];
+        });
+    }
+
+    /**
+     * Upsert Gmail API rows keyed by `gmail_message_id`.
+     *
+     * @param list<array<string, mixed>> $rows
+     */
+    public function upsertGmailBatch(array $rows): int
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('EmailIngestRepository::upsertGmailBatch must not run on a satellite.');
+        }
+        if ($rows === []) {
+            return 0;
+        }
+
+        $t = entryTable('emails');
+        $sql = 'INSERT INTO ' . $t . ' (
+            imap_uid, gmail_message_id, message_id, from_addr, to_addr, cc_addr,
+            subject, from_email, from_name, date_utc, date_received, date_sent,
+            body_text, body_html, raw_headers, metadata, text_body, html_body
+        ) VALUES (
+            NULL, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?
+        ) ON DUPLICATE KEY UPDATE
+            message_id = VALUES(message_id),
+            from_addr = VALUES(from_addr),
+            to_addr = VALUES(to_addr),
+            cc_addr = VALUES(cc_addr),
+            subject = VALUES(subject),
+            from_email = VALUES(from_email),
+            from_name = VALUES(from_name),
+            date_utc = VALUES(date_utc),
+            date_received = VALUES(date_received),
+            date_sent = VALUES(date_sent),
+            body_text = VALUES(body_text),
+            body_html = VALUES(body_html),
+            raw_headers = VALUES(raw_headers),
+            metadata = VALUES(metadata),
+            text_body = VALUES(text_body),
+            html_body = VALUES(html_body)';
+
+        return $this->executeBatch($sql, $rows, static function (array $row): ?string {
+            $id = trim((string)($row['gmail_message_id'] ?? ''));
+
+            return $id !== '' ? $id : null;
+        }, static function (array $row): array {
+            return [
+                $row['gmail_message_id'],
+                $row['message_id'],
+                $row['from_addr'],
+                $row['to_addr'],
+                $row['cc_addr'],
+                $row['subject'],
+                $row['from_email'],
+                $row['from_name'],
+                $row['date_utc'],
+                $row['date_received'],
+                $row['date_sent'],
+                $row['body_text'],
+                $row['body_html'],
+                $row['raw_headers'],
+                $row['metadata'],
+                $row['text_body'],
+                $row['html_body'],
+            ];
+        });
+    }
+
+    /**
+     * @param callable(array<string, mixed>): (int|string|null) $keyFilter
+     * @param callable(array<string, mixed>): list<mixed> $bindRow
+     */
+    private function executeBatch(string $sql, array $rows, callable $keyFilter, callable $bindRow): int
+    {
+        $stmt = $this->pdo->prepare($sql);
         $subs = (new EmailSubscriptionRepository($this->pdo))
             ->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
 
@@ -72,29 +168,11 @@ final class EmailIngestRepository
         try {
             $n = 0;
             foreach ($rows as $row) {
-                $uid = isset($row['imap_uid']) ? (int)$row['imap_uid'] : 0;
-                if ($uid <= 0) {
+                if ($keyFilter($row) === null) {
                     continue;
                 }
-                $row = $this->maybeStripListingBoilerplate($row, $subs);
-                $stmt->execute([
-                    $uid,
-                    $this->nullStr($row['message_id'] ?? null),
-                    $this->nullStr($row['from_addr'] ?? null),
-                    $this->nullStr($row['to_addr'] ?? null),
-                    $this->nullStr($row['cc_addr'] ?? null),
-                    $this->truncate($row['subject'] ?? null, 500),
-                    $this->truncate($row['from_email'] ?? null, 255),
-                    $this->truncate($row['from_name'] ?? null, 255),
-                    $this->nullStr($row['date_utc'] ?? null),
-                    $this->nullStr($row['date_received'] ?? null),
-                    $this->nullStr($row['date_sent'] ?? null),
-                    $this->nullStr($row['body_text'] ?? null),
-                    $this->nullStr($row['body_html'] ?? null),
-                    $this->nullStr($row['raw_headers'] ?? null),
-                    $this->nullStr($row['text_body'] ?? null),
-                    $this->nullStr($row['html_body'] ?? null),
-                ]);
+                $row = $this->prepareRow($row, $subs);
+                $stmt->execute($bindRow($row));
                 ++$n;
             }
             $this->pdo->commit();
@@ -104,6 +182,31 @@ final class EmailIngestRepository
             $this->pdo->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param list<array<string, mixed>> $subs
+     * @return array<string, mixed>
+     */
+    private function prepareRow(array $row, array $subs): array
+    {
+        $row = EmailIngestNormalizer::normalizeBodies($row);
+        $row = $this->maybeStripListingBoilerplate($row, $subs);
+
+        $row['message_id'] = $this->truncate($row['message_id'] ?? null, 512);
+        $row['subject']    = $this->truncate($row['subject'] ?? null, 500);
+        $row['from_email'] = $this->truncate($row['from_email'] ?? null, 255);
+        $row['from_name']  = $this->truncate($row['from_name'] ?? null, 255);
+
+        foreach ([
+            'from_addr', 'to_addr', 'cc_addr', 'date_utc', 'date_received', 'date_sent',
+            'body_text', 'body_html', 'raw_headers', 'text_body', 'html_body', 'metadata',
+        ] as $k) {
+            $row[$k] = $this->nullStr($row[$k] ?? null);
+        }
+
+        return $row;
     }
 
     /**

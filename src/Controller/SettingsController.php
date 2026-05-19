@@ -13,6 +13,8 @@ use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\MagnituLabelRepository;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Core\Mail\GmailOAuthService;
+use Seismo\Core\Mail\MailConfigKeys;
 use Seismo\Service\CoreRunner;
 use Seismo\Service\RetentionService;
 
@@ -51,6 +53,15 @@ final class SettingsController
      * @var list<string>
      */
     private const MAIL_CONFIG_KEYS = [
+        MailConfigKeys::TRANSPORT,
+        MailConfigKeys::GOOGLE_CLIENT_ID,
+        MailConfigKeys::GOOGLE_CLIENT_SECRET,
+        MailConfigKeys::GOOGLE_REFRESH_TOKEN,
+        MailConfigKeys::GOOGLE_EMAIL,
+        MailConfigKeys::GMAIL_HISTORY_ID,
+        MailConfigKeys::GMAIL_LAST_SYNC_AT,
+        MailConfigKeys::GMAIL_CATCHUP_DAYS,
+        MailConfigKeys::MAX_MESSAGES,
         'mail_imap_mailbox',
         'mail_imap_username',
         'mail_imap_password',
@@ -58,7 +69,6 @@ final class SettingsController
         'mail_imap_port',
         'mail_imap_flags',
         'mail_imap_folder',
-        'mail_max_messages',
         'mail_search_criteria',
         'mail_mark_seen',
     ];
@@ -117,8 +127,11 @@ final class SettingsController
         $satellitesSuggestedRefreshKey        = '';
         $satellitesHighlightSlug              = '';
 
-        $mailConfig           = array_fill_keys(self::MAIL_CONFIG_KEYS, null);
-        $mailPasswordOnFile   = false;
+        $mailConfig              = array_fill_keys(self::MAIL_CONFIG_KEYS, null);
+        $mailPasswordOnFile      = false;
+        $mailGoogleSecretOnFile  = false;
+        $mailGmailConnected      = false;
+        $mailOAuthRedirectUri    = '';
 
         $migrateKeyConfigured      = false;
         $configLocalWritable       = false;
@@ -164,6 +177,11 @@ final class SettingsController
                 }
                 $pw = $config->get('mail_imap_password');
                 $mailPasswordOnFile = $pw !== null && $pw !== '';
+                $sec = $config->get(MailConfigKeys::GOOGLE_CLIENT_SECRET);
+                $mailGoogleSecretOnFile = $sec !== null && $sec !== '';
+                $oauth = new GmailOAuthService($config);
+                $mailGmailConnected   = $oauth->isConnected();
+                $mailOAuthRedirectUri = $oauth->redirectUri();
             } catch (\Throwable $e) {
                 error_log('Seismo settings mail: ' . $e->getMessage());
                 $pageError = 'Could not load mail settings. Check error_log for details.';
@@ -268,66 +286,83 @@ final class SettingsController
             return;
         }
 
-        $mailbox  = trim((string)($_POST['mail_imap_mailbox'] ?? ''));
-        $username = trim((string)($_POST['mail_imap_username'] ?? ''));
-        $host     = trim((string)($_POST['mail_imap_host'] ?? ''));
-        $flags    = trim((string)($_POST['mail_imap_flags'] ?? ''));
-        $folder   = trim((string)($_POST['mail_imap_folder'] ?? ''));
-
-        $portRaw = trim((string)($_POST['mail_imap_port'] ?? ''));
-        $port    = $portRaw === '' ? 0 : (int)$portRaw;
-        if ($port < 0 || $port > 65535) {
-            $port = 0;
-        }
-
-        $maxRaw = trim((string)($_POST['mail_max_messages'] ?? ''));
-        $max    = $maxRaw === '' ? 50 : (int)$maxRaw;
-        if ($max < 1) {
-            $max = 1;
-        }
-        if ($max > 500) {
-            $max = 500;
-        }
-
-        $criteria = trim((string)($_POST['mail_search_criteria'] ?? ''));
-        if ($criteria === '') {
-            $criteria = 'UNSEEN';
-        }
-
-        $markSeen = isset($_POST['mail_mark_seen']) ? '1' : '0';
-
-        $newPassword = (string)($_POST['mail_imap_password'] ?? '');
+        $form = trim((string)($_POST['mail_settings_form'] ?? 'gmail'));
 
         try {
             $cfg = new SystemConfigRepository(getDbConnection());
-            $cfg->set('mail_imap_username', $username);
-            $cfg->set('mail_max_messages', (string)$max);
-            $cfg->set('mail_search_criteria', $criteria);
-            $cfg->set('mail_mark_seen', $markSeen);
 
-            if ($newPassword !== '') {
-                $cfg->set('mail_imap_password', $newPassword);
-            }
+            if ($form === 'imap_legacy') {
+                $mailbox  = trim((string)($_POST['mail_imap_mailbox'] ?? ''));
+                $username = trim((string)($_POST['mail_imap_username'] ?? ''));
+                $host     = trim((string)($_POST['mail_imap_host'] ?? ''));
+                $flags    = trim((string)($_POST['mail_imap_flags'] ?? ''));
+                $folder   = trim((string)($_POST['mail_imap_folder'] ?? ''));
 
-            if ($mailbox !== '') {
-                $cfg->set('mail_imap_mailbox', $mailbox);
-                $cfg->set('mail_imap_host', '');
-                $cfg->set('mail_imap_port', '');
-                $cfg->set('mail_imap_flags', '');
-                $cfg->set('mail_imap_folder', '');
-            } else {
-                $cfg->set('mail_imap_mailbox', '');
-                $cfg->set('mail_imap_host', $host);
-                if ($port > 0) {
-                    $cfg->set('mail_imap_port', (string)$port);
-                } else {
-                    $cfg->set('mail_imap_port', '');
+                $portRaw = trim((string)($_POST['mail_imap_port'] ?? ''));
+                $port    = $portRaw === '' ? 0 : (int)$portRaw;
+                if ($port < 0 || $port > 65535) {
+                    $port = 0;
                 }
-                $cfg->set('mail_imap_flags', $flags);
-                $cfg->set('mail_imap_folder', $folder);
-            }
 
-            $_SESSION['success'] = 'Mail settings saved.';
+                $criteria = trim((string)($_POST['mail_search_criteria'] ?? ''));
+                if ($criteria === '') {
+                    $criteria = 'UNSEEN';
+                }
+                $markSeen    = isset($_POST['mail_mark_seen']) ? '1' : '0';
+                $newPassword = (string)($_POST['mail_imap_password'] ?? '');
+
+                $cfg->set(MailConfigKeys::TRANSPORT, MailConfigKeys::TRANSPORT_IMAP_LEGACY);
+                $cfg->set('mail_imap_username', $username);
+                $cfg->set('mail_search_criteria', $criteria);
+                $cfg->set('mail_mark_seen', $markSeen);
+                if ($newPassword !== '') {
+                    $cfg->set('mail_imap_password', $newPassword);
+                }
+                if ($mailbox !== '') {
+                    $cfg->set('mail_imap_mailbox', $mailbox);
+                    $cfg->set('mail_imap_host', '');
+                    $cfg->set('mail_imap_port', '');
+                    $cfg->set('mail_imap_flags', '');
+                    $cfg->set('mail_imap_folder', '');
+                } else {
+                    $cfg->set('mail_imap_mailbox', '');
+                    $cfg->set('mail_imap_host', $host);
+                    $cfg->set('mail_imap_port', $port > 0 ? (string)$port : '');
+                    $cfg->set('mail_imap_flags', $flags);
+                    $cfg->set('mail_imap_folder', $folder);
+                }
+                $_SESSION['success'] = 'Legacy IMAP settings saved.';
+            } else {
+                $googleClientId = trim((string)($_POST['mail_google_client_id'] ?? ''));
+                $googleSecret   = (string)($_POST['mail_google_client_secret'] ?? '');
+
+                $catchupRaw  = trim((string)($_POST['mail_gmail_catchup_days'] ?? ''));
+                $catchupDays = $catchupRaw === '' ? 7 : (int)$catchupRaw;
+                if ($catchupDays < 1) {
+                    $catchupDays = 1;
+                }
+                if ($catchupDays > 30) {
+                    $catchupDays = 30;
+                }
+
+                $maxRaw = trim((string)($_POST['mail_max_messages'] ?? ''));
+                $max    = $maxRaw === '' ? 50 : (int)$maxRaw;
+                if ($max < 1) {
+                    $max = 1;
+                }
+                if ($max > 500) {
+                    $max = 500;
+                }
+
+                $cfg->set(MailConfigKeys::TRANSPORT, MailConfigKeys::TRANSPORT_GMAIL_API);
+                $cfg->set(MailConfigKeys::GOOGLE_CLIENT_ID, $googleClientId);
+                $cfg->set(MailConfigKeys::GMAIL_CATCHUP_DAYS, (string)$catchupDays);
+                $cfg->set(MailConfigKeys::MAX_MESSAGES, (string)$max);
+                if ($googleSecret !== '') {
+                    $cfg->set(MailConfigKeys::GOOGLE_CLIENT_SECRET, $googleSecret);
+                }
+                $_SESSION['success'] = 'Gmail settings saved.';
+            }
         } catch (\Throwable $e) {
             error_log('Seismo settings_save_mail: ' . $e->getMessage());
             $_SESSION['error'] = 'Could not save mail settings.';

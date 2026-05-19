@@ -183,6 +183,26 @@ $router->register(
     false
 );
 $router->register(
+    'mail_google_oauth_start',
+    \Seismo\Controller\MailGoogleOAuthController::class . '::startConnect',
+    false
+);
+$router->register(
+    'mail_google_oauth_callback',
+    \Seismo\Controller\MailGoogleOAuthController::class . '::callback',
+    true
+);
+$router->register(
+    'mail_google_disconnect',
+    \Seismo\Controller\MailGoogleOAuthController::class . '::disconnect',
+    false
+);
+$router->register(
+    'mail_gmail_catchup',
+    \Seismo\Controller\MailGoogleOAuthController::class . '::catchUp',
+    false
+);
+$router->register(
     'settings_save_magnitu',
     \Seismo\Controller\MagnituAdminController::class . '::saveConfig',
     false

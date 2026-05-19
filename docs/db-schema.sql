@@ -89,9 +89,10 @@ CREATE TABLE IF NOT EXISTS feed_items (
 -- entry_type='email' in scoring tables refers to rows here.
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS emails (
-    id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    imap_uid      BIGINT UNSIGNED DEFAULT NULL,
-    message_id    VARCHAR(512) DEFAULT NULL,
+    id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    imap_uid          BIGINT UNSIGNED DEFAULT NULL,
+    gmail_message_id  VARCHAR(32) DEFAULT NULL,
+    message_id        VARCHAR(512) DEFAULT NULL,
     from_addr     TEXT NULL,
     to_addr       TEXT NULL,
     cc_addr       TEXT NULL,
@@ -99,6 +100,7 @@ CREATE TABLE IF NOT EXISTS emails (
     body_text     LONGTEXT NULL,
     body_html     LONGTEXT NULL,
     raw_headers   LONGTEXT NULL,
+    metadata      JSON DEFAULT NULL,
     subject       VARCHAR(500) DEFAULT NULL,
     from_email    VARCHAR(255) DEFAULT NULL,
     from_name     VARCHAR(255) DEFAULT NULL,
@@ -108,6 +110,7 @@ CREATE TABLE IF NOT EXISTS emails (
     date_sent     DATETIME  DEFAULT NULL,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uniq_emails_imap_uid (imap_uid),
+    UNIQUE KEY uniq_emails_gmail_message_id (gmail_message_id),
     INDEX idx_created_at    (created_at),
     INDEX idx_from_email    (from_email),
     INDEX idx_date_received (date_received)

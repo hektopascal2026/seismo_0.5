@@ -113,6 +113,8 @@ final class EmailListingBoilerplateStripper
             "if you can't read this e-mail in your",
             'this email is best viewed in your browser',
             'this e-mail is best viewed in your browser',
+            'this email requires a modern e-mail reader',
+            'this email requires a modern email reader',
             // English — image display
             'if images are not displaying',
             'if the images in this email are not',

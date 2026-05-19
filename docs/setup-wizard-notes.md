@@ -95,3 +95,13 @@ On an empty database, migration applies `docs/db-schema.sql` and sets `schema_ve
 - **PDO test** happens inside `SetupController::handlePost()` before any write. **Write path:** if the install root is not writable (or `file_put_contents` fails), the UI shows a **copy-and-paste** block; we never suggest `chmod 0777` and never stash secrets under `/tmp`.
 - **Clipboard safety:** the generated PHP must not be passed through `htmlspecialchars` for display inside a `<pre>` — that would corrupt `<?php` for copy/paste. `views/setup.php` assigns the textarea from `json_encode` in a `<script>` block instead.
 - **Auth:** `AuthGate` allows `setup` without a logged-in session **only** while `config.local.php` is absent. Once the file exists, `setup` follows normal session rules (login required when `SEISMO_ADMIN_PASSWORD_HASH` is set).
+
+### Gmail API mail ingest (Slice 11)
+
+- **Recommended path:** Settings → Mail → Google Cloud OAuth client (Web application) with redirect URI exactly as shown on the page (`{scheme}://{host}{basePath}/index.php?action=mail_google_oauth_callback`). Enable **Gmail API** on the project. Scope is read-only (`gmail.readonly`).
+- **Consent screen:** External/testing mode only allows listed test users until the app is verified — add the inbox address as a test user or use Internal (Workspace) when applicable.
+- **Refresh token:** First connect must use **Connect Google account** (prompt=consent). If Google returns no refresh token, revoke the app under Google Account → Third-party access and connect again.
+- **Schema 29:** run `?action=migrate&key=…` once after deploy (`Migration013EmailGmail` — `gmail_message_id`, `metadata` JSON on `emails`).
+- **Composer on server:** upload `vendor/` after `composer install` locally (adds `google/apiclient`, `fivefilters/readability.php`, `league/html-to-markdown`). Shared hosts without Composer on the server need the full vendor tree uploaded.
+- **Catch up:** Settings → Mail → **Catch up inbox** re-fetches a bounded window (default 7 days) when history cursor drifted.
+- **Legacy IMAP:** still available under “Legacy IMAP” on the same tab; not recommended for Gmail. Default `mail_mark_seen` is off for new saves.

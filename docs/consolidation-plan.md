@@ -1,6 +1,6 @@
 # Seismo 0.5 — consolidation plan
 
-> **Status (2026-05-11): 0.5 consolidation closed.** Every numbered slice in this document (0 → 1 → 1.5b → 2 → 3 → 4 → 5 → 5a → 6 → 7 → 7a → 8 → 9 → 10) is **shipped**. There is no Slice 11. Ongoing work is **operational maintenance and product follow-ups** (e.g. the **Open decisions** at the bottom of this file, and post-Slice 10 entries on top of `README-REORG.md`), not "still finishing the rewrite". Pre-agreed graduation paths (async rescore in Slice 5b, FULLTEXT search, "test fetch" for core fetchers) remain documented here so they can be picked up *if* observed pain warrants them — not as work owed before declaring the consolidation done.
+> **Status (2026-05-11): 0.5 consolidation closed.** Numbered slices **0 → 10** are **shipped**. **Slices 11+** are **post-consolidation product follow-ups** (not part of the original rewrite closure). Pre-agreed graduation paths (async rescore in Slice 5b, FULLTEXT search, "test fetch" for core fetchers) remain documented here so they can be picked up *if* observed pain warrants them — not as work owed before declaring the consolidation done.
 
 Living document. Captures the architectural north star and the **order of work** when porting from 0.4. Update as decisions change.
 
@@ -283,7 +283,111 @@ The "last-mile polish" slice. Closes three small ergonomics gaps (dashboard refr
 
 **Definition of done:** `README.md` answers “how do I run this?” at a glance; stale plan bullets are fixed; `README-REORG.md` records Slice 10.
 
-**Consolidation arc.** Slices **7a → 8 → 9** shipped the feature arc; **Slice 10** is a documentation-only capstone in this document. **No Slice 11** is defined here — further work is tracked as follow-ups or product decisions (Magnitu companion, optional Magnitu API tweaks, etc.). Sophisticated scoring belongs in **Magnitu**; the PHP `RecipeScorer` stays the cheap deterministic fallback.
+**Consolidation arc.** Slices **7a → 8 → 9** shipped the feature arc; **Slice 10** is a documentation-only capstone in this document. **Slices 11–12** define the first post-consolidation mail track: Gmail-first reliability, then List-Id/legacy-IMAP hardening. Sophisticated scoring belongs in **Magnitu**; the PHP `RecipeScorer` stays the cheap deterministic fallback.
+
+### Slice 11 — Gmail-native mail ingest reliability + body quality — **implemented (pending live verify)**
+
+**Why (lay terms).** Seismo reliability now depends on legacy IMAP semantics (`UNSEEN`, mark-seen, mailbox quirks). That is exactly why Gmail and Seismo drift today. We optimize for the real use case: **Gmail inbox as the source of truth**. Slice 11 makes Gmail API + OAuth the primary ingest path and fixes newsletter text extraction so cards show article content, not boilerplate links.
+
+**Product decision (explicit):** for Seismo 0.5 mothership installs where mail matters, **Google OAuth is the default and recommended path**. IMAP remains legacy fallback for non-Google providers only.
+
+**What.**
+
+1. **Google OAuth + Gmail API as default transport.**
+   - Add Settings → Mail flow: **Connect Google account** / **Disconnect**.
+   - OAuth scope: `https://www.googleapis.com/auth/gmail.readonly` only.
+   - Persist OAuth client id/secret + refresh token in `system_config` (`mail_google_client_id`, `mail_google_client_secret`, `mail_google_refresh_token`); never commit real values.
+   - `CoreRunner` mail path reads `mail_transport` and defaults to `gmail_api` for new installs.
+
+2. **Reliable incremental sync (no unread semantics).**
+   - `Seismo\Core\Mail\GmailApiInboxClient` uses Gmail `historyId` progression (plus bootstrap backfill) instead of unread/search flags.
+   - Persist watermark keys in `system_config` (`mail_gmail_history_id`, plus last successful sync timestamp).
+   - Add **Catch up inbox** action for manual recovery (bounded window) without SQL edits.
+   - Dedup for Gmail rows is based on stable Gmail message id / RFC `message_id` mapping; migration **v29** adds required uniqueness support and docs the exact index strategy.
+
+3. **HTML → readable body pipeline (library-based).**
+   - Replace one-line `strip_tags` fallback with `Seismo\Core\Mail\NewsletterBodyExtractor`:
+     - `fivefilters/readability.php` for main-article extraction.
+     - `league/html-to-markdown` (or equivalent) for clean text body.
+   - Keep raw HTML in DB; store cleaned text for cards/scoring/export.
+   - Keep `EmailListingBoilerplateStripper` as thin post-pass only for known residuals.
+
+4. **Mail metadata for robust classification (prep).**
+   - Parse/store `List-Id`, `List-Unsubscribe`, `Precedence`, `Sender` in `emails.metadata` JSON (migration **v29** if not already done by dedup migration split; otherwise next version number in implementation).
+   - Use metadata in diagnostics visibility first; subscription matching rewrite is Slice 12.
+
+5. **Tests + operator docs.**
+   - Add fixture tests for ECOWAS / UN / News Service Bund HTML to assert headline/body extraction quality.
+   - Add OAuth failure-path tests (bad `state`, invalid token refresh).
+   - Document Google Cloud setup + consent-screen pitfalls in `docs/setup-wizard-notes.md`.
+
+**Composer (mail-only additions):** `google/apiclient` (or equivalent Google auth stack), `fivefilters/readability.php`, `league/html-to-markdown`.
+
+**Explicitly out of Slice 11:**
+
+- Full List-Id-based subscription matching UI logic.
+- Multi-mailbox support.
+- Sending mail / label writes in Gmail API.
+- Forcing satellites to fetch mail (still mothership-only).
+
+**Definition of done:**
+
+- Fresh mothership admin can connect Gmail, run refresh, and ingest reliably without unread/read coupling.
+- ECOWAS + UN fixtures produce article-first preview text (not only “view in browser” boilerplate).
+- Cron + web refresh still share `CoreRunner` pipeline.
+- Invalid OAuth callback state is rejected; expired refresh token surfaces reconnect guidance.
+- Gemini spot-check on Gmail ingest + extractor + email ingest repository.
+- Live smoke test on `https://www.hektopascal.org/seismo/`.
+
+**Rollback:** disable Gmail transport (`mail_transport=imap_legacy`), remove Google token keys, revert PHP/composer changes, run documented rollback for the migration that introduced Gmail dedup/watermark storage.
+
+---
+
+### Slice 12 — Post-Gmail hardening: List-Id matching + IMAP legacy demotion — **planned**
+
+**Why (lay terms).** After Gmail-native ingest is live, two follow-ups improve maintainability: (1) stop classifying newsletters mainly by sender heuristics; (2) make IMAP an explicit legacy compatibility path, not a co-equal architecture.
+
+**What.**
+
+1. **Subscription matching on standards metadata.**
+   - Extend `EmailSubscriptionRepository` matching precedence:
+     1) `List-Id`,
+     2) explicit sender email,
+     3) sender domain fallback.
+   - Mail UI explains which key matched each card/subscription decision.
+
+2. **Transport policy and UX cleanup.**
+   - Rename IMAP mode to `imap_legacy` in UI and docs.
+   - New-install defaults: Gmail OAuth path; IMAP settings collapsed behind “Use non-Google provider”.
+   - Add health/diagnostics warnings when running Gmail mailboxes on IMAP legacy mode.
+
+3. **Operational hardening.**
+   - Add dead-letter table or structured failure store for ingest/parsing failures.
+   - Add replay command/action for failed message ids.
+   - Add mail-pipeline metrics in diagnostics (fetched, deduped, failed parse, extracted-empty).
+
+4. **Setup wizard alignment.**
+   - Wizard presents Gmail OAuth as primary path, IMAP as advanced fallback.
+   - Copy-paste fallback remains for hosts where admin edits config manually.
+
+**Explicitly out of Slice 12:**
+
+- Removing IMAP code entirely (still needed for non-Google providers).
+- Multi-account Gmail tenancy.
+- Changes to Magnitu API/auth model.
+
+**Definition of done:**
+
+- List-Id-driven matching works on real newsletters and reduces manual subscription grooming.
+- New setup defaults clearly guide users to Gmail OAuth first.
+- IMAP is visibly marked legacy, with no regression for non-Google installs.
+- Diagnostics provides actionable ingest failure visibility and replay path.
+
+**Rollback:** revert repository/UI changes for matching precedence; keep Gmail OAuth transport from Slice 11 intact.
+
+**Relationship to Slice 11:** Slice 12 starts only after Slice 11 is live-tested and spot-checked; it hardens and simplifies operations around the Gmail-first architecture.
+
+---
 
 ## Portability checklist (applies to every slice)
 
@@ -343,6 +447,9 @@ Recorded here so they don't get re-litigated:
 - **Dashboard filter pills:** ~~`EntryRepository::getFilterPillOptions()` runs three `SELECT DISTINCT` queries per request~~ — **Slice 6** adds a ~60s session cache for the merged options array. Cache lives in `DashboardController::getFilterPillOptionsCached()`; the repository method is still pure-SQL.
 - **Scraper / feed_items sort churn:** `FeedItemRepository::upsertFeedItems()` keeps the existing `published_date` when `content_hash` is unchanged so scraper re-runs do not float stale pages to the top of the dashboard.
 - **Diagnostics parity:** Core fetchers have per-id “Refresh now” on **`?action=settings&tab=diagnostics`** (same POST as plugins). A “Test fetch (no save)” path for RSS/scraper/mail is still deferred — not part of the `SourceFetcherInterface` test shape.
+- **Mail ingest reliability + body quality** — **Slice 11** (Gmail API `historyId` watermark, OAuth sign-in, Readability extraction, `emails.metadata` for List-Id). Replaces brittle IMAP `UNSEEN` + `strip_tags`.
+- **IMAP demotion / compatibility policy** — **Slice 12** marks IMAP as `imap_legacy` (fallback for non-Google providers), with Gmail OAuth as primary UX path.
+- **Subscription matching via List-Id** — implemented in **Slice 12** as the first-class matching key (sender/domain become fallback).
 
 ## Open Decisions / Future Polish
 

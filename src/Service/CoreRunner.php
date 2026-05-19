@@ -7,6 +7,9 @@ namespace Seismo\Service;
 use DateTimeImmutable;
 use DateTimeZone;
 use Seismo\Core\Fetcher\ImapMailFetchService;
+use Seismo\Core\Mail\GmailApiInboxClient;
+use Seismo\Core\Mail\GmailOAuthService;
+use Seismo\Core\Mail\MailConfigKeys;
 use Seismo\Core\Fetcher\ParlPressFetchService;
 use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Core\Fetcher\ScraperFetchService;
@@ -46,16 +49,13 @@ final class CoreRunner
 
     private const CHUNK_RSS_FEEDS     = 12;
     private const CHUNK_SCRAPER_FEEDS = 8;
-
-    /** Feeds per chunk when Diagnostics / module refresh runs a single `runOne()` pass. */
-    private const CHUNK_SCRAPER_FEEDS_WEB_SINGLE = 3;
-
-    /** Article cap per feed on forced (web) refresh — keeps one HTTP request under proxy limits. */
     private const CHUNK_WEB_SCRAPER_MAX_ARTICLES = 8;
 
     /**
-     * Wall-clock seconds for forced (web) "Refresh all" drain loops only.
-     * Stay under typical shared-host 60s proxy/FPM ceilings.
+     * Wall-clock seconds for forced (web) runs to keep pulling chunks before yielding.
+     *
+     * Keep below common shared-host proxy/FPM 60s ceilings to avoid 503 timeouts
+     * from synchronous Diagnostics refresh requests.
      */
     private const CHUNK_WEB_TIME_BUDGET_SEC = 45;
 
@@ -90,32 +90,28 @@ final class CoreRunner
     public function runAll(bool $force): array
     {
         return [
-            self::ID_RSS         => $this->runRss($force, $force),
+            self::ID_RSS         => $this->runRss($force),
             self::ID_PARL_PRESS  => $this->runParlPress($force),
-            self::ID_SCRAPER     => $this->runScraper($force, $force),
+            self::ID_SCRAPER     => $this->runScraper($force),
             self::ID_MAIL        => $this->runMail($force),
         ];
     }
 
     /**
      * Run one core fetcher by id ({@see self::ID_RSS}, {@see self::ID_SCRAPER}, {@see self::ID_MAIL}).
-     *
-     * Per-fetcher Diagnostics "Refresh now" runs a **single** RSS/scraper chunk so the
-     * HTTP request stays within shared-host timeouts. Use "Refresh all" to drain the
-     * full cursor cycle within {@see self::CHUNK_WEB_TIME_BUDGET_SEC}.
      */
     public function runOne(string $coreId, bool $force): PluginRunResult
     {
         return match ($coreId) {
-            self::ID_RSS        => $this->runRss($force, false),
+            self::ID_RSS        => $this->runRss($force),
             self::ID_PARL_PRESS => $this->runParlPress($force),
-            self::ID_SCRAPER    => $this->runScraper($force, false),
+            self::ID_SCRAPER    => $this->runScraper($force),
             self::ID_MAIL       => $this->runMail($force),
             default             => PluginRunResult::error('Unknown core fetcher id: ' . $coreId),
         };
     }
 
-    private function runRss(bool $force, bool $webDrainFullCycle = false): PluginRunResult
+    private function runRss(bool $force): PluginRunResult
     {
         if (isSatellite()) {
             $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
@@ -127,7 +123,7 @@ final class CoreRunner
             return $this->runRssLegacy($force);
         }
 
-        if ($force && $webDrainFullCycle) {
+        if ($force) {
             $deadline = microtime(true) + self::CHUNK_WEB_TIME_BUDGET_SEC;
             $chunkItemSum = 0;
             $last         = PluginRunResult::ok(0);
@@ -356,7 +352,7 @@ final class CoreRunner
         return $r;
     }
 
-    private function runScraper(bool $force, bool $webDrainFullCycle = false): PluginRunResult
+    private function runScraper(bool $force): PluginRunResult
     {
         if (isSatellite()) {
             $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
@@ -368,12 +364,12 @@ final class CoreRunner
             return $this->runScraperLegacy($force);
         }
 
-        if ($force && $webDrainFullCycle) {
+        if ($force) {
             $deadline = microtime(true) + self::CHUNK_WEB_TIME_BUDGET_SEC;
             $chunkItemSum = 0;
             $last         = PluginRunResult::ok(0);
             for ($i = 0; $i < self::CHUNK_WEB_MAX_LOOPS && microtime(true) < $deadline; $i++) {
-                $last = $this->runScraperChunkedOnce($force, self::CHUNK_SCRAPER_FEEDS);
+                $last = $this->runScraperChunkedOnce($force);
                 if ($last->isThrottleSkipped()) {
                     return $last;
                 }
@@ -388,7 +384,7 @@ final class CoreRunner
             return new PluginRunResult('ok', $chunkItemSum, $msg, false);
         }
 
-        return $this->runScraperChunkedOnce($force, self::CHUNK_SCRAPER_FEEDS_WEB_SINGLE);
+        return $this->runScraperChunkedOnce($force);
     }
 
     private function runScraperLegacy(bool $force): PluginRunResult
@@ -423,14 +419,16 @@ final class CoreRunner
                         $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
                         $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
                         $excludeSels = trim((string)($feed['scraper_exclude_selectors'] ?? ''));
-                        $limits      = $this->scraperFetchLimits($force);
+                        $maxArticles = $force
+                            ? self::CHUNK_WEB_SCRAPER_MAX_ARTICLES
+                            : ScraperFetchService::PRODUCTION_MAX_ARTICLES;
                         $out         = $this->scraper->fetchScraperFeedItems(
                             $url,
                             $linkPattern,
                             $dateSel,
                             $excludeSels,
-                            $limits['maxArticles'],
-                            $limits['delayBetweenArticles']
+                            $maxArticles,
+                            !$force
                         );
                         if ($out['fatal_error'] !== null) {
                             throw new \RuntimeException($out['fatal_error']);
@@ -464,7 +462,7 @@ final class CoreRunner
         return $r;
     }
 
-    private function runScraperChunkedOnce(bool $force, int $chunkFeedLimit = self::CHUNK_SCRAPER_FEEDS): PluginRunResult
+    private function runScraperChunkedOnce(bool $force): PluginRunResult
     {
         $start = (int)(microtime(true) * 1000);
         try {
@@ -482,8 +480,7 @@ final class CoreRunner
                 $this->zeroScraperAccumulators();
             }
 
-            $chunkFeedLimit = max(1, min($chunkFeedLimit, self::CHUNK_SCRAPER_FEEDS));
-            $batch = $this->feeds->listFeedsForScraperRefreshAfterId($afterId, $chunkFeedLimit);
+            $batch = $this->feeds->listFeedsForScraperRefreshAfterId($afterId, self::CHUNK_SCRAPER_FEEDS);
             if ($batch === []) {
                 if ($afterId > 0) {
                     return $this->finalizeScraperChunkedCycle($start);
@@ -511,14 +508,16 @@ final class CoreRunner
                     $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
                     $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
                     $excludeSels = trim((string)($feed['scraper_exclude_selectors'] ?? ''));
-                    $limits      = $this->scraperFetchLimits($force);
+                    $maxArticles = $force
+                        ? self::CHUNK_WEB_SCRAPER_MAX_ARTICLES
+                        : ScraperFetchService::PRODUCTION_MAX_ARTICLES;
                     $out         = $this->scraper->fetchScraperFeedItems(
                         $url,
                         $linkPattern,
                         $dateSel,
                         $excludeSels,
-                        $limits['maxArticles'],
-                        $limits['delayBetweenArticles']
+                        $maxArticles,
+                        !$force
                     );
                     if ($out['fatal_error'] !== null) {
                         throw new \RuntimeException($out['fatal_error']);
@@ -538,7 +537,7 @@ final class CoreRunner
             }
 
             $this->addScraperAccumulators($total, $attempted, $failed);
-            if (count($batch) < $chunkFeedLimit) {
+            if (count($batch) < self::CHUNK_SCRAPER_FEEDS) {
                 return $this->finalizeScraperChunkedCycle($start);
             }
             $this->magnituConfig->set(self::K_SCRAPER_AFTER, (string)$maxId);
@@ -570,31 +569,16 @@ final class CoreRunner
 
         $start = (int)(microtime(true) * 1000);
         try {
-            if (!extension_loaded('imap')) {
-                $r = PluginRunResult::skipped(
-                    'PHP imap extension is not enabled — install ext-imap on the server for core:mail.',
-                    $force
-                );
-            } elseif (!$this->mailImapConfigured()) {
-                $r = PluginRunResult::skipped(
-                    'IMAP not configured — set system_config keys mail_imap_mailbox (or mail_imap_host), mail_imap_username, mail_imap_password.',
-                    $force
-                );
+            $transport = $this->resolveMailTransport();
+            if ($transport === MailConfigKeys::TRANSPORT_GMAIL_API) {
+                $r = $this->runGmailMail();
+            } elseif ($transport === MailConfigKeys::TRANSPORT_IMAP_LEGACY) {
+                $r = $this->runImapLegacyMail($force);
             } else {
-                $cfg  = $this->loadMailImapConfig();
-                $rows = $this->imapMail->fetch($cfg);
-                $n    = $this->emailIngest->upsertImapBatch($rows);
-                if ($n > 0 && $rows !== []) {
-                    try {
-                        $this->imapMail->markSeen($cfg, array_map(
-                            static fn (array $row): int => (int)($row['imap_uid'] ?? 0),
-                            $rows
-                        ));
-                    } catch (\Throwable $e) {
-                        error_log('Seismo core:mail mark seen: ' . $e->getMessage());
-                    }
-                }
-                $r = PluginRunResult::ok($n);
+                $r = PluginRunResult::skipped(
+                    'Mail not configured — connect Gmail in Settings → Mail (recommended) or configure legacy IMAP.',
+                    $force
+                );
             }
         } catch (\Throwable $e) {
             error_log('Seismo core:mail: ' . $e->getMessage());
@@ -604,6 +588,84 @@ final class CoreRunner
         $this->record(self::ID_MAIL, $r, $duration);
 
         return $r;
+    }
+
+    private function runGmailMail(): PluginRunResult
+    {
+        $oauth = new GmailOAuthService($this->magnituConfig);
+        if (!$oauth->isConnected()) {
+            return PluginRunResult::skipped(
+                'Gmail not connected — use Settings → Mail → Connect Google account.',
+                true
+            );
+        }
+        $client = new GmailApiInboxClient($oauth, $this->magnituConfig);
+        $rows   = $client->fetch(false);
+        $n      = $this->emailIngest->upsertGmailBatch($rows);
+
+        return PluginRunResult::ok($n);
+    }
+
+    private function runImapLegacyMail(bool $force): PluginRunResult
+    {
+        if (!extension_loaded('imap')) {
+            return PluginRunResult::skipped(
+                'PHP imap extension is not enabled — install ext-imap for legacy IMAP mail.',
+                $force
+            );
+        }
+        if (!$this->mailImapConfigured()) {
+            return PluginRunResult::skipped(
+                'Legacy IMAP not configured — set mailbox/host and credentials in Settings → Mail.',
+                $force
+            );
+        }
+        $cfg  = $this->loadMailImapConfig();
+        $rows = $this->imapMail->fetch($cfg);
+        $n    = $this->emailIngest->upsertImapBatch($rows);
+        if ($n > 0 && $rows !== [] && $this->truthyMailConfig($cfg['mail_mark_seen'] ?? '0')) {
+            try {
+                $this->imapMail->markSeen($cfg, array_map(
+                    static fn (array $row): int => (int)($row['imap_uid'] ?? 0),
+                    $rows
+                ));
+            } catch (\Throwable $e) {
+                error_log('Seismo core:mail mark seen: ' . $e->getMessage());
+            }
+        }
+
+        return PluginRunResult::ok($n);
+    }
+
+    private function resolveMailTransport(): ?string
+    {
+        $explicit = trim((string)($this->magnituConfig->get(MailConfigKeys::TRANSPORT) ?? ''));
+        if ($explicit === MailConfigKeys::TRANSPORT_GMAIL_API) {
+            return MailConfigKeys::TRANSPORT_GMAIL_API;
+        }
+        if ($explicit === MailConfigKeys::TRANSPORT_IMAP_LEGACY) {
+            return MailConfigKeys::TRANSPORT_IMAP_LEGACY;
+        }
+
+        $oauth = new GmailOAuthService($this->magnituConfig);
+        if ($oauth->isConnected()) {
+            return MailConfigKeys::TRANSPORT_GMAIL_API;
+        }
+        if ($this->mailImapConfigured()) {
+            return MailConfigKeys::TRANSPORT_IMAP_LEGACY;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, string|null> $cfg
+     */
+    private function truthyMailConfig(mixed $v): bool
+    {
+        $s = strtolower(trim((string)$v));
+
+        return $s === '1' || $s === 'true' || $s === 'yes' || $s === 'on';
     }
 
     private function mailImapConfigured(): bool
@@ -760,19 +822,6 @@ final class CoreRunner
         $this->record(self::ID_SCRAPER, $r, $duration);
 
         return $r;
-    }
-
-    /**
-     * @return array{maxArticles: int, delayBetweenArticles: bool}
-     */
-    private function scraperFetchLimits(bool $force): array
-    {
-        return [
-            'maxArticles'          => $force
-                ? self::CHUNK_WEB_SCRAPER_MAX_ARTICLES
-                : ScraperFetchService::PRODUCTION_MAX_ARTICLES,
-            'delayBetweenArticles' => !$force,
-        ];
     }
 
     /**

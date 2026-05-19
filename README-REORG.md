@@ -11,6 +11,25 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 11 — Gmail-native mail ingest + newsletter body extraction
+
+**Why.** IMAP `UNSEEN` + `strip_tags()` caused missed newsletters and mangled cards (ECOWAS “view in browser” stubs). Product decision: **Gmail API + OAuth** as the primary path; legacy IMAP remains a fallback block on Settings → Mail.
+
+**What moved.**
+- `src/Core/Mail/GmailOAuthService.php`, `GmailApiInboxClient.php`, `GmailMessageParser.php`, `MailConfigKeys.php`, `NewsletterBodyExtractor.php`, `EmailIngestNormalizer.php` — OAuth, `historyId` incremental sync, Readability + html-to-markdown bodies.
+- `src/Controller/MailGoogleOAuthController.php` — connect / disconnect / catch-up.
+- `src/Repository/EmailIngestRepository.php` — `upsertGmailBatch()` + shared body normalisation for IMAP rows.
+- `src/Service/CoreRunner.php` — transport resolver (`gmail_api` vs `imap_legacy`).
+- `src/Migration/Migration013EmailGmail.php` — schema **29** (`gmail_message_id`, `emails.metadata`).
+- `views/partials/settings_mail.php` — Gmail-first UI.
+- Composer: `google/apiclient`, `fivefilters/readability.php`, `league/html-to-markdown`.
+
+**New wiring.** Settings → Mail → save OAuth client → **Connect Google account** → `?action=refresh_all` or cron runs `core:mail` via Gmail history cursor. **Catch up inbox** resets cursor and re-imports a bounded day window.
+
+**Gotchas.** Upload **`vendor/`** to shared hosting. Run migration v29 once. Google Cloud redirect URI must match the readonly field on Settings → Mail exactly. Gemini spot-check still required before Slice 12.
+
+---
+
 ## Scraper: newly added sources actually refresh (auto-wire feeds row + self-heal)
 
 **Why.** Since Slice 8, adding a scraper target through `?action=scraper&view=sources` only inserted into `scraper_configs`. The `core:scraper` pipeline still iterates the `feeds` table and requires a matching enabled row (same URL) — and `feed_items.feed_id` is a `NOT NULL` FK to `feeds.id` either way. The Feeds form (`?action=feeds`) deliberately offers only `rss / substack / parl_press` in its Source-type dropdown, so there was no UI path to create the matching `feeds` row. Net effect: every scraper source added through the UI since Slice 8 became an orphan and `core:scraper` silently iterated an empty list — exactly the "I added Interpol yesterday, nothing shows up" symptom reported on 2026-05-19. The `views/scraper.php` hint ("Targets must match a row in `feeds`…") documented the gap rather than offered a workaround the operator could act on.

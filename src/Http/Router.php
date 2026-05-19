@@ -56,6 +56,7 @@ final class Router
         'mail'       => true,
         'about'         => true,
         'configuration' => true,
+        'mail_google_oauth_callback' => true,
     ];
 
     /** @var array<string, string> action => "Class::method" */
