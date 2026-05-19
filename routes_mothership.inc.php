@@ -178,6 +178,11 @@ $router->register(
     false
 );
 $router->register(
+    'export_source_configs',
+    \Seismo\Controller\SourceConfigExportController::class . '::download',
+    true
+);
+$router->register(
     'settings_save_mail',
     \Seismo\Controller\SettingsController::class . '::saveMail',
     false

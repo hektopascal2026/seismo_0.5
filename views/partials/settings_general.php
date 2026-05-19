@@ -55,6 +55,22 @@ declare(strict_types=1);
             </form>
         </div>
 
+        <?php if (empty($satellite)): ?>
+        <div class="latest-entries-section module-section-spaced">
+            <h2 class="section-title">Source config export</h2>
+            <p class="admin-intro">
+                Download one JSON bundle with Feeds sources, Scraper sources, Mail subscriptions, and related
+                <code>system_config</code> rows. Useful before host migrations.
+            </p>
+            <p class="message message-warning">
+                This export includes sensitive values (for example OAuth tokens and API-related settings). Store it securely.
+            </p>
+            <p class="admin-form-actions">
+                <a class="btn btn-secondary" href="<?= e($basePath) ?>/index.php?action=export_source_configs">Download source config bundle</a>
+            </p>
+        </div>
+        <?php endif; ?>
+
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Web migrations</h2>
             <p class="admin-intro">
