@@ -147,7 +147,9 @@ final class ScraperController
 
         $id = (int)($_POST['id'] ?? 0);
         try {
-            $repo = new ScraperConfigRepository(getDbConnection());
+            $pdo       = getDbConnection();
+            $repo      = new ScraperConfigRepository($pdo);
+            $feedItems = new FeedItemRepository($pdo);
             $payload = [
                 'name'                => (string)($_POST['name'] ?? ''),
                 'url'                 => (string)($_POST['url'] ?? ''),
@@ -157,14 +159,28 @@ final class ScraperController
                 'category'            => (string)($_POST['category'] ?? 'scraper'),
                 'disabled'            => ((string)($_POST['disabled'] ?? '0')) === '1',
             ];
+            $newUrl = trim($payload['url']);
             if ($id > 0) {
+                $existing = $repo->findById($id);
+                $oldUrl = trim((string)($existing['url'] ?? ''));
                 $repo->update($id, $payload);
+                if ($oldUrl !== '' && $oldUrl !== $newUrl) {
+                    // URL changed: retire the old feeds row so it stops being
+                    // listed as an orphan scraper-feed.
+                    $feedItems->disableFeedsByUrl($oldUrl);
+                }
+                if (!$payload['disabled'] && $newUrl !== '') {
+                    $feedItems->ensureScraperFeed($newUrl, $payload['name'], $payload['category']);
+                }
                 $_SESSION['success'] = 'Scraper source updated.';
             } else {
                 $newId = $repo->insert($payload);
+                if (!$payload['disabled'] && $newUrl !== '') {
+                    $feedItems->ensureScraperFeed($newUrl, $payload['name'], $payload['category']);
+                }
                 $_SESSION['success'] = 'Scraper source added (#' . $newId . ').';
                 try {
-                    (new SourceLogRepository(getDbConnection()))
+                    (new SourceLogRepository($pdo))
                         ->append(SourceLogRepository::KIND_SCRAPER, $newId, $payload['name']);
                 } catch (\Throwable $e) {
                     error_log('Seismo source_log (scraper): ' . $e->getMessage());

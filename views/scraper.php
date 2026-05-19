@@ -84,7 +84,7 @@ $sourcesQs = 'action=scraper&view=sources';
         <?php else: ?>
         <div class="latest-entries-section">
             <h2 class="section-title">Scraper sources</h2>
-            <p class="admin-intro">Targets must match a row in <code>feeds</code> (same URL) for the core pipeline to store items. Plain RSS feeds belong on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.</p>
+            <p class="admin-intro">Saving a source here wires the matching <code>feeds</code> row automatically so the core scraper picks it up on the next refresh. Plain RSS feeds belong on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.</p>
 
             <?php if (!$satellite): ?>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=scraper_save" class="admin-form-card" id="scraper-source-form">

@@ -387,6 +387,7 @@ final class CoreRunner
         }
 
         $start = (int)(microtime(true) * 1000);
+        $this->backfillScraperFeedsSafely();
         $total = 0;
         $attempted = 0;
         $failed = 0;
@@ -460,6 +461,10 @@ final class CoreRunner
                 );
             }
             if ($afterId === 0) {
+                // Self-heal at the start of each chunked cycle so newly-added
+                // scraper_configs (and re-enabled ones) get a matching enabled
+                // feeds row before listFeedsForScraperRefreshAfterId() reads.
+                $this->backfillScraperFeedsSafely();
                 $this->zeroScraperAccumulators();
             }
 
@@ -739,6 +744,23 @@ final class CoreRunner
         $this->record(self::ID_SCRAPER, $r, $duration);
 
         return $r;
+    }
+
+    /**
+     * Call {@see FeedItemRepository::backfillScraperFeeds()} but never let a
+     * backfill error abort the whole `core:scraper` run — the worst case is
+     * still "no new entries", same as before the helper existed.
+     */
+    private function backfillScraperFeedsSafely(): void
+    {
+        try {
+            $created = $this->feeds->backfillScraperFeeds();
+            if ($created > 0) {
+                error_log('Seismo core:scraper backfill: created ' . $created . ' feeds row(s) for orphan scraper_configs.');
+            }
+        } catch (\Throwable $e) {
+            error_log('Seismo core:scraper backfill failed: ' . $e->getMessage());
+        }
     }
 
     private function isThrottled(string $coreId, int $minSeconds): bool

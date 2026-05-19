@@ -11,6 +11,30 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Scraper: newly added sources actually refresh (auto-wire feeds row + self-heal)
+
+**Why.** Since Slice 8, adding a scraper target through `?action=scraper&view=sources` only inserted into `scraper_configs`. The `core:scraper` pipeline still iterates the `feeds` table and requires a matching enabled row (same URL) — and `feed_items.feed_id` is a `NOT NULL` FK to `feeds.id` either way. The Feeds form (`?action=feeds`) deliberately offers only `rss / substack / parl_press` in its Source-type dropdown, so there was no UI path to create the matching `feeds` row. Net effect: every scraper source added through the UI since Slice 8 became an orphan and `core:scraper` silently iterated an empty list — exactly the "I added Interpol yesterday, nothing shows up" symptom reported on 2026-05-19. The `views/scraper.php` hint ("Targets must match a row in `feeds`…") documented the gap rather than offered a workaround the operator could act on.
+
+**What moved.**
+- `src/Repository/FeedItemRepository.php` — new `ensureScraperFeed(string $url, string $name, ?string $category): int` (single-row upsert: re-uses any existing feeds row by URL, sets `source_type='scraper'`, refreshes `title` / `category`, re-enables; otherwise inserts a new one). New `backfillScraperFeeds(): int` (bulk self-heal: `INSERT … WHERE NOT EXISTS …` for orphan `scraper_configs`, plus `UPDATE feeds SET disabled = 0` where a live `scraper_configs` match exists). Both refuse satellite (defence in depth).
+- `src/Controller/ScraperController.php` — `save()` now calls `ensureScraperFeed()` on both insert and update paths, and on URL change it also calls the existing `disableFeedsByUrl()` for the old URL so the previous `feeds` row stops being treated as an orphan scraper-feed. Disabled scraper configs do **not** create a `feeds` row.
+- `src/Service/CoreRunner.php` — `runScraperLegacy()` and `runScraperChunkedOnce()` call `backfillScraperFeedsSafely()` at the start of each cycle. Failures inside the backfill log to `error_log` but never abort the run (worst case is the pre-fix behaviour: empty list, no new entries).
+- `views/scraper.php` — the misleading hint is replaced with one that matches the new behaviour: "Saving a source here wires the matching `feeds` row automatically so the core scraper picks it up on the next refresh."
+
+**New wiring.** `?action=scraper_save` (insert / update) now writes `scraper_configs` **and** ensures the matching enabled `feeds` row. `core:scraper` (both chunked and legacy paths, both the cron and the Settings → Diagnostics "Refresh now" button) self-heals at the start of each cycle. `listFeedsForScraperRefresh()` / `listFeedsForScraperRefreshAfterId()` are unchanged — they still require both rows; the new helpers make sure both rows actually exist. No schema change.
+
+**Gotchas.**
+- **Operator action for existing orphans:** none required. The first `core:scraper` cycle after deploy runs `backfillScraperFeeds()`, which inserts a `feeds` row for every existing `scraper_configs` URL that lacks one and re-enables any feeds rows that were disabled while a matching scraper_config is still live. To verify before waiting for cron, click **Refresh Scraper** on `?action=scraper`.
+- **`feeds.disabled` vs `scraper_configs.disabled` stay independent.** `listFeedsForScraperRefresh()` already requires `f.disabled = 0` AND a live `scraper_configs` match; the backfill only touches feeds rows that have a live match, so disabling a scraper source still stops the refresh.
+- **Display-name drift.** `ensureScraperFeed()` rewrites `feeds.title` and `feeds.category` from the scraper-config row each save, which is what the operator typically expects ("the Scraper page is the source of truth"). If the operator had hand-edited the `feeds.title` of the same URL elsewhere, that edit is overwritten on the next scraper save — call out in the Slice 8 follow-up if it becomes a real complaint.
+- **Mothership-only.** All new writes go through the existing `isSatellite()` guards in `FeedItemRepository` and `ScraperController`. Satellites read scraper outputs via cross-DB and never run `core:scraper`, so the backfill is also a no-op on satellites.
+
+**Uploads.**
+- **Mothership:** `src/Repository/FeedItemRepository.php`, `src/Controller/ScraperController.php`, `src/Service/CoreRunner.php`, `views/scraper.php`. (No migration; no schema change.)
+- **Satellite:** `src/Repository/FeedItemRepository.php` (shared file). `src/Controller/ScraperController.php`, `src/Service/CoreRunner.php`, and `views/scraper.php` are not exercised on satellites but are not in `satellite-prune.json` either — re-upload only the repository file if generating a minimal patch, or the full set on a normal bundle refresh. **Smoke test on the mothership:** add a new scraper source (e.g. Interpol news), click **Refresh Scraper**, expect entries to land within one cycle; on `?action=settings&tab=diagnostics` the `core:scraper` row should show non-zero `attempted`.
+
+---
+
 ## Consolidation closure — lift the Leg "exclusion" wording; mark plan + reorg log closed
 
 **Why.** Two lines in `docs/consolidation-plan.md` still said the Magnitu API "Leg exclusion stays intentional until we decide otherwise" and listed lifting it as an **Open decision**. That wording was stale: Slice 5 shipped with Leg (`calendar_event`) included across every Magnitu / export code path, and both `.cursor/rules/magnitu-integration.mdc` and `.cursor/rules/calendar-events.mdc` have documented the included shape ever since. The plan was the only place still implying Leg was held back.
