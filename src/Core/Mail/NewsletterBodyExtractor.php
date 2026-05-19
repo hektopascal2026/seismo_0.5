@@ -4,19 +4,13 @@ declare(strict_types=1);
 
 namespace Seismo\Core\Mail;
 
-use fivefilters\Readability\Configuration;
-use fivefilters\Readability\Readability;
-use League\HTMLToMarkdown\HtmlConverter;
-
 /**
- * Derive readable plain text from newsletter HTML (Slice 11).
+ * Derive readable plain text from newsletter HTML (Slice 11c).
  *
- * Replaces naive {@see \Seismo\Core\Fetcher\EmailHtmlPlainText} strip_tags behaviour.
+ * Sanitize full digest HTML, then extract plain text (no Readability / markdown for email).
  */
 final class NewsletterBodyExtractor
 {
-    private static ?HtmlConverter $markdown = null;
-
     public static function fromHtml(string $html): string
     {
         $html = trim($html);
@@ -24,12 +18,15 @@ final class NewsletterBodyExtractor
             return '';
         }
 
-        $articleHtml = self::extractArticleHtml($html);
-        if ($articleHtml === '') {
-            return self::postProcess(self::fallbackPlain($html));
+        $safe = EmailHtmlSanitizer::sanitize($html);
+        if ($safe !== '') {
+            $text = EmailPlainTextExtractor::fromSanitizedHtml($safe);
+            if ($text !== '') {
+                return self::postProcess($text);
+            }
         }
 
-        return self::postProcess(self::htmlToPlain($articleHtml));
+        return self::postProcess(self::fallbackPlain($html));
     }
 
     private static function postProcess(string $text): string
@@ -41,64 +38,16 @@ final class NewsletterBodyExtractor
         return EmailListingBoilerplateStripper::strip($text, null);
     }
 
-    private static function extractArticleHtml(string $html): string
-    {
-        try {
-            $config = new Configuration([
-                'fixRelativeURLs' => false,
-                'originalURL'     => 'https://localhost/',
-                'charThreshold'   => 80,
-            ]);
-            $readability = new Readability($config);
-            $readability->parse($html);
-            $content = $readability->getContent();
-            if (is_string($content) && trim($content) !== '') {
-                return $content;
-            }
-        } catch (\Throwable $e) {
-            error_log('Seismo NewsletterBodyExtractor: ' . $e->getMessage());
-        }
-
-        return '';
-    }
-
-    private static function htmlToPlain(string $html): string
-    {
-        try {
-            $converter = self::markdownConverter();
-            $md        = trim($converter->convert($html));
-            if ($md !== '') {
-                $md = preg_replace("/\n{3,}/", "\n\n", $md) ?? $md;
-
-                return trim($md);
-            }
-        } catch (\Throwable $e) {
-            error_log('Seismo NewsletterBodyExtractor markdown: ' . $e->getMessage());
-        }
-
-        return self::fallbackPlain($html);
-    }
-
     private static function fallbackPlain(string $html): string
     {
         $clean = preg_replace('/<(style|script)\b[^>]*>.*<\/\\1>/is', '', $html) ?? '';
         $text  = strip_tags($clean);
+        $text  = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text  = preg_replace("/\r\n|\r/", "\n", $text) ?? $text;
+        $text  = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
+        $lines = preg_split("/\n/", $text) ?: [];
+        $lines = array_map(static fn (string $l): string => trim(preg_replace('/\s+/u', ' ', $l) ?? ''), $lines);
 
-        return trim(preg_replace('/\s+/', ' ', html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? '');
-    }
-
-    private static function markdownConverter(): HtmlConverter
-    {
-        if (self::$markdown === null) {
-            $c = new HtmlConverter([
-                'strip_tags'      => true,
-                'remove_nodes'    => 'head style script',
-                'hard_break'      => true,
-                'header_style'    => 'atx',
-            ]);
-            self::$markdown = $c;
-        }
-
-        return self::$markdown;
+        return trim(implode("\n", array_filter($lines, static fn (string $l): bool => $l !== '')));
     }
 }

@@ -11,6 +11,40 @@ Technical companion to `README.md`, written **live** during the 0.4 → 0.5 cons
 
 ---
 
+## Slice 11c — Email body pipeline for Magnitu scoring quality
+
+**Why.** Readability + markdown was wrong for newsletters: one-story extraction, tracking URLs and `![](…)` in bodies hurt **Magnitu v3** embeddings. Goal: one clean plain-text body for the whole digest at ingest.
+
+**What moved.**
+- `src/Core/Mail/EmailHtmlSanitizer.php` — HTML Purifier (`ezyang/htmlpurifier`) + unwrap tracking `<a>` links.
+- `src/Core/Mail/EmailPlainTextExtractor.php` — DOM walk to plain text with paragraph breaks.
+- `src/Core/Mail/EmailTrackingUrl.php` — shared tracking-host detection.
+- `src/Core/Mail/NewsletterBodyExtractor.php` — sanitize → plain text → `EmailListingBoilerplateStripper` (no Readability/markdown for mail).
+- Removed `EmailMarkdownPlainSanitizer.php` (Slice 11b).
+- `tests/fixtures/mail/efta_mailchimp.html`, `news_service_bund.html`; expanded `tests/NewsletterBodyExtractorTest.php`.
+- Composer: `ezyang/htmlpurifier`.
+
+**New wiring.** `EmailIngestNormalizer` → `NewsletterBodyExtractor::fromHtml()` writes `text_body` once; dashboard, recipe scorer, Magnitu export read that field (no per-path sanitizers).
+
+**Gotchas.** Run **Catch up inbox** after deploy to rewrite stored Gmail bodies. Upload full **`vendor/`**. `fivefilters/readability.php` / `league/html-to-markdown` remain in tree (scraper / legacy); mail path no longer uses them.
+
+---
+
+## Slice 11b — Mail body markdown cleanup (superseded by 11c)
+
+**Why.** Slice 11 extraction produced markdown walls (linked images + `list-manage.com` tracking) on multi-story newsletters such as EFTA.
+
+**What moved.**
+- `src/Core/Mail/EmailMarkdownPlainSanitizer.php` — strip image markdown, unwrap `[label](url)` to label (drop tracking/asset hosts), plain headers/bold.
+- `src/Core/Mail/NewsletterBodyExtractor.php` — sanitizer in `postProcess()` after Readability/markdown.
+- `views/partials/dashboard_entry_loop.php` — sanitize on display; preview one-line, expand keeps `\n`.
+- `src/Controller/MagnituController.php`, `src/Core/Scoring/ScoringService.php` — same sanitizer on email export/scoring reads.
+- `tests/EmailMarkdownPlainSanitizerTest.php`
+
+**Gotchas.** Rows already in DB keep old `text_body` until Gmail upsert (e.g. **Catch up inbox**) or until the dashboard/Magnitu read path runs (display improves immediately for expand; DB text updates on re-ingest only).
+
+---
+
 ## Slice 11 — Gmail-native mail ingest + newsletter body extraction
 
 **Why.** IMAP `UNSEEN` + `strip_tags()` caused missed newsletters and mangled cards (ECOWAS “view in browser” stubs). Product decision: **Gmail API + OAuth** as the primary path; legacy IMAP remains a fallback block on Settings → Mail.

@@ -362,7 +362,6 @@ $entryLoopIndex                 = 0;
                             if ($body === '') {
                                 $body = strip_tags((string)($email['html_body'] ?? $email['body_html'] ?? ''));
                             }
-                            $body = trim(preg_replace('/\s+/', ' ', $body ?? ''));
                             $body = seismo_strip_email_listing_boilerplate(
                                 $body,
                                 $fromEmail,
@@ -372,12 +371,13 @@ $entryLoopIndex                 = 0;
                             if ($body === '') {
                                 $bodyPreview = '';
                             } else {
-                                $bodyPreview = mb_substr($body, 0, 200);
-                                if (mb_strlen($body) > 200) {
+                                $previewFlat = trim(preg_replace('/\s+/', ' ', $body) ?? '');
+                                $bodyPreview = mb_substr($previewFlat, 0, 200);
+                                if (mb_strlen($previewFlat) > 200) {
                                     $bodyPreview .= '...';
                                 }
                             }
-                            $hasMore = $body !== '' && mb_strlen($body) > 200;
+                            $hasMore = $body !== '' && mb_strlen(trim(preg_replace('/\s+/', ' ', $body) ?? '')) > 200;
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">

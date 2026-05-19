@@ -102,6 +102,6 @@ On an empty database, migration applies `docs/db-schema.sql` and sets `schema_ve
 - **Consent screen:** External/testing mode only allows listed test users until the app is verified — add the inbox address as a test user or use Internal (Workspace) when applicable.
 - **Refresh token:** First connect must use **Connect Google account** (prompt=consent). If Google returns no refresh token, revoke the app under Google Account → Third-party access and connect again.
 - **Schema 29:** run `?action=migrate&key=…` once after deploy (`Migration013EmailGmail` — `gmail_message_id`, `metadata` JSON on `emails`).
-- **Composer on server:** upload `vendor/` after `composer install` locally (adds `google/apiclient`, `fivefilters/readability.php`, `league/html-to-markdown`). Shared hosts without Composer on the server need the full vendor tree uploaded.
+- **Composer on server:** upload `vendor/` after `composer install` locally (adds `google/apiclient`, `ezyang/htmlpurifier`, `fivefilters/readability.php`, `league/html-to-markdown`). Shared hosts without Composer on the server need the full vendor tree uploaded. Mail body extraction (Slice 11c) uses **HTML Purifier** only; Purifier cache is in-memory (`Cache.DefinitionImpl = null`).
 - **Catch up:** Settings → Mail → **Catch up inbox** re-fetches a bounded window (default 7 days) when history cursor drifted.
 - **Legacy IMAP:** still available under “Legacy IMAP” on the same tab; not recommended for Gmail. Default `mail_mark_seen` is off for new saves.

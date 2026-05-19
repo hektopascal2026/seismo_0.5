@@ -4,6 +4,7 @@
     "require": {
         "php": ">=8.1",
         "easyrdf/easyrdf": "^1.1",
+        "ezyang/htmlpurifier": "^4.17",
         "fivefilters/readability.php": "^3.1",
         "google/apiclient": "^2.15",
         "league/html-to-markdown": "^5.1",

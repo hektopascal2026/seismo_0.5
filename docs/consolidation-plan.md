@@ -341,6 +341,78 @@ The "last-mile polish" slice. Closes three small ergonomics gaps (dashboard refr
 
 **Rollback:** disable Gmail transport (`mail_transport=imap_legacy`), remove Google token keys, revert PHP/composer changes, run documented rollback for the migration that introduced Gmail dedup/watermark storage.
 
+### Slice 11b — Mail body markdown cleanup (post-ingest plain text) — **superseded by Slice 11c**
+
+**Why.** Readability + html-to-markdown (Slice 11) still leaves Mailchimp-style noise on cards: `[![](img)](track/click)`, bare tracking URLs, `####` headers. EFTA-style digests were unreadable in the dashboard expand view.
+
+**What.** `EmailMarkdownPlainSanitizer` runs after markdown conversion at ingest (`NewsletterBodyExtractor`) and on read paths (dashboard expand, recipe rescore, Magnitu export) so existing rows improve without re-fetch.
+
+**Status.** Shipped as a tactical fix. The underlying pipeline (Readability → markdown → regex cleanup) is the wrong shape for newsletters: Readability is article-tuned and discards stories from multi-story digests, hurting **Magnitu v3** scoring quality. **Slice 11c replaces this pipeline for email**; `EmailMarkdownPlainSanitizer` is retired when 11c lands.
+
+---
+
+### Slice 11c — Email body pipeline tuned for Magnitu scoring quality — **implemented**
+
+**Why (lay terms).** Slice 11/11b chased card readability. The bigger lever is **what Magnitu sees** when it scores an email. A newsletter is multiple short stories in one HTML email; Readability (an article-extractor) picks one block and drops the rest, so Magnitu scores on a fragment instead of the full digest. Plain-text-with-markdown also leaves tracking URLs (`list-manage`, `mcusercontent`) and `![](…)` image placeholders in the body, which dilute the embedding signal. Goal: one clean, paragraph-preserving plain-text version of the whole email, used identically by **dashboard preview**, **dashboard expand**, **recipe scorer**, and **Magnitu v3 / export APIs**.
+
+**Product decision (explicit).** For **email specifically**, drop Readability and html-to-markdown. Sanitize the raw HTML at the DOM level and produce plain text directly. Readability stays available for the **scraper** path (where it is correct — single-article web pages) and is not touched here.
+
+**What.**
+
+1. **HTML sanitizer + plain-text extractor for mail.**
+   - New `Seismo\Core\Mail\EmailHtmlSanitizer` — wraps **HTML Purifier** (`ezyang/htmlpurifier`, the established PHP HTML sanitizer) configured for newsletters:
+     - Whitelist text/structure tags (`p`, `h1–h6`, `ul`, `ol`, `li`, `blockquote`, `br`, `strong`, `em`, `a`).
+     - Drop `<img>`, `<script>`, `<style>`, `<meta>`, `<link>`, hidden elements, tracking pixels.
+     - Rewrite `<a href>` to keep label only when `href` matches known tracking hosts (`list-manage.com`, `mcusercontent.com`, `click.email.*`, `mailchi.mp`, `sendgrid.net`, `mandrillapp.com`, `campaign-archive.com`, `*utm_*`). Non-tracking links keep their `href`.
+   - New `Seismo\Core\Mail\EmailPlainTextExtractor` — DOM walk over the sanitized HTML, returns plain text with paragraph breaks (`\n\n` between block elements, single `\n` for `<br>`). No third dependency.
+   - **Replaces** the `NewsletterBodyExtractor` Readability + html-to-markdown chain for **email only**. `NewsletterBodyExtractor` is kept for back-compat but delegates to the new pipeline.
+
+2. **One body for everyone.**
+   - `EmailIngestNormalizer` writes the new plain text into `text_body` / `body_text` at ingest (Gmail and IMAP legacy).
+   - `EmailListingBoilerplateStripper` still runs as a thin post-pass for the "view in browser" / image-display lines (content, not markup) when the matching subscription has `strip_listing_boilerplate = 1`.
+   - Dashboard preview: first 200 characters with whitespace collapsed (one-line look stays).
+   - Dashboard expand: same `text_body` with paragraph breaks preserved.
+   - Recipe scorer (`ScoringService`) and **Magnitu v3** / `export_*` controllers consume the same `text_body` field — **no per-consumer sanitization**.
+   - `EmailMarkdownPlainSanitizer` (Slice 11b) is removed; its tests are deleted or rewritten against the new pipeline.
+
+3. **Re-ingest plan.**
+   - **Catch up inbox** action already re-upserts Gmail rows by `gmail_message_id`, so it rewrites `text_body` on existing rows with no DB migration.
+   - For IMAP legacy rows, document an optional one-time "rescore from html_body" maintenance action (CLI script or hidden admin route) — out of scope for first cut if **Catch up** covers the active mailbox.
+   - Magnitu re-scores in the background through its normal recipe / model loop; older scores are not back-deleted (recipe rescore picks new bodies up on the next refresh; v3 sync rewrites on the next pull).
+
+4. **Tests.**
+   - EFTA Mailchimp fixture: plain text contains "Highlights", "Significant headway", and **does not** contain `list-manage.com`, `mcusercontent.com`, `![](`, or `####`.
+   - ECOWAS fixture (existing): still passes — article extracted, "view in browser" stripped via boilerplate stripper.
+   - News Service Bund (admin.ch) fixture: paragraph breaks preserved between press items.
+   - Sanitizer drops `<script>` / `<style>` content (not just tags) and removes `<img>` entirely.
+   - Non-tracking `<a>` keeps its label and URL in the output.
+
+5. **Operator docs.**
+   - `docs/setup-wizard-notes.md`: add `ezyang/htmlpurifier` to the Composer dep list and the "upload `vendor/`" note. Document HTML Purifier's serialiser cache directory if used (default: in-memory; we keep it in-memory to avoid filesystem-permission surprises on shared hosting).
+
+**Composer (mail-only additions):** `ezyang/htmlpurifier`. **Removed (mail-only):** `league/html-to-markdown` once 11b is retired — left installed for now if any non-mail caller turns up, decided at implementation time.
+
+**Explicitly out of Slice 11c:**
+
+- Showing **sanitized HTML** (not plain text) in the dashboard expand view. This is a UX upgrade option for a later slice; scoring quality does not need it.
+- Touching the scraper / RSS / Lex / Leg body paths. `ScraperContentExtractor` and `NewsletterBodyExtractor`'s Readability use elsewhere remain.
+- Schema changes. `emails.text_body` and `body_text` already exist.
+- Subscription List-Id matching (still **Slice 12**).
+- Backfilling text on every historical IMAP row (operator-driven via Catch up inbox or future maintenance action).
+
+**Definition of done:**
+
+- One mail-body pipeline (sanitize → plain text) feeds **dashboard, recipe scorer, Magnitu v3, export APIs** — verified by reading repository / controller code paths.
+- EFTA / ECOWAS / News Service Bund fixtures pass the new tests; old `EmailMarkdownPlainSanitizer` tests removed or replaced.
+- After **Catch up inbox** on the live mothership, an EFTA card's expand view shows headlines + prose with no `list-manage` URLs, no `![](` markdown, and visible paragraph breaks.
+- Magnitu `?action=magnitu_status` continues to return the same JSON shape; `magnitu_entries` returns the new clean body for emails.
+- Gemini spot-check on `EmailHtmlSanitizer`, `EmailPlainTextExtractor`, `EmailIngestNormalizer`, and one consumer (`MagnituController::shapeEmail` or `ScoringService::scoreEmails`).
+- Live smoke test on `https://www.hektopascal.org/seismo/`.
+
+**Rollback:** revert the 11c PHP / composer changes. Slice 11 + 11b code remains in place under feature flag-style fallback only if implementation chooses that path; otherwise rollback = re-deploy previous tag and **Catch up inbox** rewrites bodies via the older pipeline.
+
+**Before Slice 12.**
+
 ---
 
 ### Slice 12 — Post-Gmail hardening: List-Id matching + IMAP legacy demotion — **planned**
