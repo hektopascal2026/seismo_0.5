@@ -23,10 +23,30 @@ final class GmailOAuthService
 
     public function redirectUri(): string
     {
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $host   = (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost');
+        return self::requestScheme() . '://' . self::requestHost()
+            . getBasePath() . '/index.php?action=mail_google_oauth_callback';
+    }
 
-        return $scheme . '://' . $host . getBasePath() . '/index.php?action=mail_google_oauth_callback';
+    /**
+     * Scheme + host must match what Google sees and what the admin copies into Cloud Console.
+     * Shared hosts often terminate TLS in front of PHP — honour X-Forwarded-Proto like SettingsController.
+     */
+    private static function requestScheme(): string
+    {
+        $httpsFlag = (string)($_SERVER['HTTPS'] ?? '');
+        if ($httpsFlag !== '' && strtolower($httpsFlag) !== 'off') {
+            return 'https';
+        }
+        if (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') {
+            return 'https';
+        }
+
+        return 'http';
+    }
+
+    private static function requestHost(): string
+    {
+        return (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost');
     }
 
     public function isConfigured(): bool
